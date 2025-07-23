@@ -322,6 +322,42 @@ def after_delete_colis(doc, method):
                                "Erreur critique after_delete_colis")
 
 @frappe.whitelist()
+def get_unpacked_items(delivery_note_name):
+    """
+    Retourne la liste des articles de la DN avec leurs quantités non emballées.
+    """
+    dn = frappe.get_doc("Delivery Note", delivery_note_name)
+    dn_qty = {item.item_code: {"qty": item.qty, "description": item.description or item.item_code} for item in dn.items}
+
+    # Cumul des quantités déjà en Colis
+    noms = [c.name for c in frappe.get_all("Colis",
+        filters={"bl": delivery_note_name}, fields=["name"])]
+    cumul = {}
+    if noms:
+        for r in frappe.get_all("Articles Colis",
+            filters={"parent": ["in", noms]},
+            fields=["article", "quantite_totale"]):
+            cumul[r.article] = cumul.get(r.article, 0) + (r.quantite_totale or 0)
+
+    # Calculer les quantités restantes
+    unpacked_items = []
+    for code, item_info in dn_qty.items():
+        total_qty = item_info["qty"]
+        packed_qty = cumul.get(code, 0)
+        remaining_qty = total_qty - packed_qty
+        
+        if remaining_qty > 0:
+            unpacked_items.append({
+                "item_code": code,
+                "description": item_info["description"],
+                "total_qty": total_qty,
+                "packed_qty": packed_qty,
+                "remaining_qty": remaining_qty
+            })
+    
+    return unpacked_items
+
+@frappe.whitelist()
 def force_update_colis_count(delivery_note_name):
     """
     Fonction utilitaire pour forcer manuellement la mise à jour du nombre de colis.

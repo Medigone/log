@@ -143,6 +143,11 @@ doc_events = {
                 "log.log.customer_hooks.uppercase_customer_name",
             ]
         },
+    "Colis": {
+        "validate": "log.delivery_note_hooks.validate_colis_quantities",
+        "on_trash": "log.delivery_note_hooks.on_trash_colis",
+        "after_delete": "log.delivery_note_hooks.after_delete_colis"
+    }
 }
 
 # Scheduled Tasks
