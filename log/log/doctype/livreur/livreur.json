@@ -1,0 +1,131 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-03-18 16:25:18.507041",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "section_break_zpjc",
+  "id_utilisateur",
+  "column_break_nsiv",
+  "nom",
+  "column_break_szdb",
+  "vehicule",
+  "section_break_qaod",
+  "active",
+  "documents_tab",
+  "permis",
+  "valable"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Actif\nEn cong\u00e9\nIndisponible"
+  },
+  {
+   "fieldname": "id_utilisateur",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "ID Utilisateur",
+   "link_filters": "[[\"User\",\"role\",\"=\",\"Delivery User\"]]",
+   "options": "User"
+  },
+  {
+   "fetch_from": "id_utilisateur.full_name",
+   "fetch_if_empty": 1,
+   "fieldname": "nom",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nom Complet",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vehicule",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "V\u00e9hicule attribu\u00e9",
+   "options": "Vehicule"
+  },
+  {
+   "fieldname": "documents_tab",
+   "fieldtype": "Tab Break",
+   "label": "Documents"
+  },
+  {
+   "fieldname": "permis",
+   "fieldtype": "Attach",
+   "label": "Permis de conduire"
+  },
+  {
+   "fieldname": "valable",
+   "fieldtype": "Date",
+   "label": "Valable jusqu'au"
+  },
+  {
+   "fieldname": "section_break_zpjc",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_nsiv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_szdb",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_qaod",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Activ\u00e9"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-03-18 22:45:03.982920",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Livreur",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Green",
+   "title": "Actif"
+  },
+  {
+   "color": "Orange",
+   "title": "En cong\u00e9"
+  },
+  {
+   "color": "Red",
+   "title": "Indisponible"
+  }
+ ],
+ "title_field": "nom"
+}

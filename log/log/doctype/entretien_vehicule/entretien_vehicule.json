@@ -1,0 +1,167 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-03-18 21:52:12.163548",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "section_break_uvoi",
+  "date",
+  "column_break_gjhq",
+  "date_entretien",
+  "section_break_rinq",
+  "type",
+  "column_break_zdan",
+  "vehicule",
+  "d\u00e9tails_des_r\u00e9parations_tab",
+  "reparations",
+  "km",
+  "section_break_qlgt",
+  "observations",
+  "planification_tab",
+  "prochain_entretien",
+  "column_break_iwjl",
+  "type_pro",
+  "documents_justificatifs_tab",
+  "facture",
+  "column_break_riei",
+  "document"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Programm\u00e9\nEn Cours\nTermin\u00e9"
+  },
+  {
+   "fieldname": "section_break_uvoi",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "Today",
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "vehicule",
+   "fieldtype": "Link",
+   "label": "V\u00e9hicule",
+   "options": "Vehicule"
+  },
+  {
+   "fieldname": "type",
+   "fieldtype": "Select",
+   "label": "Type d\u2019entretien",
+   "options": "Pr\u00e9ventif\nCorrectif\nAutre"
+  },
+  {
+   "fieldname": "column_break_gjhq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_entretien",
+   "fieldtype": "Date",
+   "label": "Date de l'entretien"
+  },
+  {
+   "fieldname": "km",
+   "fieldtype": "Float",
+   "label": "Kilom\u00e9trage \u00e0 l'entretien",
+   "precision": "0"
+  },
+  {
+   "fieldname": "section_break_rinq",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_zdan",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "d\u00e9tails_des_r\u00e9parations_tab",
+   "fieldtype": "Tab Break",
+   "label": "D\u00e9tails des R\u00e9parations"
+  },
+  {
+   "fieldname": "reparations",
+   "fieldtype": "Data",
+   "label": "R\u00e9parations"
+  },
+  {
+   "fieldname": "section_break_qlgt",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "observations",
+   "fieldtype": "Text Editor",
+   "label": "Observations"
+  },
+  {
+   "fieldname": "documents_justificatifs_tab",
+   "fieldtype": "Tab Break",
+   "label": "Documents justificatifs"
+  },
+  {
+   "fieldname": "facture",
+   "fieldtype": "Link",
+   "label": "Facture",
+   "options": "Purchase Invoice"
+  },
+  {
+   "fieldname": "column_break_riei",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "document",
+   "fieldtype": "Attach",
+   "label": "Document"
+  },
+  {
+   "fieldname": "planification_tab",
+   "fieldtype": "Tab Break",
+   "label": "Planification"
+  },
+  {
+   "fieldname": "prochain_entretien",
+   "fieldtype": "Date",
+   "label": "Prochain entretien recommand\u00e9"
+  },
+  {
+   "fieldname": "column_break_iwjl",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "type_pro",
+   "fieldtype": "Select",
+   "label": "Type de prochain entretien",
+   "options": "Vidange, Freinage, Pneus, Autre"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-03-18 22:04:29.522302",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Entretien Vehicule",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

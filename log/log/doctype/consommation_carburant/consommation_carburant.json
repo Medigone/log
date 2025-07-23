@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-03-18 22:05:23.347897",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "date",
+  "column_break_zwry",
+  "section_break_mfil",
+  "vehicule",
+  "km",
+  "column_break_noma",
+  "type_carb",
+  "section_break_hutr",
+  "montant",
+  "column_break_phfm",
+  "recu",
+  "suivi_de_consommation_tab",
+  "km_parcouru",
+  "cout_km"
+ ],
+ "fields": [
+  {
+   "default": "Today",
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "column_break_zwry",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_mfil",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "vehicule",
+   "fieldtype": "Link",
+   "label": "V\u00e9hicule",
+   "options": "Vehicule"
+  },
+  {
+   "fieldname": "column_break_noma",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "km",
+   "fieldtype": "Float",
+   "label": "Kilom\u00e9trage",
+   "precision": "0"
+  },
+  {
+   "fieldname": "section_break_hutr",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "montant",
+   "fieldtype": "Currency",
+   "label": "Montant",
+   "non_negative": 1,
+   "precision": "0"
+  },
+  {
+   "fieldname": "column_break_phfm",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "recu",
+   "fieldtype": "Attach Image",
+   "label": "Re\u00e7u"
+  },
+  {
+   "fetch_from": "vehicule.type_carb",
+   "fieldname": "type_carb",
+   "fieldtype": "Select",
+   "label": "Type de carburant",
+   "options": "Diesel\nEssence\n\u00c9lectrique\nGPL"
+  },
+  {
+   "fieldname": "suivi_de_consommation_tab",
+   "fieldtype": "Tab Break",
+   "label": "Suivi de Consommation"
+  },
+  {
+   "fieldname": "km_parcouru",
+   "fieldtype": "Float",
+   "label": "Kilom\u00e9trage parcouru depuis dernier plein",
+   "precision": "0"
+  },
+  {
+   "fieldname": "cout_km",
+   "fieldtype": "Currency",
+   "label": "Co\u00fbt par km",
+   "precision": "2"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-03-18 22:16:47.993175",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Consommation Carburant",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

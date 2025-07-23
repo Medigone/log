@@ -1,0 +1,241 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-03-18 14:15:57.780288",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "section_break_seuh",
+  "nom",
+  "type",
+  "chauffeur",
+  "type_carb",
+  "column_break_nhgp",
+  "immatriculation",
+  "charge",
+  "nom_chauffeur",
+  "section_break_mleo",
+  "active",
+  "suivi_et_entretien_tab",
+  "km",
+  "section_break_shkb",
+  "date_dernier_entretien",
+  "column_break_dylv",
+  "pdate_rochain_entretien",
+  "documentation_et_assurance_tab",
+  "carte_grise",
+  "vignette",
+  "column_break_ibuu",
+  "assurance",
+  "controle_technique",
+  "column_break_whex",
+  "date_exp_assurance",
+  "date_exp_cont_tech",
+  "liens_tab"
+ ],
+ "fields": [
+  {
+   "default": "Disponible",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Statut",
+   "options": "\nDisponible\nEn maintenance\nEn livraison\nHors service",
+   "sort_options": 1
+  },
+  {
+   "fieldname": "section_break_seuh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "nom",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Nom du v\u00e9hicule"
+  },
+  {
+   "fieldname": "type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Camion\nFourgon\nMoto\nAutre"
+  },
+  {
+   "fieldname": "column_break_nhgp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "immatriculation",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Immatriculation"
+  },
+  {
+   "fieldname": "charge",
+   "fieldtype": "Float",
+   "label": "Capacit\u00e9 de charge",
+   "non_negative": 1,
+   "precision": "0"
+  },
+  {
+   "fieldname": "chauffeur",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Chauffeur principal",
+   "link_filters": "[[\"User\",\"role\",\"=\",\"Delivery User\"]]",
+   "options": "User"
+  },
+  {
+   "fieldname": "suivi_et_entretien_tab",
+   "fieldtype": "Tab Break",
+   "label": "Suivi et Entretien"
+  },
+  {
+   "fieldname": "km",
+   "fieldtype": "Float",
+   "label": "Kilom\u00e9trage actuel ",
+   "non_negative": 1,
+   "precision": "0"
+  },
+  {
+   "fieldname": "date_dernier_entretien",
+   "fieldtype": "Date",
+   "label": "Date dernier entretien"
+  },
+  {
+   "fieldname": "pdate_rochain_entretien",
+   "fieldtype": "Date",
+   "label": "Prochain entretien pr\u00e9vu"
+  },
+  {
+   "fieldname": "section_break_shkb",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_dylv",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "documentation_et_assurance_tab",
+   "fieldtype": "Tab Break",
+   "label": "Documentation et Assurance"
+  },
+  {
+   "fieldname": "carte_grise",
+   "fieldtype": "Attach",
+   "label": "Carte grise"
+  },
+  {
+   "fieldname": "assurance",
+   "fieldtype": "Attach",
+   "label": "Assurance"
+  },
+  {
+   "fieldname": "controle_technique",
+   "fieldtype": "Attach",
+   "label": "Contr\u00f4le technique"
+  },
+  {
+   "fieldname": "vignette",
+   "fieldtype": "Attach",
+   "label": "Vignette"
+  },
+  {
+   "fieldname": "column_break_ibuu",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_exp_assurance",
+   "fieldtype": "Date",
+   "label": "Date d'expiration Assurance"
+  },
+  {
+   "fieldname": "date_exp_cont_tech",
+   "fieldtype": "Date",
+   "label": "Date d'expiration Contr\u00f4le technique"
+  },
+  {
+   "fieldname": "column_break_whex",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "liens_tab",
+   "fieldtype": "Tab Break",
+   "label": "Liens",
+   "show_dashboard": 1
+  },
+  {
+   "fetch_from": "chauffeur.full_name",
+   "fieldname": "nom_chauffeur",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Chauffeur",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_mleo",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "active",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Activ\u00e9"
+  },
+  {
+   "fieldname": "type_carb",
+   "fieldtype": "Select",
+   "label": "Type de carburant",
+   "options": "Diesel\nEssence\n\u00c9lectrique\nGPL"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-03-18 22:15:06.946201",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Vehicule",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "immatriculation,type,nom_chauffeur",
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Green",
+   "title": "Disponible"
+  },
+  {
+   "color": "Orange",
+   "title": "En maintenance"
+  },
+  {
+   "color": "Blue",
+   "title": "En livraison"
+  },
+  {
+   "color": "Red",
+   "title": "Hors service"
+  }
+ ],
+ "title_field": "nom"
+}

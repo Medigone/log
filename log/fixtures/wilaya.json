@@ -1,0 +1,582 @@
+[
+ {
+  "code": "01",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.692467",
+  "name": "Adrar",
+  "nom": "Adrar",
+  "nom_ar": "أدرار",
+  "region": null
+ },
+ {
+  "code": "02",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.731837",
+  "name": "Chlef",
+  "nom": "Chlef",
+  "nom_ar": "الشلف",
+  "region": null
+ },
+ {
+  "code": "03",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.744293",
+  "name": "Laghouat",
+  "nom": "Laghouat",
+  "nom_ar": "الأغواط",
+  "region": null
+ },
+ {
+  "code": "04",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.756890",
+  "name": "Oum El Bouaghi",
+  "nom": "Oum El Bouaghi",
+  "nom_ar": "أم البواقي",
+  "region": null
+ },
+ {
+  "code": "05",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.772725",
+  "name": "Batna",
+  "nom": "Batna",
+  "nom_ar": "باتنة",
+  "region": null
+ },
+ {
+  "code": "06",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.789058",
+  "name": "Béjaïa",
+  "nom": "Béjaïa",
+  "nom_ar": "بجاية",
+  "region": null
+ },
+ {
+  "code": "07",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.806252",
+  "name": "Biskra",
+  "nom": "Biskra",
+  "nom_ar": "بسكرة",
+  "region": null
+ },
+ {
+  "code": "08",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.821928",
+  "name": "Béchar",
+  "nom": "Béchar",
+  "nom_ar": "بشار",
+  "region": null
+ },
+ {
+  "code": "09",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.841029",
+  "name": "Blida",
+  "nom": "Blida",
+  "nom_ar": "البليدة",
+  "region": null
+ },
+ {
+  "code": "10",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.861683",
+  "name": "Bouira",
+  "nom": "Bouira",
+  "nom_ar": "البويرة",
+  "region": null
+ },
+ {
+  "code": "11",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.879397",
+  "name": "Tamanrasset",
+  "nom": "Tamanrasset",
+  "nom_ar": "تمنراست",
+  "region": null
+ },
+ {
+  "code": "12",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.893616",
+  "name": "Tébessa",
+  "nom": "Tébessa",
+  "nom_ar": "تبسة",
+  "region": null
+ },
+ {
+  "code": "13",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.908671",
+  "name": "Tlemcen",
+  "nom": "Tlemcen",
+  "nom_ar": "تلمسان",
+  "region": null
+ },
+ {
+  "code": "14",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.921873",
+  "name": "Tiaret",
+  "nom": "Tiaret",
+  "nom_ar": "تيارت",
+  "region": null
+ },
+ {
+  "code": "15",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.942665",
+  "name": "Tizi Ouzou",
+  "nom": "Tizi Ouzou",
+  "nom_ar": "تيزي وزو",
+  "region": null
+ },
+ {
+  "code": "16",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.955641",
+  "name": "Alger",
+  "nom": "Alger",
+  "nom_ar": "الجزائر",
+  "region": null
+ },
+ {
+  "code": "17",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.967862",
+  "name": "Djelfa",
+  "nom": "Djelfa",
+  "nom_ar": "الجلفة",
+  "region": null
+ },
+ {
+  "code": "18",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.979997",
+  "name": "Jijel",
+  "nom": "Jijel",
+  "nom_ar": "جيجل",
+  "region": null
+ },
+ {
+  "code": "19",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:21.992981",
+  "name": "Sétif",
+  "nom": "Sétif",
+  "nom_ar": "سطيف",
+  "region": null
+ },
+ {
+  "code": "20",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.010453",
+  "name": "Saïda",
+  "nom": "Saïda",
+  "nom_ar": "سعيدة",
+  "region": null
+ },
+ {
+  "code": "21",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.029307",
+  "name": "Skikda",
+  "nom": "Skikda",
+  "nom_ar": "سكيكدة",
+  "region": null
+ },
+ {
+  "code": "22",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.051715",
+  "name": "Sidi Bel Abbès",
+  "nom": "Sidi Bel Abbès",
+  "nom_ar": "سيدي بلعباس",
+  "region": null
+ },
+ {
+  "code": "23",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.070902",
+  "name": "Annaba",
+  "nom": "Annaba",
+  "nom_ar": "عنابة",
+  "region": null
+ },
+ {
+  "code": "24",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.094852",
+  "name": "Guelma",
+  "nom": "Guelma",
+  "nom_ar": "قالمة",
+  "region": null
+ },
+ {
+  "code": "25",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.109571",
+  "name": "Constantine",
+  "nom": "Constantine",
+  "nom_ar": "قسنطينة",
+  "region": null
+ },
+ {
+  "code": "26",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.129867",
+  "name": "Médéa",
+  "nom": "Médéa",
+  "nom_ar": "المدية",
+  "region": null
+ },
+ {
+  "code": "27",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.166953",
+  "name": "Mostaganem",
+  "nom": "Mostaganem",
+  "nom_ar": "مستغانم",
+  "region": null
+ },
+ {
+  "code": "28",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.181812",
+  "name": "M'Sila",
+  "nom": "M'Sila",
+  "nom_ar": "المسيلة",
+  "region": null
+ },
+ {
+  "code": "29",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.206953",
+  "name": "Mascara",
+  "nom": "Mascara",
+  "nom_ar": "معسكر",
+  "region": null
+ },
+ {
+  "code": "30",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.238020",
+  "name": "Ouargla",
+  "nom": "Ouargla",
+  "nom_ar": "ورقلة",
+  "region": null
+ },
+ {
+  "code": "31",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.263090",
+  "name": "Oran",
+  "nom": "Oran",
+  "nom_ar": "وهران",
+  "region": null
+ },
+ {
+  "code": "32",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.281115",
+  "name": "El Bayadh",
+  "nom": "El Bayadh",
+  "nom_ar": "البيض",
+  "region": null
+ },
+ {
+  "code": "33",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.296162",
+  "name": "Illizi",
+  "nom": "Illizi",
+  "nom_ar": "إليزي",
+  "region": null
+ },
+ {
+  "code": "34",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.313007",
+  "name": "Bordj Bou Arreridj",
+  "nom": "Bordj Bou Arreridj",
+  "nom_ar": "برج بوعريريج",
+  "region": null
+ },
+ {
+  "code": "35",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.331201",
+  "name": "Boumerdès",
+  "nom": "Boumerdès",
+  "nom_ar": "بومرداس",
+  "region": null
+ },
+ {
+  "code": "36",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.361526",
+  "name": "El Tarf",
+  "nom": "El Tarf",
+  "nom_ar": "الطارف",
+  "region": null
+ },
+ {
+  "code": "37",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.376050",
+  "name": "Tindouf",
+  "nom": "Tindouf",
+  "nom_ar": "تندوف",
+  "region": null
+ },
+ {
+  "code": "38",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.393960",
+  "name": "Tissemsilt",
+  "nom": "Tissemsilt",
+  "nom_ar": "تيسمسيلت",
+  "region": null
+ },
+ {
+  "code": "39",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.414637",
+  "name": "El Oued",
+  "nom": "El Oued",
+  "nom_ar": "الوادي",
+  "region": null
+ },
+ {
+  "code": "40",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.440344",
+  "name": "Khenchela",
+  "nom": "Khenchela",
+  "nom_ar": "خنشلة",
+  "region": null
+ },
+ {
+  "code": "41",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.466274",
+  "name": "Souk Ahras",
+  "nom": "Souk Ahras",
+  "nom_ar": "سوق أهراس",
+  "region": null
+ },
+ {
+  "code": "42",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.489484",
+  "name": "Tipaza",
+  "nom": "Tipaza",
+  "nom_ar": "تيبازة",
+  "region": null
+ },
+ {
+  "code": "43",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.513400",
+  "name": "Mila",
+  "nom": "Mila",
+  "nom_ar": "ميلة",
+  "region": null
+ },
+ {
+  "code": "44",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.572531",
+  "name": "Aïn Defla",
+  "nom": "Aïn Defla",
+  "nom_ar": "عين الدفلة",
+  "region": null
+ },
+ {
+  "code": "45",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.641781",
+  "name": "Naâma",
+  "nom": "Naâma",
+  "nom_ar": "النعامة",
+  "region": null
+ },
+ {
+  "code": "46",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.712570",
+  "name": "Aïn Témouchent",
+  "nom": "Aïn Témouchent",
+  "nom_ar": "عين تيموشنت",
+  "region": null
+ },
+ {
+  "code": "47",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.749617",
+  "name": "Ghardaïa",
+  "nom": "Ghardaïa",
+  "nom_ar": "غرداية",
+  "region": null
+ },
+ {
+  "code": "48",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.785217",
+  "name": "Relizane",
+  "nom": "Relizane",
+  "nom_ar": "غليزان",
+  "region": null
+ },
+ {
+  "code": "49",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.812879",
+  "name": "Timimoun",
+  "nom": "Timimoun",
+  "nom_ar": "تيميمون",
+  "region": null
+ },
+ {
+  "code": "50",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.832714",
+  "name": "Bordj Badji Mokhtar",
+  "nom": "Bordj Badji Mokhtar",
+  "nom_ar": "برج باجي مختار",
+  "region": null
+ },
+ {
+  "code": "51",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.855270",
+  "name": "Ouled Djellal",
+  "nom": "Ouled Djellal",
+  "nom_ar": "أولاد جلال",
+  "region": null
+ },
+ {
+  "code": "52",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.871620",
+  "name": "Béni Abbès",
+  "nom": "Béni Abbès",
+  "nom_ar": "بني عباس",
+  "region": null
+ },
+ {
+  "code": "53",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.906173",
+  "name": "In Salah",
+  "nom": "In Salah",
+  "nom_ar": "عين صالح",
+  "region": null
+ },
+ {
+  "code": "54",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.922290",
+  "name": "In Guezzam",
+  "nom": "In Guezzam",
+  "nom_ar": "عين قزام",
+  "region": null
+ },
+ {
+  "code": "55",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.938733",
+  "name": "Touggourt",
+  "nom": "Touggourt",
+  "nom_ar": "تقرت",
+  "region": null
+ },
+ {
+  "code": "56",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.954100",
+  "name": "Djanet",
+  "nom": "Djanet",
+  "nom_ar": "جانت",
+  "region": null
+ },
+ {
+  "code": "57",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.970350",
+  "name": "El Meghaier",
+  "nom": "El Meghaier",
+  "nom_ar": "المغير",
+  "region": null
+ },
+ {
+  "code": "58",
+  "docstatus": 0,
+  "doctype": "Wilaya",
+  "modified": "2025-03-16 13:15:22.985498",
+  "name": "El Menia",
+  "nom": "El Menia",
+  "nom_ar": "المنيعة",
+  "region": null
+ }
+]

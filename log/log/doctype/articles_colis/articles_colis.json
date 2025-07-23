@@ -1,0 +1,102 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-06-30 18:30:09.418820",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "article",
+  "column_break_1",
+  "statut_article",
+  "section_break_2",
+  "quantite_totale",
+  "column_break_2",
+  "quantite_livree",
+  "column_break_3",
+  "quantite_restante",
+  "section_break_3",
+  "date_derniere_livraison"
+ ],
+ "fields": [
+  {
+   "fieldname": "article",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Article",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "En attente",
+   "fieldname": "statut_article",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Statut Article",
+   "options": "En attente\nPartiellement livr\u00e9\nLivr\u00e9\nNon livr\u00e9",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Quantit\u00e9s"
+  },
+  {
+   "fieldname": "quantite_totale",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantit\u00e9 Totale",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "quantite_livree",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantit\u00e9 Livr\u00e9e",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quantite_restante",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantit\u00e9 Restante",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "date_derniere_livraison",
+   "fieldtype": "Datetime",
+   "label": "Derni\u00e8re Livraison",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-06-30 18:31:44.352000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Articles Colis",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

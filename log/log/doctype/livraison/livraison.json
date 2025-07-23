@@ -1,0 +1,164 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-03-18 22:19:20.386563",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "section_break_lkjp",
+  "date_liv",
+  "section_break_zbae",
+  "livreur",
+  "vehicule",
+  "column_break_wsgq",
+  "nom_livreur",
+  "bons_de_livraison_tab",
+  "bl",
+  "colis_tab",
+  "liste_colis",
+  "paiements_tab",
+  "pe",
+  "\u00e9tapes_de_livraison_tab",
+  "rt"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Nouveau\nEnlev\u00e9\nEn Cours\nPartiellement Livr\u00e9\nLivr\u00e9\nAnnul\u00e9"
+  },
+  {
+   "fieldname": "section_break_lkjp",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "date_liv",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date"
+  },
+  {
+   "fieldname": "section_break_zbae",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "livreur",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Livreur",
+   "options": "Livreur"
+  },
+  {
+   "fieldname": "column_break_wsgq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "livreur.nom",
+   "fieldname": "nom_livreur",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nom Livreur",
+   "read_only": 1
+  },
+  {
+   "fieldname": "vehicule",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "V\u00e9hicule",
+   "options": "Vehicule"
+  },
+  {
+   "fieldname": "bons_de_livraison_tab",
+   "fieldtype": "Tab Break",
+   "label": "Bons de Livraison"
+  },
+  {
+   "fieldname": "bl",
+   "fieldtype": "Data",
+   "label": "Tableau BL"
+  },
+  {
+   "fieldname": "paiements_tab",
+   "fieldtype": "Tab Break",
+   "label": "Paiements"
+  },
+  {
+   "fieldname": "pe",
+   "fieldtype": "Data",
+   "label": "Paiements enregistr\u00e9s"
+  },
+  {
+   "fieldname": "\u00e9tapes_de_livraison_tab",
+   "fieldtype": "Tab Break",
+   "label": "\u00c9tapes de Livraison"
+  },
+  {
+   "fieldname": "rt",
+   "fieldtype": "Text Editor",
+   "label": "Routing"
+  },
+  {
+   "fieldname": "colis_tab",
+   "fieldtype": "Tab Break",
+   "label": "Colis"
+  },
+  {
+   "fieldname": "liste_colis",
+   "fieldtype": "Data",
+   "label": "Liste Colis"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-06-30 18:11:53.883451",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Livraison",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Blue",
+   "title": "Nouveau"
+  },
+  {
+   "color": "Light Blue",
+   "title": "En pr\u00e9paration"
+  },
+  {
+   "color": "Orange",
+   "title": "En Cours"
+  },
+  {
+   "color": "Green",
+   "title": "Livr\u00e9"
+  },
+  {
+   "color": "Pink",
+   "title": "Partiellement Livr\u00e9"
+  },
+  {
+   "color": "Gray",
+   "title": "Annul\u00e9"
+  }
+ ]
+}

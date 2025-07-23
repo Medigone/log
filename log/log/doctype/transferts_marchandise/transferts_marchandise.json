@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-12-08 22:49:37.742957",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "amended_from",
+  "column_break_oron",
+  "date",
+  "delivery_date",
+  "section_break_kkjb",
+  "from_warehouse",
+  "column_break_clzp",
+  "to_warehouse",
+  "section_break_wlrb",
+  "delivery_notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Statut",
+   "options": "Brouillon\nTransf\u00e9r\u00e9"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Transferts Marchandise",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "default": "Today",
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "label": "Date"
+  },
+  {
+   "fieldname": "column_break_oron",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "delivery_date",
+   "fieldtype": "Date",
+   "label": "Date de Livraison"
+  },
+  {
+   "fieldname": "section_break_kkjb",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "from_warehouse",
+   "fieldtype": "Link",
+   "label": "D\u00e9p\u00f4t Source",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "column_break_clzp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "to_warehouse",
+   "fieldtype": "Link",
+   "label": "D\u00e9p\u00f4t Cible",
+   "options": "Warehouse"
+  },
+  {
+   "fieldname": "section_break_wlrb",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "delivery_notes",
+   "fieldtype": "Table",
+   "options": "Bons de Livraison Transferts"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2024-12-09 00:12:17.390658",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Transferts Marchandise",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

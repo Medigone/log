@@ -1,0 +1,188 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-06-30 18:08:15.047527",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "html",
+  "section_break_ldph",
+  "status",
+  "column_break_hlss",
+  "image",
+  "section_break_cshx",
+  "date_creation",
+  "client",
+  "column_break_apah",
+  "date",
+  "section_break_kspn",
+  "bl",
+  "column_break_tvzk",
+  "custom_numero_sequence",
+  "section_break_anxd",
+  "scan_barcode",
+  "articles"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "in_filter": 1,
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Statut",
+   "options": "Nouveau\nPr\u00e9par\u00e9\nEnlev\u00e9\nPartiellement Livr\u00e9\nLivr\u00e9\nNon Livr\u00e9\nAnnul\u00e9"
+  },
+  {
+   "description": "Format: X/Y o\u00f9 X est le num\u00e9ro du colis et Y le nombre total de colis",
+   "fieldname": "custom_numero_sequence",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Num\u00e9ro de s\u00e9quence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_cshx",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "Now",
+   "fieldname": "date",
+   "fieldtype": "Datetime",
+   "label": "Date/Heure",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_kspn",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "client",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Client",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_tvzk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "bl",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Bon de livraison",
+   "options": "Delivery Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_anxd",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "scan_barcode",
+   "fieldtype": "Data",
+   "label": "Scanner Code-barres",
+   "options": "Barcode"
+  },
+  {
+   "fieldname": "articles",
+   "fieldtype": "Table",
+   "label": "Articles",
+   "options": "Articles Colis"
+  },
+  {
+   "fieldname": "html",
+   "fieldtype": "HTML",
+   "label": "HTML"
+  },
+  {
+   "fieldname": "section_break_ldph",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "hidden": 1,
+   "label": "Image QR"
+  },
+  {
+   "fieldname": "column_break_hlss",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_apah",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Today",
+   "fieldname": "date_creation",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date",
+   "read_only": 1
+  }
+ ],
+ "image_field": "image",
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-07-02 00:55:27.440064",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Colis",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Guest"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Blue",
+   "title": "Nouveau"
+  },
+  {
+   "color": "Cyan",
+   "title": "Pr\u00e9par\u00e9"
+  },
+  {
+   "color": "Orange",
+   "title": "Enlev\u00e9"
+  },
+  {
+   "color": "Yellow",
+   "title": "Partiellement Livr\u00e9"
+  },
+  {
+   "color": "Green",
+   "title": "Livr\u00e9"
+  },
+  {
+   "color": "Red",
+   "title": "Non Livr\u00e9"
+  },
+  {
+   "color": "Gray",
+   "title": "Annul\u00e9"
+  }
+ ]
+}

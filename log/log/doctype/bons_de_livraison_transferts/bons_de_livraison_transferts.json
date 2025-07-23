@@ -1,0 +1,66 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-12-08 23:00:29.648043",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "delivery_note",
+  "customer",
+  "status",
+  "delivery_date",
+  "driver"
+ ],
+ "fields": [
+  {
+   "fieldname": "delivery_note",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bon de Livraison",
+   "options": "Delivery Note"
+  },
+  {
+   "fetch_from": "delivery_note.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Client",
+   "options": "Customer"
+  },
+  {
+   "fetch_from": "delivery_note.status",
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Statut"
+  },
+  {
+   "fetch_from": "delivery_note.posting_date",
+   "fieldname": "delivery_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date de Livraison"
+  },
+  {
+   "fetch_from": "delivery_note.driver",
+   "fieldname": "driver",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Livreur",
+   "options": "Driver"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2024-12-09 00:18:20.291909",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Bons de Livraison Transferts",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
