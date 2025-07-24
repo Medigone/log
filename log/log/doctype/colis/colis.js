@@ -35,6 +35,69 @@ frappe.ui.form.on("Colis", {
 	}
 });
 
+// Événements pour la table enfant Articles Colis
+frappe.ui.form.on("Articles Colis", {
+	// Calculer la quantité restante quand la quantité totale change
+	quantite_totale: function(frm, cdt, cdn) {
+		calculer_quantite_restante(frm, cdt, cdn);
+	},
+	
+	// Calculer la quantité restante quand la quantité livrée change
+	quantite_livree: function(frm, cdt, cdn) {
+		calculer_quantite_restante(frm, cdt, cdn);
+	}
+});
+
+/**
+ * Calcule et met à jour la quantité restante pour une ligne d'article
+ * @param {Object} frm - L'objet formulaire Frappe
+ * @param {String} cdt - Le type de document enfant
+ * @param {String} cdn - Le nom du document enfant
+ */
+function calculer_quantite_restante(frm, cdt, cdn) {
+	let row = locals[cdt][cdn];
+	
+	// Validation: la quantité totale ne peut pas être égale à 0
+	let quantite_totale = row.quantite_totale || 0;
+	if (quantite_totale === 0) {
+		frappe.show_alert({
+			message: __('La quantité totale ne peut pas être égale à 0'),
+			indicator: 'red'
+		}, 3);
+		// Remettre la quantité totale à 1 par défaut
+		frappe.model.set_value(cdt, cdn, 'quantite_totale', 1);
+		quantite_totale = 1;
+	}
+	
+	// Calculer la quantité restante = Quantité Totale - Quantité Livrée
+	let quantite_livree = row.quantite_livree || 0;
+	let quantite_restante = quantite_totale - quantite_livree;
+	
+	// S'assurer que la quantité restante n'est pas négative
+	if (quantite_restante < 0) {
+		quantite_restante = 0;
+		frappe.show_alert({
+			message: __('La quantité livrée ne peut pas être supérieure à la quantité totale'),
+			indicator: 'red'
+		}, 3);
+	}
+	
+	// Mettre à jour la quantité restante
+	frappe.model.set_value(cdt, cdn, 'quantite_restante', quantite_restante);
+	
+	// Mettre à jour le statut de l'article en fonction des quantités
+	let nouveau_statut;
+	if (quantite_livree === 0) {
+		nouveau_statut = "En attente";
+	} else if (quantite_livree >= quantite_totale) {
+		nouveau_statut = "Livré";
+	} else {
+		nouveau_statut = "Partiellement livré";
+	}
+	
+	frappe.model.set_value(cdt, cdn, 'statut_article', nouveau_statut);
+}
+
 /**
  * Traite un code-barres d'article scanné et ajoute l'article correspondant à la table enfant 'articles'
  * @param {Object} frm - L'objet formulaire Frappe
@@ -66,7 +129,8 @@ function traiter_article_scanne(frm, code_barre) {
 				if (existe) {
 					// Incrémenter la quantité si l'article existe déjà
 					frm.doc.articles[row_idx].quantite_totale += 1;
-					frm.doc.articles[row_idx].quantite_restante = frm.doc.articles[row_idx].quantite_totale - (frm.doc.articles[row_idx].quantite_livree || 0);
+					// Utiliser la fonction pour calculer la quantité restante
+					calculer_quantite_restante(frm, 'Articles Colis', frm.doc.articles[row_idx].name);
 				} else {
 					// Ajouter un nouvel article à la table
 					const child = frm.add_child('articles');

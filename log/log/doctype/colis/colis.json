@@ -35,7 +35,6 @@
    "options": "Nouveau\nPr\u00e9par\u00e9\nEnlev\u00e9\nPartiellement Livr\u00e9\nLivr\u00e9\nNon Livr\u00e9\nAnnul\u00e9"
   },
   {
-   "description": "Format: X/Y o\u00f9 X est le num\u00e9ro du colis et Y le nombre total de colis",
    "fieldname": "custom_numero_sequence",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -130,7 +129,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-07-02 00:55:27.440064",
+ "modified": "2025-07-24 11:26:27.026835",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Colis",
@@ -153,6 +152,7 @@
    "role": "Guest"
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [
