@@ -792,6 +792,48 @@ def mark_article_undeliverable(docname, article_name, reason="", confirm=False):
 		}
 
 
+@frappe.whitelist(allow_guest=True)
+def get_colis_info(colis_id):
+	"""Méthode publique pour récupérer les informations d'un colis"""
+	try:
+		# Récupérer le document colis
+		colis = frappe.get_doc("Colis", colis_id)
+		
+		# Préparer les données de base
+		data = {
+			"name": colis.name,
+			"status": colis.status,
+			"client": colis.client,
+			"bl": colis.bl,
+			"date_creation": colis.creation,
+			"articles": []
+		}
+		
+		# Ajouter les articles
+		for article in colis.articles:
+			# Récupérer les détails de l'article depuis le doctype Item
+			item_doc = frappe.get_doc("Item", article.article)
+			
+			article_data = {
+				"name": article.name,
+				"article": article.article,
+				"item_name": item_doc.item_name,
+				"quantite_totale": article.quantite_totale,
+				"quantite_livree": article.quantite_livree,
+				"quantite_restante": article.quantite_restante,
+				"statut_article": article.statut_article
+			}
+			data["articles"].append(article_data)
+		
+		return data
+		
+	except frappe.DoesNotExistError:
+		return {"error": "Colis non trouvé"}
+	except Exception as e:
+		frappe.log_error(f"Erreur get_colis_info: {str(e)}")
+		return {"error": f"Erreur lors de la récupération des données: {str(e)}"}
+
+
 @frappe.whitelist()
 def deliver_all_articles(docname, confirm=False):
 	"""Livre tous les articles restants d'un colis
