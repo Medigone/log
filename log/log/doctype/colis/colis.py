@@ -15,6 +15,51 @@ class Colis(Document):
 		# Calculer le statut global basé sur les articles
 		self.calculate_global_status()
 	
+	def on_update(self):
+		"""Hook appelé après la mise à jour du document"""
+		self.sync_with_delivery_note()
+	
+	def sync_with_delivery_note(self):
+		"""Synchronise les quantités livrées avec le Delivery Note associé"""
+		if not self.bl or not self.articles:
+			return
+		
+		try:
+			# Récupérer le Delivery Note
+			delivery_note = frappe.get_doc("Delivery Note", self.bl)
+			
+			# Créer un dictionnaire des quantités livrées par article
+			delivered_quantities = {}
+			for article in self.articles:
+				if article.article and article.quantite_livree > 0:
+					if article.article in delivered_quantities:
+						delivered_quantities[article.article] += article.quantite_livree
+					else:
+						delivered_quantities[article.article] = article.quantite_livree
+			
+			# Mettre à jour les quantités dans le Delivery Note
+			for item in delivery_note.items:
+				if item.item_code in delivered_quantities:
+					# Calculer la nouvelle quantité livrée
+					new_delivered_qty = delivered_quantities[item.item_code]
+					
+					# S'assurer que la quantité livrée ne dépasse pas la quantité commandée
+					if new_delivered_qty > item.qty:
+						new_delivered_qty = item.qty
+					
+					# Mettre à jour le champ delivered_qty s'il existe
+					if hasattr(item, 'delivered_qty'):
+						item.delivered_qty = new_delivered_qty
+			
+			# Sauvegarder le Delivery Note avec les nouvelles quantités
+			delivery_note.save(ignore_permissions=True)
+			
+			frappe.logger().info(f"Synchronisation réussie avec Delivery Note {self.bl}")
+			
+		except Exception as e:
+			frappe.logger().error(f"Erreur lors de la synchronisation avec Delivery Note {self.bl}: {str(e)}")
+			# Ne pas lever l'erreur pour éviter de bloquer la sauvegarde du Colis
+	
 	def calculate_global_status(self):
 		"""Calcule automatiquement le statut global du colis basé sur les statuts des articles"""
 		if not self.articles:
@@ -45,9 +90,9 @@ class Colis(Document):
 		if not self.name or self.name == "new-colis":
 			return
 		
-		# Construire l'URL complète vers la page publique d'information du colis
+		# Construire l'URL complète vers l'interface livreurs
 		site_url = frappe.utils.get_url()
-		public_url = f"{site_url}/colis_info?id={self.name}"
+		frontend_url = f"{site_url}/frontend/colis/{self.name}"
 		
 		# URL vers l'application Frappe (pour les utilisateurs authentifiés)
 		app_url = f"{site_url}/app/colis/{self.name}"
@@ -56,15 +101,15 @@ class Colis(Document):
 		# Format JSON pour inclure plus d'informations
 		qr_data = {
 			"id": self.name,
-			"url": public_url,  # URL publique pour accès direct
+			"url": frontend_url,  # URL de l'interface livreurs pour accès direct
 			"app_url": app_url,  # URL de l'application pour les utilisateurs authentifiés
 			"client": self.client if self.client else "",
 			"date": str(self.date) if self.date else "",
 			"status": self.status if self.status else ""
 		}
 		
-		# Pour les scanners QR simples qui ne supportent que les URL, utiliser directement l'URL publique
-		data = public_url
+		# Pour les scanners QR simples qui ne supportent que les URL, utiliser directement l'URL de l'interface livreurs
+		data = frontend_url
 		
 		# Créer le QR code avec des paramètres optimisés pour réduire la taille
 		# Augmenter légèrement la version pour accommoder plus de données

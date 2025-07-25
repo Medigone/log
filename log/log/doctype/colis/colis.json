@@ -21,7 +21,13 @@
   "custom_numero_sequence",
   "section_break_anxd",
   "scan_barcode",
-  "articles"
+  "articles",
+  "section_break_livraison",
+  "photo_livraison",
+  "column_break_livraison",
+  "signature_client",
+  "section_break_commentaire",
+  "commentaire_livreur"
  ],
  "fields": [
   {
@@ -124,6 +130,35 @@
    "in_standard_filter": 1,
    "label": "Date",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_break_livraison",
+   "fieldtype": "Section Break",
+   "label": "Informations de livraison"
+  },
+  {
+   "fieldname": "photo_livraison",
+   "fieldtype": "Attach Image",
+   "label": "Photo de livraison"
+  },
+  {
+   "fieldname": "column_break_livraison",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "signature_client",
+   "fieldtype": "Signature",
+   "label": "Signature Client"
+  },
+  {
+   "fieldname": "section_break_commentaire",
+   "fieldtype": "Section Break",
+   "label": "Commentaires"
+  },
+  {
+   "fieldname": "commentaire_livreur",
+   "fieldtype": "Text",
+   "label": "Commentaire Livreur"
   }
  ],
  "image_field": "image",

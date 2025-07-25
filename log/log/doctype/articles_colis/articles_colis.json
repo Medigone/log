@@ -16,7 +16,11 @@
   "column_break_3",
   "quantite_restante",
   "section_break_3",
-  "date_derniere_livraison"
+  "date_derniere_livraison",
+  "section_break_details",
+  "raison_non_livraison",
+  "column_break_details",
+  "commentaire_article"
  ],
  "fields": [
   {
@@ -85,6 +89,26 @@
    "fieldtype": "Datetime",
    "label": "Derni\u00e8re Livraison",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_break_details",
+   "fieldtype": "Section Break",
+   "label": "Détails de livraison"
+  },
+  {
+   "fieldname": "raison_non_livraison",
+   "fieldtype": "Select",
+   "label": "Raison Non Livraison",
+   "options": "\nClient absent\nAdresse incorrecte\nRefus du client\nArticle endommagé\nStock insuffisant\nAutre"
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "commentaire_article",
+   "fieldtype": "Small Text",
+   "label": "Commentaire Article"
   }
  ],
  "index_web_pages_for_search": 1,
