@@ -268,3 +268,4 @@ fixtures = [
     # "Workspace",
     # "Role Profile",
 ]
+website_route_rules = [{'from_route': '/Colis/<path:app_path>', 'to_route': 'Colis'},]

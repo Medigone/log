@@ -5,3 +5,6 @@
 tags
 node_modules
 __pycache__
+log/public/Colis
+log/public/node_modules
+log/www/Colis.html
