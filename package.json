@@ -12,5 +12,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs"
+  "type": "commonjs",
+  "dependencies": {
+    "react-hook-form": "^7.61.1",
+    "react-router-dom": "^7.7.1"
+  }
 }
