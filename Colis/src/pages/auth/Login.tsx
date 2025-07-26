@@ -1,197 +1,201 @@
-import React, { useState } from 'react';
-import {
-  Theme,
-  Box,
-  Card,
-  Flex,
-  Text,
-  TextField,
-  Button,
-} from '@radix-ui/themes';
-import { useForm } from 'react-hook-form';
+import { Flex, Box, Heading, Text, TextField, Button, Callout } from '@radix-ui/themes';
+import { useState } from 'react';
+import { useFrappeAuth } from 'frappe-react-sdk';
+import { ExclamationTriangleIcon, EyeOpenIcon, EyeClosedIcon } from '@radix-ui/react-icons';
 
-interface LoginFormData {
-  email: string;
-  password: string;
-}
+const Login = () => {
 
-const Login: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  
-  const {
-    register,
-    handleSubmit,
-    formState: { errors }
-  } = useForm<LoginFormData>();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState<any>('');
 
-  const onSubmit = async (data: LoginFormData) => {
-    setIsLoading(true);
+  const {currentUser, login, logout, error, isLoading} = useFrappeAuth();
+
+  const getErrorMessage = (error: any) => {
+    if (!error) return '';
     
-    try {
-      // Simuler une requête de connexion
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Ici vous pouvez ajouter votre logique de connexion avec Frappe
-      console.log('Données de connexion:', data);
-      
-    } catch (err) {
-      console.error('Erreur de connexion:', err);
-    } finally {
-      setIsLoading(false);
+    // Messages d'erreur courants traduits en français
+    const errorTranslations: { [key: string]: string } = {
+      'Invalid login credentials': 'Identifiants de connexion invalides',
+      'User disabled or does not exist': 'Utilisateur désactivé ou inexistant',
+      'Incorrect password': 'Mot de passe incorrect',
+      'User does not exist': 'Utilisateur inexistant',
+      'Authentication failed': 'Échec de l\'authentification',
+      'Network Error': 'Erreur de réseau',
+      'Server Error': 'Erreur du serveur',
+      'Unauthorized': 'Non autorisé',
+      'Incomplete login details': 'Détails de connexion incomplets'
+    };
+    
+    const message = error.message || error.httpStatusText || error.exc_type || 'Erreur de connexion';
+    
+    // Chercher une traduction exacte
+    if (errorTranslations[message]) {
+      return errorTranslations[message];
     }
+    
+    // Chercher une traduction partielle
+    for (const [englishMsg, frenchMsg] of Object.entries(errorTranslations)) {
+      if (message.toLowerCase().includes(englishMsg.toLowerCase())) {
+        return frenchMsg;
+      }
+    }
+    
+    return message;
   };
 
+  const onSubmit = () => {
+    console.log(username, password);
+    login({
+      username: username, 
+      password: password
+    }).then(res => {
+      console.log(res)
+      setLoginError('')
+      // Forcer un rechargement pour déclencher la redirection
+      window.location.reload();
+    }).catch(err => {
+      setLoginError(err)
+    })
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      onSubmit();
+    }
+  }
+
   return (
-    <Theme
-      appearance="dark"
-      accentColor="blue"
-      panelBackground="solid"
-    >
-      <Box 
-        style={{
-          minHeight: '100vh',
-          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #581c87 100%)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '1rem'
-        }}
-      >
-        <Card 
-          size="4" 
-          style={{
-            width: '100%',
-            maxWidth: '400px',
-            backgroundColor: 'rgba(30, 41, 59, 0.95)',
-            border: '1px solid rgba(71, 85, 105, 0.3)',
-            borderRadius: '16px',
-            backdropFilter: 'blur(10px)'
-          }}
-        >
-          <Box p="8">
-            {/* En-tête */}
-            <Box mb="8">
-              <Text 
-                size="8" 
-                weight="bold" 
-                style={{ 
-                  color: 'white',
-                  fontSize: '2rem',
-                  lineHeight: '1'
-                }}
-              >
-                Connectez-vous
-              </Text>
-            </Box>
+    <div className="w-full h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden flex">
+        {/* Section gauche - Contenu promotionnel */}
+        <div className="flex-1 bg-slate-800 relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900"></div>
+          
+          {/* Logo */}
+          <div className="relative z-10 p-8">
+            <Flex align="center" gap="3">
+              <div className="w-8 h-8 bg-white rounded flex items-center justify-center">
+                <Text size="4" weight="bold" style={{ color: '#1e293b' }}>L</Text>
+              </div>
+              <Text size="5" weight="bold" style={{ color: 'white' }}>Logoipsum</Text>
+            </Flex>
+          </div>
+
+          {/* Contenu principal */}
+          <div className="relative z-10 px-8 py-16 max-w-lg">
+            <Heading size="8" style={{ color: 'white', lineHeight: '1.2', marginBottom: '1rem' }}>
+              Les flottes sont le pont qui nous rassemble.
+            </Heading>
+            
+            
+
+          </div>
+        </div>
+
+        {/* Section droite - Formulaire de connexion */}
+        <div className="w-full max-w-md bg-white flex items-center justify-center p-8">
+          <div className="w-full max-w-sm">
 
             {/* Formulaire */}
-            <form onSubmit={handleSubmit(onSubmit)}>
-              <Flex direction="column" gap="6">
-                {/* Champ Email */}
+            <Box>
+              <Heading size="6" mb="2" style={{ color: '#1e293b' }}>Bienvenue</Heading>
+
+
+              {/* Messages d'erreur */}
+              {loginError && (
+                <Box mb="4">
+                  <Callout.Root color="red" role="alert">
+                    <Callout.Icon>
+                      <ExclamationTriangleIcon />
+                    </Callout.Icon>
+                    <Callout.Text>
+                      {getErrorMessage(loginError)}
+                    </Callout.Text>
+                  </Callout.Root>
+                </Box>
+              )}
+
+              <Flex direction="column" gap="4">
+                {/* Champ Email/Utilisateur */}
                 <Box>
-                  <Text 
-                    as="label" 
-                    size="3" 
-                    weight="medium" 
-                    mb="3"
-                    style={{ 
-                      color: 'white',
-                      display: 'block'
-                    }}
-                  >
-                    Adresse email
+                  <Text as="label" size="2" weight="medium" mb="2" style={{ color: '#374151' }}>
+                    Identifiant
                   </Text>
                   <TextField.Root
+                    placeholder="guru.phianotracodet.com"
                     size="3"
-                    placeholder="Entrez votre adresse email"
-                    style={{
-                      backgroundColor: 'rgba(51, 65, 85, 0.8)',
-                      border: '1px solid rgba(71, 85, 105, 0.5)',
-                      borderRadius: '8px',
-                      color: 'white',
-                      fontSize: '1rem',
-                      padding: '12px 16px'
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    style={{ 
+                      backgroundColor: '#f8fafc',
+                      border: '1px solid #e2e8f0'
                     }}
-                    {...register('email', {
-                      required: 'L\'adresse email est requise',
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: 'Adresse email invalide'
-                      }
-                    })}
                   />
-                  {errors.email && (
-                    <Text size="1" color="red" mt="1">
-                      {errors.email.message}
-                    </Text>
-                  )}
                 </Box>
 
-                {/* Champ Mot de passe avec lien "Forgot password?" */}
+                {/* Champ Mot de passe */}
                 <Box>
-                  <Flex justify="between" align="center" mb="3">
-                    <Text 
-                      as="label" 
-                      size="3" 
-                      weight="medium"
-                      style={{ color: 'white' }}
+                  <Text as="label" size="2" weight="medium" mb="2" style={{ color: '#374151' }}>
+                    Mot de passe
+                  </Text>
+                  <Box style={{ position: 'relative' }}>
+                    <TextField.Root
+                      placeholder="••••••••"
+                      type={showPassword ? 'text' : 'password'}
+                      size="3"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      style={{ 
+                        backgroundColor: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        paddingRight: '2.5rem'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '0.75rem',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#64748b'
+                      }}
                     >
-                      Mot de passe
-                    </Text>
-                  </Flex>
-                  <TextField.Root
-                    size="3"
-                    type="password"
-                    placeholder="Enter your password"
-                    style={{
-                      backgroundColor: 'rgba(51, 65, 85, 0.8)',
-                      border: '1px solid rgba(71, 85, 105, 0.5)',
-                      borderRadius: '8px',
-                      color: 'white',
-                      fontSize: '1rem',
-                      padding: '12px 16px'
-                    }}
-                    {...register('password', {
-                      required: 'Le mot de passe est requis',
-                      minLength: {
-                        value: 6,
-                        message: 'Le mot de passe doit contenir au moins 6 caractères'
-                      }
-                    })}
-                  />
-                  {errors.password && (
-                    <Text size="1" color="red" mt="1">
-                      {errors.password.message}
-                    </Text>
-                  )}
+                      {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
+                    </button>
+                  </Box>
                 </Box>
 
                 {/* Bouton de connexion */}
-                <Box mt="4">
-                  <Button
-                    type="submit"
-                    size="3"
-                    loading={isLoading}
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#3b82f6',
-                      border: 'none',
-                      color: 'white',
-                      borderRadius: '8px',
-                      padding: '12px 24px',
-                      fontSize: '1rem'
-                    }}
-                  >
-                    {isLoading ? 'Connexion en cours...' : 'Se connecter'}
-                  </Button>
-                </Box>
+                <Button
+                  size="3"
+                  onClick={onSubmit}
+                  disabled={isLoading}
+                  style={{
+                    backgroundColor: '#1e293b',
+                    color: 'white',
+                    width: '100%',
+                    marginTop: '1rem',
+                    cursor: isLoading ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {isLoading ? 'Connexion...' : 'Se connecter'}
+                </Button>
               </Flex>
-            </form>
-          </Box>
-        </Card>
-      </Box>
-    </Theme>
-  );
-};
+            </Box>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default Login;
