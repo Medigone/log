@@ -20,6 +20,9 @@ frappe.ui.form.on("Colis", {
 				</div>
 			`);
 		}
+		
+		// Calculer le total des articles au chargement du formulaire
+		calculer_total_articles(frm);
 	},
 	
 	// Gérer l'événement de scan du code-barres via le champ scan_barcode
@@ -40,13 +43,35 @@ frappe.ui.form.on("Articles Colis", {
 	// Calculer la quantité restante quand la quantité totale change
 	quantite_totale: function(frm, cdt, cdn) {
 		calculer_quantite_restante(frm, cdt, cdn);
+		calculer_total_articles(frm);
 	},
 	
 	// Calculer la quantité restante quand la quantité livrée change
 	quantite_livree: function(frm, cdt, cdn) {
 		calculer_quantite_restante(frm, cdt, cdn);
+	},
+	
+	// Recalculer le total quand une ligne est supprimée
+	articles_remove: function(frm) {
+		calculer_total_articles(frm);
 	}
 });
+
+/**
+ * Calcule et met à jour le total des articles dans le champ total_art
+ * @param {Object} frm - L'objet formulaire Frappe
+ */
+function calculer_total_articles(frm) {
+	let total = 0;
+	
+	// Parcourir tous les articles dans la table enfant
+	$.each(frm.doc.articles || [], function(i, row) {
+		total += row.quantite_totale || 0;
+	});
+	
+	// Mettre à jour le champ total_art
+	frm.set_value('total_art', total);
+}
 
 /**
  * Calcule et met à jour la quantité restante pour une ligne d'article
@@ -141,8 +166,9 @@ function traiter_article_scanne(frm, code_barre) {
 					child.statut_article = "En attente";
 				}
 				
-				// Rafraîchir la table
+				// Rafraîchir la table et recalculer le total
 				frm.refresh_field('articles');
+				calculer_total_articles(frm);
 				
 				// Sauvegarder le document après l'ajout de l'article
 				frm.save().then(() => {

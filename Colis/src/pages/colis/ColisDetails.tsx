@@ -1,6 +1,7 @@
 import { Flex, Box, Heading, Text, Badge, Card, Table, Button, Separator, TextField } from '@radix-ui/themes';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { CalendarIcon, PersonIcon, BoxIcon, CheckIcon, CrossCircledIcon, Pencil1Icon, CameraIcon } from '@radix-ui/react-icons';
+import { useFrappeGetDoc, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
 
 interface Article {
   id: string;
@@ -22,56 +23,53 @@ interface ColisData {
   date_creation: string;
   date: string;
   bl: string;
+  total_art?: number;
   articles: Article[];
   photo_livraison?: string;
   signature_client?: string;
   commentaire_livreur?: string;
 }
 
-const ColisDetails = () => {
-  // Données de test
-  const [colisData, setColisData] = useState<ColisData>({
-    id: "COL-2024-001",
-    custom_numero_sequence: "SEQ-001234",
-    status: "Partiellement Livré",
-    client: "SARL TECH SOLUTIONS",
-    date_creation: "2024-01-15",
-    date: "2024-01-15 14:30:00",
-    bl: "BL-2024-0156",
-    articles: [
-      {
-        id: "1",
-        article: "Ordinateur Portable Dell XPS 13",
-        statut_article: "Livré",
-        quantite_totale: 2,
-        quantite_livree: 2,
-        quantite_restante: 0,
-        date_derniere_livraison: "2024-01-15 15:45:00",
-        commentaire_article: "Livraison effectuée avec succès"
-      },
-      {
-        id: "2",
-        article: "Écran Samsung 27 pouces",
-        statut_article: "Partiellement livré",
-        quantite_totale: 3,
-        quantite_livree: 1,
-        quantite_restante: 2,
-        date_derniere_livraison: "2024-01-15 15:45:00",
-        commentaire_article: "Client souhaite reporter la livraison du reste"
-      },
-      {
-        id: "3",
-        article: "Clavier mécanique Logitech",
-        statut_article: "Non livré",
-        quantite_totale: 2,
-        quantite_livree: 0,
-        quantite_restante: 2,
-        raison_non_livraison: "Client absent",
-        commentaire_article: "Tentative de livraison à 16h00, bureau fermé"
-      }
-    ],
-    commentaire_livreur: "Livraison partielle effectuée. Le client souhaite reporter le reste à la semaine prochaine."
+interface ColisDetailsProps {
+  colisId?: string;
+}
+
+const ColisDetails = ({ colisId }: ColisDetailsProps) => {
+  // Récupération des données du colis depuis Frappe
+  const { data: colisData, mutate: mutateColisData, error, isLoading } = useFrappeGetDoc<ColisData>('Colis', colisId, {
+    fields: [
+      'name',
+      'custom_numero_sequence',
+      'status',
+      'client',
+      'date_creation',
+      'date',
+      'bl',
+      'total_art',
+      'articles',
+      'photo_livraison',
+      'signature_client',
+      'commentaire_livreur'
+    ]
   });
+
+  // Écouter les changements sur le doctype Colis
+  useFrappeDocTypeEventListener('Colis', () => {
+    mutateColisData();
+  });
+
+  // État local pour les modifications
+  const [localColisData, setLocalColisData] = useState<ColisData | null>(null);
+
+  // Synchroniser les données locales avec les données Frappe
+  useEffect(() => {
+    if (colisData) {
+      setLocalColisData({
+        ...colisData,
+        id: colisData.name || colisData.id
+      });
+    }
+  }, [colisData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -102,17 +100,14 @@ const ColisDetails = () => {
 
   // État pour gérer la capture photo
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(colisData.photo_livraison || null);
+  const [capturedPhoto, setCapturedPhoto] = useState<string | null>(localColisData?.photo_livraison || null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // État pour gérer la signature client
-  const [isSigningMode, setIsSigningMode] = useState<boolean>(false);
-  const [clientSignature, setClientSignature] = useState<string | null>(colisData.signature_client || null);
-  const signatureCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [isDrawing, setIsDrawing] = useState<boolean>(false);
-  const [lastPosition, setLastPosition] = useState<{ x: number; y: number } | null>(null);
+  // État pour gérer l'édition du commentaire
+  const [isEditingComment, setIsEditingComment] = useState<boolean>(false);
+  const [commentText, setCommentText] = useState<string>(localColisData?.commentaire_livreur || '');
 
   // Fonction pour démarrer l'édition d'un article
   const startEditing = (articleId: string, currentQuantity: number) => {
@@ -173,10 +168,10 @@ const ColisDetails = () => {
         setCapturedPhoto(photoDataUrl);
         
         // Mettre à jour les données du colis
-        setColisData(prevData => ({
+        setLocalColisData(prevData => prevData ? ({
           ...prevData,
           photo_livraison: photoDataUrl
-        }));
+        }) : null);
         
         stopCamera();
       }
@@ -186,117 +181,36 @@ const ColisDetails = () => {
   // Fonction pour supprimer la photo
   const deletePhoto = () => {
     setCapturedPhoto(null);
-    setColisData(prevData => ({
+    setLocalColisData(prevData => prevData ? ({
       ...prevData,
       photo_livraison: undefined
-    }));
+    }) : null);
   };
 
-  // Fonctions pour la signature client
-  const startSignature = () => {
-    setIsSigningMode(true);
-    // Initialiser le canvas après que le composant soit rendu
-    setTimeout(() => {
-      if (signatureCanvasRef.current) {
-        const canvas = signatureCanvasRef.current;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.strokeStyle = '#000000';
-          ctx.lineWidth = 2;
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-        }
-      }
-    }, 100);
+  // Fonctions pour l'édition du commentaire
+  const startEditingComment = () => {
+    setIsEditingComment(true);
   };
 
-  const clearSignature = () => {
-    if (signatureCanvasRef.current) {
-      const canvas = signatureCanvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-    }
-  };
-
-  const saveSignature = () => {
-    if (signatureCanvasRef.current) {
-      const canvas = signatureCanvasRef.current;
-      const signatureDataUrl = canvas.toDataURL('image/png');
-      setClientSignature(signatureDataUrl);
-      
-      // Mettre à jour les données du colis
-      setColisData(prevData => ({
-        ...prevData,
-        signature_client: signatureDataUrl
-      }));
-      
-      setIsSigningMode(false);
-    }
-  };
-
-  const deleteSignature = () => {
-    setClientSignature(null);
-    setColisData(prevData => ({
+  const saveComment = () => {
+    setLocalColisData(prevData => prevData ? ({
       ...prevData,
-      signature_client: undefined
-    }));
+      commentaire_livreur: commentText
+    }) : null);
+    setIsEditingComment(false);
   };
 
-  const cancelSignature = () => {
-    setIsSigningMode(false);
-    clearSignature();
-  };
-
-  // Gestion des événements de dessin pour la signature
-  const getCanvasPosition = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = signatureCanvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    
-    const rect = canvas.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    
-    return {
-      x: clientX - rect.left,
-      y: clientY - rect.top
-    };
-  };
-
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    setIsDrawing(true);
-    const position = getCanvasPosition(e);
-    setLastPosition(position);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    if (!isDrawing || !lastPosition || !signatureCanvasRef.current) return;
-    
-    const canvas = signatureCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    const currentPosition = getCanvasPosition(e);
-    
-    ctx.beginPath();
-    ctx.moveTo(lastPosition.x, lastPosition.y);
-    ctx.lineTo(currentPosition.x, currentPosition.y);
-    ctx.stroke();
-    
-    setLastPosition(currentPosition);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-    setLastPosition(null);
+  const cancelEditComment = () => {
+    setCommentText(localColisData?.commentaire_livreur || '');
+    setIsEditingComment(false);
   };
 
   // Fonction pour sauvegarder les modifications
   const saveQuantity = (articleId: string) => {
-    setColisData(prevData => {
+    if (!localColisData) return;
+    
+    setLocalColisData(prevData => {
+      if (!prevData) return null;
       const updatedArticles = prevData.articles.map(article => {
         if (article.id === articleId) {
           const newQuantiteLivree = Math.min(tempQuantity, article.quantite_totale);
@@ -343,11 +257,17 @@ const ColisDetails = () => {
     
     setEditingArticle(null);
     setTempQuantity(0);
+    
+    // TODO: Sauvegarder les modifications dans Frappe
+    // Vous pouvez utiliser useFrappeUpdateDoc ici
   };
 
   // Fonction pour marquer toute la quantité comme livrée
   const markAllAsDelivered = (articleId: string) => {
-    setColisData(prevData => {
+    if (!localColisData) return;
+    
+    setLocalColisData(prevData => {
+      if (!prevData) return null;
       const updatedArticles = prevData.articles.map(article => {
         if (article.id === articleId) {
           return {
@@ -376,10 +296,71 @@ const ColisDetails = () => {
       return {
         ...prevData,
         articles: updatedArticles,
-        status: newGlobalStatus
+        status: newGlobalStatus,
+        date_derniere_livraison: new Date().toISOString()
       };
     });
   };
+
+  // Fonction pour marquer tous les articles comme livrés
+  const markAllArticlesAsDelivered = () => {
+    if (!localColisData) return;
+    
+    setLocalColisData(prevData => {
+      if (!prevData) return null;
+      const updatedArticles = prevData.articles.map(article => ({
+        ...article,
+        quantite_livree: article.quantite_totale,
+        quantite_restante: 0,
+        statut_article: 'Livré',
+        date_derniere_livraison: new Date().toISOString()
+      }));
+
+      return {
+        ...prevData,
+        articles: updatedArticles,
+        status: 'Livré',
+        date_derniere_livraison: new Date().toISOString()
+      };
+    });
+  };
+
+  // Gestion des états de chargement et d'erreur
+  if (isLoading) {
+    return (
+      <div className="w-full p-4">
+        <div className="w-full max-w-7xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <Text size="4" style={{ color: '#64748b' }}>Chargement des données du colis...</Text>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="w-full p-4">
+        <div className="w-full max-w-7xl mx-auto">
+          <div className="bg-red-50 border border-red-200 rounded-2xl shadow-lg p-6">
+            <Text size="4" style={{ color: '#dc2626' }}>Erreur lors du chargement : {error.message}</Text>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!localColisData) {
+    return (
+      <div className="w-full p-4">
+        <div className="w-full max-w-7xl mx-auto">
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <Text size="4" style={{ color: '#64748b' }}>Aucune donnée disponible pour ce colis.</Text>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full p-4">
@@ -389,28 +370,38 @@ const ColisDetails = () => {
           <Flex align="center" justify="between" mb="4">
             <div>
               <Heading size="7" style={{ color: '#1e293b' }}>
-                Colis {colisData.custom_numero_sequence}
+                Colis {localColisData.custom_numero_sequence}
               </Heading>
               <Text size="3" style={{ color: '#64748b' }}>
-                {colisData.id}
+                {localColisData.id}
               </Text>
             </div>
-            <Badge size="3" color={getStatusColor(colisData.status) as any}>
-              {colisData.status}
+            <Badge size="1" color={getStatusColor(localColisData.status) as any}>
+              {localColisData.status}
             </Badge>
           </Flex>
           
           <Separator size="4" mb="4" />
           
           {/* Informations générales */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+            <Card className="p-4">
+              <Flex align="center" gap="3" mb="2">
+                <BoxIcon className="w-5 h-5" style={{ color: '#3b82f6' }} />
+                <Text size="2" weight="medium" style={{ color: '#374151' }}>Numéro de séquence</Text>
+              </Flex>
+              <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
+                {localColisData.custom_numero_sequence}
+              </Text>
+            </Card>
+            
             <Card className="p-4">
               <Flex align="center" gap="3" mb="2">
                 <PersonIcon className="w-5 h-5" style={{ color: '#3b82f6' }} />
                 <Text size="2" weight="medium" style={{ color: '#374151' }}>Client</Text>
               </Flex>
               <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
-                {colisData.client}
+                {localColisData.client}
               </Text>
             </Card>
             
@@ -420,7 +411,7 @@ const ColisDetails = () => {
                 <Text size="2" weight="medium" style={{ color: '#374151' }}>Date de création</Text>
               </Flex>
               <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
-                {new Date(colisData.date_creation).toLocaleDateString('fr-FR')}
+                {new Date(localColisData.date_creation).toLocaleDateString('fr-FR')}
               </Text>
             </Card>
             
@@ -430,7 +421,17 @@ const ColisDetails = () => {
                 <Text size="2" weight="medium" style={{ color: '#374151' }}>Bon de livraison</Text>
               </Flex>
               <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
-                {colisData.bl}
+                {localColisData.bl}
+              </Text>
+            </Card>
+            
+            <Card className="p-4">
+              <Flex align="center" gap="3" mb="2">
+                <BoxIcon className="w-5 h-5" style={{ color: '#10b981' }} />
+                <Text size="2" weight="medium" style={{ color: '#374151' }}>Total articles</Text>
+              </Flex>
+              <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
+                {localColisData.total_art || localColisData.articles.reduce((total, article) => total + article.quantite_totale, 0)}
               </Text>
             </Card>
           </div>
@@ -439,7 +440,7 @@ const ColisDetails = () => {
         {/* Articles */}
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
           <Heading size="5" mb="4" style={{ color: '#1e293b' }}>
-            Articles ({colisData.articles.length})
+            Articles ({localColisData.articles.length})
           </Heading>
           
           <div className="overflow-x-auto">
@@ -457,8 +458,8 @@ const ColisDetails = () => {
               </Table.Header>
               
               <Table.Body>
-                {colisData.articles.map((article) => (
-                  <Table.Row key={article.id}>
+                {localColisData.articles.map((article, index) => (
+                  <Table.Row key={article.id || `article-${index}`}>
                     <Table.Cell>
                       <Text size="3" weight="medium" style={{ color: '#1e293b' }}>
                         {article.article}
@@ -540,7 +541,7 @@ const ColisDetails = () => {
                       </Flex>
                     </Table.Cell>
                     <Table.Cell>
-                      <Badge size="2" color={getArticleStatusColor(article.statut_article) as any}>
+                      <Badge size="1" color={getArticleStatusColor(article.statut_article) as any}>
                         {article.statut_article}
                       </Badge>
                     </Table.Cell>
@@ -572,7 +573,7 @@ const ColisDetails = () => {
                   Quantité totale :
                 </Text>
                 <Text size="3" weight="bold" style={{ color: '#1e293b' }}>
-                  {colisData.articles.reduce((total, article) => total + article.quantite_totale, 0)} unités
+                  {localColisData.articles.reduce((total, article) => total + article.quantite_totale, 0)} unités
                 </Text>
               </div>
               <div className="flex items-center gap-2">
@@ -580,11 +581,30 @@ const ColisDetails = () => {
                   Montant total :
                 </Text>
                 <Text size="3" weight="bold" style={{ color: '#1e293b' }}>
-                  {(colisData.articles.reduce((total, article) => total + article.quantite_totale, 0) * 150).toLocaleString('fr-FR')} DZD
+                  {(localColisData.articles.reduce((total, article) => total + article.quantite_totale, 0) * 150).toLocaleString('fr-FR')} DZD
                 </Text>
               </div>
             </div>
           </div>
+
+          {/* Bouton pour marquer tous les articles comme livrés */}
+          {localColisData.articles.some(article => article.quantite_restante > 0) && (
+            <div className="mt-4 flex justify-center">
+              <Button 
+                size="3"
+                onClick={markAllArticlesAsDelivered}
+                style={{ 
+                  backgroundColor: '#16a34a', 
+                  color: 'white',
+                  cursor: 'pointer',
+                  padding: '12px 24px'
+                }}
+              >
+                <CheckIcon className="w-4 h-4" />
+                Marquer comme livré
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Informations de livraison */}
@@ -593,8 +613,8 @@ const ColisDetails = () => {
             Informations de livraison
           </Heading>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Box>
+          <div className="flex justify-center">
+            <Box className="w-full max-w-md">
               <Text size="3" weight="medium" mb="2" style={{ color: '#374151' }}>
                 Photo de livraison
               </Text>
@@ -677,147 +697,73 @@ const ColisDetails = () => {
                 </div>
               )}
             </Box>
-            
-            <Box>
-              <Text size="3" weight="medium" mb="2" style={{ color: '#374151' }}>
-                Signature client
-              </Text>
-              
-              {isSigningMode ? (
-                <div className="w-full">
-                  <div className="border-2 border-gray-300 rounded-lg bg-white">
-                    <canvas
-                      ref={signatureCanvasRef}
-                      width={400}
-                      height={200}
-                      className="w-full h-48 cursor-crosshair"
-                      onMouseDown={startDrawing}
-                      onMouseMove={draw}
-                      onMouseUp={stopDrawing}
-                      onMouseLeave={stopDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={stopDrawing}
-                      style={{ touchAction: 'none' }}
-                    />
-                  </div>
-                  <Text size="1" style={{ color: '#64748b', fontStyle: 'italic' }} mt="1">
-                    Signez dans la zone ci-dessus avec votre doigt ou un stylet
-                  </Text>
-                  <Flex gap="2" mt="2" justify="center">
-                      <Button 
-                        size="2" 
-                        onClick={saveSignature}
-                        style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
-                      >
-                        <CheckIcon className="w-4 h-4" />
-                        Valider
-                      </Button>
-                      <Button 
-                        size="2" 
-                        variant="outline" 
-                        onClick={clearSignature}
-                        style={{ cursor: 'pointer', borderColor: '#1e293b', color: '#1e293b' }}
-                      >
-                        Effacer
-                      </Button>
-                      <Button 
-                        size="2" 
-                        variant="outline" 
-                        onClick={cancelSignature}
-                        style={{ cursor: 'pointer', borderColor: '#1e293b', color: '#1e293b' }}
-                      >
-                        Annuler
-                      </Button>
-                    </Flex>
-                </div>
-              ) : clientSignature ? (
-                <div className="w-full">
-                  <img 
-                    src={clientSignature} 
-                    alt="Signature client" 
-                    className="w-full h-48 object-contain bg-white rounded-lg border"
-                  />
-                  <Flex gap="2" mt="2" justify="center">
-                      <Button 
-                        size="2" 
-                        onClick={startSignature}
-                        style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
-                      >
-                        <Pencil1Icon className="w-4 h-4" />
-                        Nouvelle signature
-                      </Button>
-                      <Button 
-                        size="2" 
-                        variant="outline" 
-                        onClick={deleteSignature}
-                        style={{ cursor: 'pointer', borderColor: '#ef4444', color: '#ef4444' }}
-                      >
-                        Supprimer
-                      </Button>
-                    </Flex>
-                </div>
-              ) : (
-                <div className="w-full">
-                  <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300">
-                    <div className="text-center">
-                      <Pencil1Icon className="w-8 h-8 mx-auto mb-2" style={{ color: '#9ca3af' }} />
-                      <Text size="2" style={{ color: '#64748b' }}>
-                        Aucune signature
-                      </Text>
-                    </div>
-                  </div>
-                  <div className="flex justify-center">
-                      <Button 
-                        size="2" 
-                        mt="2"
-                        onClick={startSignature}
-                        style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
-                      >
-                        <Pencil1Icon className="w-4 h-4" />
-                        Demander la signature
-                      </Button>
-                    </div>
-                </div>
-              )}
-            </Box>
           </div>
         </div>
 
         {/* Commentaires */}
-        {colisData.commentaire_livreur && (
-          <div className="bg-white rounded-2xl shadow-lg p-6">
-            <Heading size="5" mb="4" style={{ color: '#1e293b' }}>
-              Commentaire du livreur
-            </Heading>
-            <Box className="bg-gray-50 p-4 rounded-lg">
-              <Text size="3" style={{ color: '#374151', lineHeight: '1.6' }}>
-                {colisData.commentaire_livreur}
-              </Text>
-            </Box>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="mt-6 flex gap-4 justify-end">
-          <Button 
-            size="3" 
-            variant="outline"
-            style={{ cursor: 'pointer' }}
-          >
-            Modifier
-          </Button>
-          <Button 
-            size="3"
-            style={{ 
-              backgroundColor: '#1e293b', 
-              color: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            Marquer comme livré
-          </Button>
+        <div className="bg-white rounded-2xl shadow-lg p-6">
+          <Heading size="5" mb="4" style={{ color: '#1e293b' }}>
+            Commentaire
+          </Heading>
+          
+          {isEditingComment ? (
+            <div>
+              <textarea
+                value={commentText}
+                onChange={(e) => setCommentText(e.target.value)}
+                className="w-full p-4 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows={4}
+                placeholder="Ajoutez un commentaire..."
+                style={{ fontSize: '14px', lineHeight: '1.6' }}
+              />
+              <Flex gap="2" mt="3" justify="end">
+                <Button 
+                  size="2" 
+                  variant="outline"
+                  onClick={cancelEditComment}
+                  style={{ cursor: 'pointer', borderColor: '#6b7280', color: '#6b7280' }}
+                >
+                  Annuler
+                </Button>
+                <Button 
+                  size="2" 
+                  onClick={saveComment}
+                  style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
+                >
+                  <CheckIcon className="w-4 h-4" />
+                  Enregistrer
+                </Button>
+              </Flex>
+            </div>
+          ) : (
+            <div>
+              <Box className="bg-gray-50 p-4 rounded-lg min-h-[100px] flex items-start">
+                {commentText ? (
+                  <Text size="3" style={{ color: '#374151', lineHeight: '1.6' }}>
+                    {commentText}
+                  </Text>
+                ) : (
+                  <Text size="3" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                    Aucun commentaire
+                  </Text>
+                )}
+              </Box>
+              <div className="flex justify-end mt-3">
+                <Button 
+                  size="2" 
+                  variant="outline"
+                  onClick={startEditingComment}
+                  style={{ cursor: 'pointer', borderColor: '#1e293b', color: '#1e293b' }}
+                >
+                  <Pencil1Icon className="w-4 h-4" />
+                  Modifier
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
+
+
       </div>
     </div>
   );

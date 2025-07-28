@@ -22,10 +22,10 @@
   "section_break_anxd",
   "scan_barcode",
   "articles",
+  "total_art",
   "section_break_livraison",
   "photo_livraison",
   "column_break_livraison",
-  "signature_client",
   "section_break_commentaire",
   "commentaire_livreur"
  ],
@@ -146,11 +146,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "signature_client",
-   "fieldtype": "Signature",
-   "label": "Signature Client"
-  },
-  {
    "fieldname": "section_break_commentaire",
    "fieldtype": "Section Break",
    "label": "Commentaires"
@@ -159,12 +154,18 @@
    "fieldname": "commentaire_livreur",
    "fieldtype": "Text",
    "label": "Commentaire Livreur"
+  },
+  {
+   "fieldname": "total_art",
+   "fieldtype": "Int",
+   "label": "Total Articles",
+   "read_only": 1
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-07-24 11:26:27.026835",
+ "modified": "2025-07-27 22:58:14.847190",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Colis",

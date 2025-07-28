@@ -1,13 +1,15 @@
 import './App.css'
 import { FrappeProvider, useFrappeAuth, useFrappeGetDoc } from 'frappe-react-sdk'
 import "@radix-ui/themes/styles.css";
-import { Theme, Button, Flex, Text } from "@radix-ui/themes";
-import { ExitIcon } from '@radix-ui/react-icons';
+import { Theme, Button, Flex, Text, Tabs } from "@radix-ui/themes";
+import { ExitIcon, BoxIcon, FileTextIcon } from '@radix-ui/react-icons';
+import { useState } from 'react';
 import Login from './pages/auth/Login';
 import ColisDetails from './pages/colis/ColisDetails';
+import { DeliveryNotesList } from './pages/delivery-notes';
 
 // Barre de navigation
-function NavigationBar() {
+function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: string | null; onBackToList: () => void }) {
 	const { logout, currentUser } = useFrappeAuth();
 	// Récupérer les informations complètes de l'utilisateur
 	const { data: userData } = useFrappeGetDoc('User', currentUser || undefined);
@@ -27,28 +29,45 @@ function NavigationBar() {
 	const displayName = userData?.full_name || userData?.email || currentUser;
 
 	return (
-		<div className="w-full bg-white shadow-lg border-b border-gray-200 px-6 py-4">
-			<Flex align="center" justify="between">
-				<div>
-					<Text size="4" weight="bold" style={{ color: '#1e293b' }}>
-						Gestion des Colis
-					</Text>
-				</div>
-				<Flex align="center" gap="4">
-					<Text size="2" style={{ color: '#64748b' }}>
-						Bonjour, {displayName}
-					</Text>
+		<div className="w-full bg-white shadow-lg border-b border-gray-200">
+			{/* En-tête avec titre et bouton de déconnexion */}
+			<div className="px-6 py-4">
+				<Flex align="center" justify="between">
+					<div>
+						<Text size="4" weight="bold" style={{ color: '#1e293b' }}>
+							Gestion Logistique
+						</Text>
+					</div>
+					<Flex align="center" gap="4">
+						<Text size="2" style={{ color: '#64748b' }}>
+							Bonjour, {displayName}
+						</Text>
+						<Button 
+							size="2" 
+							variant="outline" 
+							onClick={handleLogout}
+							style={{ cursor: 'pointer' }}
+						>
+							<ExitIcon className="w-4 h-4" />
+							Déconnexion
+						</Button>
+					</Flex>
+				</Flex>
+			</div>
+			
+			{/* Navigation conditionnelle */}
+			{selectedColisId && (
+				<div className="px-6 pb-4">
 					<Button 
 						size="2" 
 						variant="outline" 
-						onClick={handleLogout}
+						onClick={onBackToList}
 						style={{ cursor: 'pointer' }}
 					>
-						<ExitIcon className="w-4 h-4" />
-						Déconnexion
+						← Retour aux bons de livraison
 					</Button>
-				</Flex>
-			</Flex>
+				</div>
+			)}
 		</div>
 	);
 }
@@ -56,6 +75,7 @@ function NavigationBar() {
 // Composant principal de l'application
 function AppContent() {
 	const { currentUser, isLoading } = useFrappeAuth();
+	const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
 
 	// Affichage d'un loader pendant la vérification de l'authentification
 	if (isLoading) {
@@ -69,13 +89,19 @@ function AppContent() {
 		);
 	}
 
-	// Si l'utilisateur est connecté, afficher la barre de navigation et ColisDetails
+	// Si l'utilisateur est connecté, afficher la barre de navigation et le contenu selon la sélection
 	// Sinon, afficher la page de login
 	if (currentUser) {
 		return (
 			<div className="min-h-screen bg-gray-100">
-				<NavigationBar />
-				<ColisDetails />
+				<NavigationBar selectedColisId={selectedColisId} onBackToList={() => setSelectedColisId(null)} />
+				<div className="pt-4">
+					{selectedColisId ? (
+						<ColisDetails colisId={selectedColisId} />
+					) : (
+						<DeliveryNotesList onColisSelect={setSelectedColisId} />
+					)}
+				</div>
 			</div>
 		);
 	}
