@@ -567,23 +567,13 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
           
           {/* Résumé des totaux */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="flex items-center gap-2">
-                <Text size="3" weight="medium" style={{ color: '#374151' }}>
-                  Quantité totale :
-                </Text>
-                <Text size="3" weight="bold" style={{ color: '#1e293b' }}>
-                  {localColisData.articles.reduce((total, article) => total + article.quantite_totale, 0)} unités
-                </Text>
-              </div>
-              <div className="flex items-center gap-2">
-                <Text size="3" weight="medium" style={{ color: '#374151' }}>
-                  Montant total :
-                </Text>
-                <Text size="3" weight="bold" style={{ color: '#1e293b' }}>
-                  {(localColisData.articles.reduce((total, article) => total + article.quantite_totale, 0) * 150).toLocaleString('fr-FR')} DZD
-                </Text>
-              </div>
+            <div className="flex items-center gap-2">
+              <Text size="3" weight="medium" style={{ color: '#374151' }}>
+                Quantité totale :
+              </Text>
+              <Text size="3" weight="bold" style={{ color: '#1e293b' }}>
+                {localColisData.articles.reduce((total, article) => total + article.quantite_totale, 0)} unités
+              </Text>
             </div>
           </div>
 
