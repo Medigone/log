@@ -3,7 +3,7 @@ import { FrappeProvider, useFrappeAuth, useFrappeGetDoc } from 'frappe-react-sdk
 import "@radix-ui/themes/styles.css";
 import { Theme, Button, Flex, Text, Tabs } from "@radix-ui/themes";
 import { ExitIcon, BoxIcon, FileTextIcon } from '@radix-ui/react-icons';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Login from './pages/auth/Login';
 import ColisDetails from './pages/colis/ColisDetails';
 import { DeliveryNotesList } from './pages/delivery-notes';
@@ -76,6 +76,15 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 function AppContent() {
 	const { currentUser, isLoading } = useFrappeAuth();
 	const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
+
+	// Vérifier les paramètres URL pour l'accès direct aux détails d'un colis
+	useEffect(() => {
+		const urlParams = new URLSearchParams(window.location.search);
+		const colisParam = urlParams.get('colis');
+		if (colisParam) {
+			setSelectedColisId(colisParam);
+		}
+	}, []);
 
 	// Affichage d'un loader pendant la vérification de l'authentification
 	if (isLoading) {

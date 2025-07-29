@@ -90,9 +90,10 @@ class Colis(Document):
 		if not self.name or self.name == "new-colis":
 			return
 		
-		# Construire l'URL complète vers l'interface livreurs
+		# Construire l'URL complète vers l'interface livreurs React
 		site_url = frappe.utils.get_url()
-		frontend_url = f"{site_url}/frontend/colis/{self.name}"
+		# URL vers l'application React avec paramètre de requête pour accès direct
+		frontend_url = f"{site_url}/Colis?colis={self.name}"
 		
 		# URL vers l'application Frappe (pour les utilisateurs authentifiés)
 		app_url = f"{site_url}/app/colis/{self.name}"
@@ -101,14 +102,14 @@ class Colis(Document):
 		# Format JSON pour inclure plus d'informations
 		qr_data = {
 			"id": self.name,
-			"url": frontend_url,  # URL de l'interface livreurs pour accès direct
-			"app_url": app_url,  # URL de l'application pour les utilisateurs authentifiés
+			"url": frontend_url,  # URL de l'application React pour accès direct aux détails du colis
+			"app_url": app_url,  # URL de l'application Frappe pour les utilisateurs authentifiés
 			"client": self.client if self.client else "",
 			"date": str(self.date) if self.date else "",
 			"status": self.status if self.status else ""
 		}
 		
-		# Pour les scanners QR simples qui ne supportent que les URL, utiliser directement l'URL de l'interface livreurs
+		# Pour les scanners QR simples qui ne supportent que les URL, utiliser directement l'URL de l'application React
 		data = frontend_url
 		
 		# Créer le QR code avec des paramètres optimisés pour réduire la taille

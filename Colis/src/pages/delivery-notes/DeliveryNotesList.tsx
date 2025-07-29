@@ -311,37 +311,54 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                           </Text>
                           
                           {note.colis && note.colis.length > 0 ? (
-                            <div className="space-y-2">
-                              {note.colis.map((colis) => (
-                                <div key={colis.name} className="bg-white p-3 rounded-lg border border-gray-200">
-                                  <Flex align="center" justify="between">
-                                    <div className="flex items-center gap-4">
-                                      <div>
+                            <div className="mt-3">
+                              <Table.Root size="1" variant="surface">
+                                <Table.Header>
+                                  <Table.Row>
+                                    <Table.ColumnHeaderCell>Séquence</Table.ColumnHeaderCell>
+                                    <Table.ColumnHeaderCell>Client</Table.ColumnHeaderCell>
+                                    <Table.ColumnHeaderCell>Statut</Table.ColumnHeaderCell>
+                                    <Table.ColumnHeaderCell>Date</Table.ColumnHeaderCell>
+                                    <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+                                  </Table.Row>
+                                </Table.Header>
+                                <Table.Body>
+                                  {note.colis.map((colis) => (
+                                    <Table.Row key={colis.name}>
+                                      <Table.Cell>
                                         <Text size="2" weight="bold" style={{ color: '#1e293b' }}>
                                           {colis.custom_numero_sequence || colis.name}
                                         </Text>
-                                        <Text size="1" style={{ color: '#64748b' }}>
-                                          Client: {colis.client || 'Non défini'}
+                                      </Table.Cell>
+                                      <Table.Cell>
+                                        <Text size="2" style={{ color: '#374151' }}>
+                                          {colis.client || 'Non défini'}
                                         </Text>
-                                      </div>
-                                      <Badge size="1" color={getStatusColor(colis.status) as any}>
-                                        {colis.status}
-                                      </Badge>
-                                      <Text size="1" style={{ color: '#64748b' }}>
-                                        {colis.date_creation ? new Date(colis.date_creation).toLocaleDateString('fr-FR') : 'Date non définie'}
-                                      </Text>
-                                    </div>
-                                    <Button
-                                      size="1"
-                                      variant="soft"
-                                      onClick={() => onColisSelect?.(colis.name)}
-                                    >
-                                      <EyeIcon size={14} />
-                                      Voir détails
-                                    </Button>
-                                  </Flex>
-                                </div>
-                              ))}
+                                      </Table.Cell>
+                                      <Table.Cell>
+                                        <Badge size="1" color={getStatusColor(colis.status) as any}>
+                                          {colis.status}
+                                        </Badge>
+                                      </Table.Cell>
+                                      <Table.Cell>
+                                        <Text size="2" style={{ color: '#64748b' }}>
+                                          {colis.date_creation ? new Date(colis.date_creation).toLocaleDateString('fr-FR') : 'Date non définie'}
+                                        </Text>
+                                      </Table.Cell>
+                                      <Table.Cell>
+                                        <Button
+                                          size="1"
+                                          variant="soft"
+                                          onClick={() => onColisSelect?.(colis.name)}
+                                        >
+                                          <EyeIcon size={14} />
+                                          Voir détails
+                                        </Button>
+                                      </Table.Cell>
+                                    </Table.Row>
+                                  ))}
+                                </Table.Body>
+                              </Table.Root>
                             </div>
                           ) : (
                             <Text size="2" style={{ color: '#64748b' }}>
@@ -400,20 +417,20 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                 {/* Statistiques */}
                 <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-gray-100">
                   <div className="text-center">
-                    <Text size="1" style={{ color: '#64748b' }}>Colis</Text>
-                    <Text size="2" weight="bold" style={{ color: '#1e293b' }}>
+                    <Text size="1" style={{ color: '#64748b' }}>Colis : </Text>
+                    <Text size="2" weight="bold" style={{ color: '#1e293b' }} className="mt-1">
                       {note.total_colis || 0}
                     </Text>
                   </div>
                   <div className="text-center">
-                    <Text size="1" style={{ color: '#64748b' }}>Articles</Text>
-                    <Text size="2" weight="bold" style={{ color: '#1e293b' }}>
+                    <Text size="1" style={{ color: '#64748b' }}>Articles : </Text>
+                    <Text size="2" weight="bold" style={{ color: '#1e293b' }} className="mt-1">
                       {note.total_articles || 0}
                     </Text>
                   </div>
                   <div className="text-center">
-                    <Text size="1" style={{ color: '#64748b' }}>Montant</Text>
-                    <Text size="1" weight="bold" style={{ color: '#1e293b' }}>
+                    <Text size="1" style={{ color: '#64748b' }}>Montant : </Text>
+                    <Text size="1" weight="bold" style={{ color: '#1e293b' }} className="mt-1">
                       {note.grand_total ? `${note.grand_total.toLocaleString('fr-FR')} DZD` : 'N/A'}
                     </Text>
                   </div>
@@ -424,7 +441,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                   size="2"
                   variant="ghost"
                   onClick={() => toggleNoteExpansion(note.name)}
-                  className="w-full mt-3"
+                  className="w-full mt-4"
                 >
                   {expandedNotes.has(note.name) ? (
                     <>
@@ -451,7 +468,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                     <div className="space-y-2">
                       {note.colis.map((colis) => (
                         <div key={colis.name} className="bg-white p-3 rounded-lg border border-gray-200">
-                          <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-3">
                             <div className="flex items-center justify-between">
                               <Text size="2" weight="bold" style={{ color: '#1e293b' }} className="truncate flex-1">
                                 {colis.custom_numero_sequence || colis.name}
