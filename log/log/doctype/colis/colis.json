@@ -38,7 +38,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Statut",
-   "options": "Nouveau\nPr\u00e9par\u00e9\nEnlev\u00e9\nPartiellement Livr\u00e9\nLivr\u00e9\nNon Livr\u00e9\nAnnul\u00e9"
+   "options": "Nouveau\nPr\u00e9par\u00e9\nEnlev\u00e9\nPartiellement Livr\u00e9\nLivr\u00e9\nNon Livr\u00e9\nAnnul\u00e9",
+   "show_on_timeline": 1
   },
   {
    "fieldname": "custom_numero_sequence",
@@ -165,8 +166,8 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-07-27 22:58:14.847190",
- "modified_by": "Administrator",
+ "modified": "2025-07-30 17:59:08.208903",
+ "modified_by": "admin@medigo.one",
  "module": "Log",
  "name": "Colis",
  "owner": "Administrator",
@@ -220,5 +221,6 @@
    "color": "Gray",
    "title": "Annul\u00e9"
   }
- ]
+ ],
+ "track_changes": 1
 }

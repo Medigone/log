@@ -1,7 +1,7 @@
 import { Flex, Box, Heading, Text, Badge, Card, Table, Button, Separator, TextField } from '@radix-ui/themes';
 import { useState, useRef, useEffect } from 'react';
-import { CalendarIcon, PersonIcon, BoxIcon, CheckIcon, CrossCircledIcon, Pencil1Icon, CameraIcon } from '@radix-ui/react-icons';
-import { useFrappeGetDoc, useFrappeDocTypeEventListener, useFrappeUpdateDoc } from 'frappe-react-sdk';
+import { CalendarIcon, PersonIcon, BoxIcon, CheckIcon, CrossCircledIcon, Pencil1Icon, CameraIcon, FileTextIcon } from '@radix-ui/react-icons';
+import { useFrappeGetDoc, useFrappeDocTypeEventListener, useFrappeUpdateDoc, useFrappeGetCall } from 'frappe-react-sdk';
 
 interface Article {
   id: string;
@@ -410,6 +410,67 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     });
   };
 
+  // État pour gérer le chargement de la mise à jour du statut
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState<boolean>(false);
+
+
+
+    // Fonction pour mettre à jour le statut du colis
+  const updateColisStatus = async (newStatus: string) => {
+    if (!localColisData || !colisId) return;
+    
+    setIsUpdatingStatus(true);
+    try {
+      // Utiliser l'API Frappe standard pour mettre à jour le statut
+      const result = await updateColis('Colis', colisId, {
+        status: newStatus
+      });
+      
+      console.log('Résultat mise à jour:', result);
+      
+      // Mettre à jour les données locales
+      setLocalColisData(prevData => {
+        if (!prevData) return null;
+        return {
+          ...prevData,
+          status: newStatus
+        };
+      });
+      
+      // Rafraîchir les données depuis le serveur
+      mutateColisData();
+      
+                    // Note: Les commentaires sont automatiquement enregistrés par Frappe lors des modifications
+       // L'historique des changements est visible dans l'interface Frappe native
+      
+    } catch (error) {
+      console.error('Erreur lors de la mise à jour du statut:', error);
+      alert('Erreur lors de la mise à jour du statut');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  // Fonction pour obtenir les statuts disponibles selon le statut actuel
+  const getAvailableStatuses = (currentStatus: string) => {
+    const statusFlow: { [key: string]: string[] } = {
+      'Nouveau': ['Préparé'],
+      'Préparé': ['Nouveau', 'Enlevé'],
+      'Enlevé': ['Préparé', 'Partiellement Livré', 'Livré'],
+      'Partiellement Livré': ['Enlevé', 'Livré'],
+      'Livré': ['Partiellement Livré'],
+      'Non Livré': ['Enlevé'],
+      'Annulé': ['Nouveau']
+    };
+    
+    return statusFlow[currentStatus] || [];
+  };
+
+  // Fonction pour vérifier si on peut livrer (statut doit être "Enlevé" ou "Partiellement Livré")
+  const canDeliver = () => {
+    return localColisData?.status === 'Enlevé' || localColisData?.status === 'Partiellement Livré';
+  };
+
   // Gestion des états de chargement et d'erreur
   if (isLoading) {
     return (
@@ -466,18 +527,81 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                 </Text>
               )}
             </div>
-            <Badge size="1" color={getStatusColor(localColisData.status) as any}>
-              {localColisData.status}
-            </Badge>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {/* Statuts précédents (rouge) */}
+                {getAvailableStatuses(localColisData.status)
+                  .filter(status => {
+                    const statusOrder = ['Nouveau', 'Préparé', 'Enlevé', 'Partiellement Livré', 'Livré'];
+                    const currentIndex = statusOrder.indexOf(localColisData.status);
+                    const statusIndex = statusOrder.indexOf(status);
+                    return statusIndex < currentIndex;
+                  })
+                  .map((status) => (
+                    <Button
+                      key={status}
+                      size="1"
+                      variant="outline"
+                      onClick={() => updateColisStatus(status)}
+                      disabled={isSaving}
+                      style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        cursor: isSaving ? 'not-allowed' : 'pointer',
+                        opacity: isSaving ? 0.6 : 1,
+                        borderColor: '#dc2626',
+                        color: '#dc2626'
+                      }}
+                    >
+                      ← {status}
+                    </Button>
+                  ))}
+                
+                {/* Statut actuel (au milieu) */}
+                <Badge size="1" color={getStatusColor(localColisData.status) as any}>
+                  {localColisData.status}
+                </Badge>
+                
+                {/* Statuts suivants (vert) */}
+                {getAvailableStatuses(localColisData.status)
+                  .filter(status => {
+                    const statusOrder = ['Nouveau', 'Préparé', 'Enlevé', 'Partiellement Livré', 'Livré'];
+                    const currentIndex = statusOrder.indexOf(localColisData.status);
+                    const statusIndex = statusOrder.indexOf(status);
+                    return statusIndex > currentIndex;
+                  })
+                  .map((status) => (
+                    <Button
+                      key={status}
+                      size="1"
+                      variant="outline"
+                      onClick={() => updateColisStatus(status)}
+                      disabled={isSaving}
+                      style={{
+                        fontSize: '10px',
+                        padding: '2px 6px',
+                        cursor: isSaving ? 'not-allowed' : 'pointer',
+                        opacity: isSaving ? 0.6 : 1,
+                        borderColor: '#16a34a',
+                        color: '#16a34a'
+                      }}
+                    >
+                      → {status}
+                    </Button>
+                  ))}
+              </div>
+            </div>
           </Flex>
           
           <Separator size="4" mb="4" />
           
           {/* Informations générales */}
+
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
             <Card className="p-4">
               <Flex align="center" gap="3" mb="2">
-                <BoxIcon className="w-5 h-5" style={{ color: '#3b82f6' }} />
+                <FileTextIcon className="w-5 h-5" style={{ color: '#3b82f6' }} />
                 <Text size="2" weight="medium" style={{ color: '#374151' }}>Numéro de séquence</Text>
               </Flex>
               <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
@@ -507,7 +631,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
             
             <Card className="p-4">
               <Flex align="center" gap="3" mb="2">
-                <BoxIcon className="w-5 h-5" style={{ color: '#3b82f6' }} />
+                <FileTextIcon className="w-5 h-5" style={{ color: '#3b82f6' }} />
                 <Text size="2" weight="medium" style={{ color: '#374151' }}>Bon de livraison</Text>
               </Flex>
               <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
@@ -526,6 +650,8 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
             </Card>
           </div>
         </div>
+
+
 
         {/* Articles */}
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
@@ -560,7 +686,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                         </Text>
                       </Table.Cell>
                       <Table.Cell>
-                        {article.quantite_restante > 0 && (
+                        {article.quantite_restante > 0 && canDeliver() && (
                           <Button
                             size="1"
                             onClick={() => markAllAsDelivered(articleKey)}
@@ -574,6 +700,11 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                           >
                             ✓
                           </Button>
+                        )}
+                        {article.quantite_restante > 0 && !canDeliver() && (
+                          <Text size="1" style={{ color: '#f59e0b', fontSize: '10px' }}>
+                            ⚠️
+                          </Text>
                         )}
                       </Table.Cell>
                       <Table.Cell>
@@ -617,14 +748,16 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                               {article.quantite_livree > 0 && (
                                 <CheckIcon className="w-4 h-4" style={{ color: '#10b981' }} />
                               )}
-                              <Button
-                                size="1"
-                                variant="ghost"
-                                onClick={() => startEditing(articleKey, article.quantite_livree)}
-                                style={{ cursor: 'pointer' }}
-                              >
-                                <Pencil1Icon className="w-3 h-3" />
-                              </Button>
+                              {canDeliver() && (
+                                <Button
+                                  size="1"
+                                  variant="ghost"
+                                  onClick={() => startEditing(articleKey, article.quantite_livree)}
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  <Pencil1Icon className="w-3 h-3" />
+                                </Button>
+                              )}
                             </Flex>
                           )}
                         </Flex>
@@ -677,7 +810,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
 
           {/* Boutons d'action */}
           <div className="mt-4 flex justify-center gap-4">
-            {localColisData.articles.some(article => article.quantite_restante > 0) && (
+            {localColisData.articles.some(article => article.quantite_restante > 0) && canDeliver() && (
               <Button 
                 size="3"
                 onClick={markAllArticlesAsDelivered}
@@ -695,21 +828,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
               </Button>
             )}
             
-            <Button 
-              size="3"
-              variant="outline"
-              onClick={() => saveToBackend(localColisData)}
-              disabled={isSaving}
-              style={{ 
-                borderColor: '#3b82f6',
-                color: '#3b82f6',
-                cursor: isSaving ? 'not-allowed' : 'pointer',
-                opacity: isSaving ? 0.6 : 1,
-                padding: '12px 24px'
-              }}
-            >
-              💾 Sauvegarder tout
-            </Button>
+
           </div>
         </div>
 

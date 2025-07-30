@@ -10,8 +10,9 @@ import base64
 
 class Colis(Document):
 	def validate(self):
-		# Générer le QR code à chaque sauvegarde
-		self.generate_qr_code()
+		# Générer le QR code seulement si le document est nouveau et n'a pas encore d'image
+		if self.is_new() and (not self.image or not self.image.strip()):
+			self.generate_qr_code()
 		# Calculer le statut global basé sur les articles
 		self.calculate_global_status()
 	
@@ -90,6 +91,13 @@ class Colis(Document):
 		"""Génère un QR code pour le document Colis et le stocke directement comme pièce jointe"""
 		if not self.name or self.name == "new-colis":
 			return
+		
+		# Vérifier si un QR code existe déjà (champ image non vide)
+		if self.image and self.image.strip():
+			# Permettre la régénération si demandée explicitement
+			if not getattr(self, '_force_regenerate_qr', False):
+				frappe.msgprint("Un QR code existe déjà pour ce colis.", indicator="blue")
+				return
 		
 		# Construire l'URL complète vers l'interface livreurs React
 		site_url = frappe.utils.get_url()
@@ -170,6 +178,41 @@ class Colis(Document):
 		
 		# Ne plus utiliser le champ qr_code pour éviter l'erreur "Valeur trop grande"
 		self.qr_code = None
+	
+	@frappe.whitelist()
+	def regenerate_qr_code(self):
+		"""Force la régénération du QR code en supprimant l'ancien"""
+		if not self.name or self.name == "new-colis":
+			return
+		
+		# Supprimer l'ancien QR code
+		if self.image:
+			# Supprimer le fichier existant
+			existing_files = frappe.get_all(
+				"File",
+				filters={
+					"attached_to_doctype": "Colis",
+					"attached_to_name": self.name,
+					"file_name": ["like", "qr_code_%"]
+				},
+				fields=["name"]
+			)
+			
+			for file in existing_files:
+				try:
+					frappe.delete_doc("File", file.name)
+				except Exception as e:
+					frappe.log_error(f"Erreur lors de la suppression du fichier QR code: {e}")
+			
+			# Vider le champ image
+			self.image = None
+		
+		# Forcer la régénération
+		self._force_regenerate_qr = True
+		self.generate_qr_code()
+		self._force_regenerate_qr = False
+		
+		frappe.msgprint("QR code régénéré avec succès.", indicator="green")
 
 
 @frappe.whitelist()
