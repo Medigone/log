@@ -75,8 +75,9 @@ class Colis(Document):
 		if all(status == "Livré" for status in article_statuses):
 			self.status = "Livré"
 		elif all(status == "En attente" for status in article_statuses):
-			# Garder le statut actuel si tous les articles sont en attente
-			pass
+			# Définir le statut "Nouveau" si tous les articles sont en attente et aucun statut n'est défini
+			if not self.status or self.status in ["Draft", ""]:
+				self.status = "Nouveau"
 		elif any(status == "Partiellement livré" for status in article_statuses) or \
 			 (any(status == "Livré" for status in article_statuses) and 
 			  any(status in ["En attente", "Partiellement livré"] for status in article_statuses)):

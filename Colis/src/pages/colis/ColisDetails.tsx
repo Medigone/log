@@ -1,7 +1,7 @@
 import { Flex, Box, Heading, Text, Badge, Card, Table, Button, Separator, TextField } from '@radix-ui/themes';
 import { useState, useRef, useEffect } from 'react';
 import { CalendarIcon, PersonIcon, BoxIcon, CheckIcon, CrossCircledIcon, Pencil1Icon, CameraIcon } from '@radix-ui/react-icons';
-import { useFrappeGetDoc, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
+import { useFrappeGetDoc, useFrappeDocTypeEventListener, useFrappeUpdateDoc } from 'frappe-react-sdk';
 
 interface Article {
   id: string;
@@ -28,6 +28,7 @@ interface ColisData {
   photo_livraison?: string;
   signature_client?: string;
   commentaire_livreur?: string;
+  date_derniere_livraison?: string;
 }
 
 interface ColisDetailsProps {
@@ -49,14 +50,18 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
       'articles',
       'photo_livraison',
       'signature_client',
-      'commentaire_livreur'
+      'commentaire_livreur',
+      'date_derniere_livraison'
     ]
   });
 
-  // Écouter les changements sur le doctype Colis
-  useFrappeDocTypeEventListener('Colis', () => {
-    mutateColisData();
-  });
+  // Hook pour mettre à jour le document Frappe
+  const { updateDoc: updateColis, loading: isUpdating, error: updateError } = useFrappeUpdateDoc();
+
+  // Écouter les changements sur le doctype Colis - Commenté pour éviter les conflits de synchronisation
+  // useFrappeDocTypeEventListener('Colis', () => {
+  //   mutateColisData();
+  // });
 
   // État local pour les modifications
   const [localColisData, setLocalColisData] = useState<ColisData | null>(null);
@@ -68,6 +73,9 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
         ...colisData,
         id: colisData.name || colisData.id
       });
+      // Réinitialiser l'état d'édition lors du chargement des données
+      setEditingArticle(null);
+      setTempQuantities({});
     }
   }, [colisData]);
 
@@ -96,7 +104,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
 
   // État pour gérer l'édition des quantités
   const [editingArticle, setEditingArticle] = useState<string | null>(null);
-  const [tempQuantity, setTempQuantity] = useState<number>(0);
+  const [tempQuantities, setTempQuantities] = useState<{[key: string]: number}>({});
 
   // État pour gérer la capture photo
   const [isCapturing, setIsCapturing] = useState<boolean>(false);
@@ -109,16 +117,47 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
   const [isEditingComment, setIsEditingComment] = useState<boolean>(false);
   const [commentText, setCommentText] = useState<string>(localColisData?.commentaire_livreur || '');
 
+  // État pour gérer le chargement de la sauvegarde
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+
+  // Fonction pour sauvegarder les modifications vers le backend
+  const saveToBackend = async (updatedData: Partial<ColisData>) => {
+    if (!colisId) return;
+    
+    setIsSaving(true);
+    try {
+      await updateColis('Colis', colisId, updatedData);
+      console.log('Données sauvegardées avec succès');
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde:', error);
+      alert('Erreur lors de la sauvegarde des modifications');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Fonction pour démarrer l'édition d'un article
   const startEditing = (articleId: string, currentQuantity: number) => {
-    setEditingArticle(articleId);
-    setTempQuantity(currentQuantity);
+    console.log('Starting edit for article:', articleId, 'with quantity:', currentQuantity);
+    
+    // Réinitialiser l'état d'édition pour éviter les conflits
+    setEditingArticle(null);
+    setTempQuantities({});
+    
+    // Démarrer l'édition pour cet article spécifique
+    setTimeout(() => {
+      setEditingArticle(articleId);
+      setTempQuantities({
+        [articleId]: currentQuantity
+      });
+    }, 0);
   };
 
   // Fonction pour annuler l'édition
   const cancelEditing = () => {
+    console.log('Canceling edit for article:', editingArticle);
     setEditingArticle(null);
-    setTempQuantity(0);
+    setTempQuantities({});
   };
 
   // Fonction pour démarrer la capture photo
@@ -153,7 +192,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
   };
 
   // Fonction pour capturer la photo
-  const capturePhoto = () => {
+  const capturePhoto = async () => {
     if (videoRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -174,17 +213,27 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
         }) : null);
         
         stopCamera();
+        
+        // Sauvegarder la photo dans Frappe
+        await saveToBackend({
+          photo_livraison: photoDataUrl
+        });
       }
     }
   };
 
   // Fonction pour supprimer la photo
-  const deletePhoto = () => {
+  const deletePhoto = async () => {
     setCapturedPhoto(null);
     setLocalColisData(prevData => prevData ? ({
       ...prevData,
       photo_livraison: undefined
     }) : null);
+    
+    // Sauvegarder la suppression dans Frappe
+    await saveToBackend({
+      photo_livraison: undefined
+    });
   };
 
   // Fonctions pour l'édition du commentaire
@@ -192,12 +241,17 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     setIsEditingComment(true);
   };
 
-  const saveComment = () => {
+  const saveComment = async () => {
     setLocalColisData(prevData => prevData ? ({
       ...prevData,
       commentaire_livreur: commentText
     }) : null);
     setIsEditingComment(false);
+    
+    // Sauvegarder le commentaire dans Frappe
+    await saveToBackend({
+      commentaire_livreur: commentText
+    });
   };
 
   const cancelEditComment = () => {
@@ -206,14 +260,20 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
   };
 
   // Fonction pour sauvegarder les modifications
-  const saveQuantity = (articleId: string) => {
-    if (!localColisData) return;
+  const saveQuantity = async (articleId: string) => {
+    if (!localColisData || editingArticle !== articleId) {
+      console.log('Cannot save: no data or wrong article being edited');
+      return;
+    }
+    
+    console.log('Saving quantity for article:', articleId, 'with value:', tempQuantities[articleId]);
     
     setLocalColisData(prevData => {
       if (!prevData) return null;
-      const updatedArticles = prevData.articles.map(article => {
-        if (article.id === articleId) {
-          const newQuantiteLivree = Math.min(tempQuantity, article.quantite_totale);
+      const updatedArticles = prevData.articles.map((article, index) => {
+        const articleKey = article.id || `article-${index}`;
+        if (articleKey === articleId) {
+          const newQuantiteLivree = Math.min(tempQuantities[articleId] || 0, article.quantite_totale);
           const newQuantiteRestante = article.quantite_totale - newQuantiteLivree;
           
           let newStatut = 'En attente';
@@ -230,7 +290,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
             quantite_livree: newQuantiteLivree,
             quantite_restante: newQuantiteRestante,
             statut_article: newStatut,
-            date_derniere_livraison: newQuantiteLivree > 0 ? new Date().toISOString() : article.date_derniere_livraison
+            date_derniere_livraison: new Date().toISOString().slice(0, 19).replace('T', ' ')
           };
         }
         return article;
@@ -248,34 +308,41 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
         newGlobalStatus = 'Partiellement Livré';
       }
 
-      return {
+      const updatedData = {
         ...prevData,
         articles: updatedArticles,
         status: newGlobalStatus
       };
+      
+      // Sauvegarder les modifications dans Frappe de manière asynchrone
+      saveToBackend({
+        articles: updatedData.articles,
+        status: updatedData.status
+      });
+      
+      return updatedData;
     });
     
+    console.log('Finished saving quantity for article:', articleId);
     setEditingArticle(null);
-    setTempQuantity(0);
-    
-    // TODO: Sauvegarder les modifications dans Frappe
-    // Vous pouvez utiliser useFrappeUpdateDoc ici
+    setTempQuantities({});
   };
 
   // Fonction pour marquer toute la quantité comme livrée
-  const markAllAsDelivered = (articleId: string) => {
+  const markAllAsDelivered = async (articleId: string) => {
     if (!localColisData) return;
     
     setLocalColisData(prevData => {
       if (!prevData) return null;
-      const updatedArticles = prevData.articles.map(article => {
-        if (article.id === articleId) {
+      const updatedArticles = prevData.articles.map((article, index) => {
+        const articleKey = article.id || `article-${index}`;
+        if (articleKey === articleId) {
           return {
             ...article,
             quantite_livree: article.quantite_totale,
             quantite_restante: 0,
             statut_article: 'Livré',
-            date_derniere_livraison: new Date().toISOString()
+            date_derniere_livraison: new Date().toISOString().slice(0, 19).replace('T', ' ')
           };
         }
         return article;
@@ -293,17 +360,26 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
         newGlobalStatus = 'Partiellement Livré';
       }
 
-      return {
+      const updatedData = {
         ...prevData,
         articles: updatedArticles,
         status: newGlobalStatus,
-        date_derniere_livraison: new Date().toISOString()
+        date_derniere_livraison: new Date().toISOString().slice(0, 19).replace('T', ' ')
       };
+      
+      // Sauvegarder les modifications dans Frappe de manière asynchrone
+      saveToBackend({
+        articles: updatedData.articles,
+        status: updatedData.status,
+        date_derniere_livraison: updatedData.date_derniere_livraison
+      });
+      
+      return updatedData;
     });
   };
 
   // Fonction pour marquer tous les articles comme livrés
-  const markAllArticlesAsDelivered = () => {
+  const markAllArticlesAsDelivered = async () => {
     if (!localColisData) return;
     
     setLocalColisData(prevData => {
@@ -313,15 +389,24 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
         quantite_livree: article.quantite_totale,
         quantite_restante: 0,
         statut_article: 'Livré',
-        date_derniere_livraison: new Date().toISOString()
+        date_derniere_livraison: new Date().toISOString().slice(0, 19).replace('T', ' ')
       }));
 
-      return {
+      const updatedData = {
         ...prevData,
         articles: updatedArticles,
         status: 'Livré',
-        date_derniere_livraison: new Date().toISOString()
+        date_derniere_livraison: new Date().toISOString().slice(0, 19).replace('T', ' ')
       };
+      
+      // Sauvegarder les modifications dans Frappe de manière asynchrone
+      saveToBackend({
+        articles: updatedData.articles,
+        status: updatedData.status,
+        date_derniere_livraison: updatedData.date_derniere_livraison
+      });
+      
+      return updatedData;
     });
   };
 
@@ -375,6 +460,11 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
               <Text size="3" style={{ color: '#64748b' }}>
                 {localColisData.id}
               </Text>
+              {isSaving && (
+                <Text size="2" style={{ color: '#3b82f6', fontStyle: 'italic' }}>
+                  💾 Sauvegarde en cours...
+                </Text>
+              )}
             </div>
             <Badge size="1" color={getStatusColor(localColisData.status) as any}>
               {localColisData.status}
@@ -458,109 +548,117 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
               </Table.Header>
               
               <Table.Body>
-                {localColisData.articles.map((article, index) => (
-                  <Table.Row key={article.id || `article-${index}`}>
-                    <Table.Cell>
-                      <Text size="3" weight="medium" style={{ color: '#1e293b' }}>
-                        {article.article}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      {article.quantite_restante > 0 && (
-                        <Button
-                          size="1"
-                          onClick={() => markAllAsDelivered(article.id)}
-                          style={{ 
-                            cursor: 'pointer', 
-                            backgroundColor: '#16a34a', 
-                            color: 'white',
-                            fontSize: '10px',
-                            padding: '2px 6px'
-                          }}
-                        >
-                          ✓
-                        </Button>
-                      )}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="3">{article.quantite_totale}</Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Flex align="center" gap="2">
-                        {editingArticle === article.id ? (
-                          <Flex align="center" gap="2">
-                            <TextField.Root
-                              size="1"
-                              style={{ width: '80px' }}
-                              type="number"
-                              min="0"
-                              max={article.quantite_totale}
-                              value={tempQuantity.toString()}
-                              onChange={(e) => setTempQuantity(parseInt(e.target.value) || 0)}
-                            />
-                            <Button
-                              size="1"
-                              onClick={() => saveQuantity(article.id)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <CheckIcon className="w-3 h-3" />
-                            </Button>
-                            <Button
-                              size="1"
-                              variant="outline"
-                              onClick={cancelEditing}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <CrossCircledIcon className="w-3 h-3" />
-                            </Button>
-                          </Flex>
-                        ) : (
-                          <Flex align="center" gap="2">
-                            <Text size="3">{article.quantite_livree}</Text>
-                            {article.quantite_livree > 0 && (
-                              <CheckIcon className="w-4 h-4" style={{ color: '#10b981' }} />
-                            )}
-                            <Button
-                              size="1"
-                              variant="ghost"
-                              onClick={() => startEditing(article.id, article.quantite_livree)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              <Pencil1Icon className="w-3 h-3" />
-                            </Button>
-                          </Flex>
-                        )}
-                      </Flex>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Flex align="center" gap="2">
-                        <Text size="3">{article.quantite_restante}</Text>
+                {localColisData.articles.map((article, index) => {
+                  // Créer un identifiant unique pour chaque article
+                  const articleKey = article.id || `article-${index}`;
+                  
+                  return (
+                    <Table.Row key={articleKey}>
+                      <Table.Cell>
+                        <Text size="3" weight="medium" style={{ color: '#1e293b' }}>
+                          {article.article}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell>
                         {article.quantite_restante > 0 && (
-                          <CrossCircledIcon className="w-4 h-4" style={{ color: '#ef4444' }} />
+                          <Button
+                            size="1"
+                            onClick={() => markAllAsDelivered(articleKey)}
+                            style={{ 
+                              cursor: 'pointer', 
+                              backgroundColor: '#16a34a', 
+                              color: 'white',
+                              fontSize: '10px',
+                              padding: '2px 6px'
+                            }}
+                          >
+                            ✓
+                          </Button>
                         )}
-                      </Flex>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Badge size="1" color={getArticleStatusColor(article.statut_article) as any}>
-                        {article.statut_article}
-                      </Badge>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" style={{ color: '#64748b' }}>
-                        {article.date_derniere_livraison 
-                          ? new Date(article.date_derniere_livraison).toLocaleString('fr-FR', {
-                              day: '2-digit',
-                              month: '2-digit', 
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit'
-                            })
-                          : '-'
-                        }
-                      </Text>
-                    </Table.Cell>
-                  </Table.Row>
-                ))}
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="3">{article.quantite_totale}</Text>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Flex align="center" gap="2">
+                          {editingArticle === articleKey ? (
+                            <Flex align="center" gap="2">
+                              <TextField.Root
+                                size="1"
+                                style={{ width: '80px' }}
+                                type="number"
+                                min="0"
+                                max={article.quantite_totale}
+                                value={(tempQuantities[articleKey] || 0).toString()}
+                                onChange={(e) => setTempQuantities(prev => ({
+                                  ...prev,
+                                  [articleKey]: parseInt(e.target.value) || 0
+                                }))}
+                              />
+                              <Button
+                                size="1"
+                                onClick={() => saveQuantity(articleKey)}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <CheckIcon className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                size="1"
+                                variant="outline"
+                                onClick={cancelEditing}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <CrossCircledIcon className="w-3 h-3" />
+                              </Button>
+                            </Flex>
+                          ) : (
+                            <Flex align="center" gap="2">
+                              <Text size="3">{article.quantite_livree}</Text>
+                              {article.quantite_livree > 0 && (
+                                <CheckIcon className="w-4 h-4" style={{ color: '#10b981' }} />
+                              )}
+                              <Button
+                                size="1"
+                                variant="ghost"
+                                onClick={() => startEditing(articleKey, article.quantite_livree)}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <Pencil1Icon className="w-3 h-3" />
+                              </Button>
+                            </Flex>
+                          )}
+                        </Flex>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Flex align="center" gap="2">
+                          <Text size="3">{article.quantite_restante}</Text>
+                          {article.quantite_restante > 0 && (
+                            <CrossCircledIcon className="w-4 h-4" style={{ color: '#ef4444' }} />
+                          )}
+                        </Flex>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Badge size="1" color={getArticleStatusColor(article.statut_article) as any}>
+                          {article.statut_article}
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="2" style={{ color: '#64748b' }}>
+                          {article.date_derniere_livraison 
+                            ? new Date(article.date_derniere_livraison).toLocaleString('fr-FR', {
+                                day: '2-digit',
+                                month: '2-digit', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
+                            : '-'
+                          }
+                        </Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  );
+                })}
               </Table.Body>
             </Table.Root>
           </div>
@@ -577,24 +675,42 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
             </div>
           </div>
 
-          {/* Bouton pour marquer tous les articles comme livrés */}
-          {localColisData.articles.some(article => article.quantite_restante > 0) && (
-            <div className="mt-4 flex justify-center">
+          {/* Boutons d'action */}
+          <div className="mt-4 flex justify-center gap-4">
+            {localColisData.articles.some(article => article.quantite_restante > 0) && (
               <Button 
                 size="3"
                 onClick={markAllArticlesAsDelivered}
+                disabled={isSaving}
                 style={{ 
                   backgroundColor: '#16a34a', 
                   color: 'white',
-                  cursor: 'pointer',
+                  cursor: isSaving ? 'not-allowed' : 'pointer',
+                  opacity: isSaving ? 0.6 : 1,
                   padding: '12px 24px'
                 }}
               >
                 <CheckIcon className="w-4 h-4" />
                 Marquer comme livré
               </Button>
-            </div>
-          )}
+            )}
+            
+            <Button 
+              size="3"
+              variant="outline"
+              onClick={() => saveToBackend(localColisData)}
+              disabled={isSaving}
+              style={{ 
+                borderColor: '#3b82f6',
+                color: '#3b82f6',
+                cursor: isSaving ? 'not-allowed' : 'pointer',
+                opacity: isSaving ? 0.6 : 1,
+                padding: '12px 24px'
+              }}
+            >
+              💾 Sauvegarder tout
+            </Button>
+          </div>
         </div>
 
         {/* Informations de livraison */}

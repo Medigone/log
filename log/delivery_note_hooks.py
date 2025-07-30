@@ -79,7 +79,18 @@ def create_colis(delivery_note_name):
             row.statut_article = "En attente"  # Initialiser statut_article
             row.description = item.get("description")
 
+    # Définir explicitement le statut avant l'insertion
+    colis.status = "Nouveau"
     colis.insert(ignore_permissions=True)
+    # Sauvegarder pour s'assurer que le statut est persisté
+    colis.save(ignore_permissions=True)
+    
+    # Recharger le document pour s'assurer qu'il est dans un état cohérent
+    colis.reload()
+    
+    # Forcer la mise à jour du cache
+    frappe.db.commit()
+    frappe.clear_document_cache("Colis", colis.name)
 
     # 3) Mise à jour des séquences et du compteur sur la DN
     _update_sequences(delivery_note_name)

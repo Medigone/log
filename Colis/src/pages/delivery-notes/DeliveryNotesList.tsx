@@ -133,11 +133,22 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      // Statuts des bons de livraison (anglais)
       case 'Draft': return 'blue';
       case 'To Deliver': return 'cyan';
       case 'Completed': return 'green';
       case 'Cancelled': return 'red';
       case 'Return Issued': return 'orange';
+      
+      // Statuts des colis (français)
+      case 'Nouveau': return 'blue';
+      case 'Préparé': return 'yellow';
+      case 'Enlevé': return 'orange';
+      case 'Partiellement Livré': return 'amber';
+      case 'Livré': return 'green';
+      case 'Non Livré': return 'red';
+      case 'Annulé': return 'gray';
+      
       default: return 'gray';
     }
   };
