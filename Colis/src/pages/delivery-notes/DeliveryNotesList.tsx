@@ -34,7 +34,7 @@ interface DeliveryNote {
   total_articles?: number;
 }
 
-type Filter = [string, string, any];
+type Filter = [string, '=' | 'like' | 'in', any];
 
 // Interface pour les données enrichies avec les colis
 interface EnrichedDeliveryNote extends DeliveryNote {
@@ -54,7 +54,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
 
   // Filtres pour les bons de livraison
   const filters = useMemo(() => {
-    const f: Filter[] = [];
+    const f: any[] = [];
     if (statusFilter) {
       f.push(['status', '=', statusFilter]);
     }
@@ -72,7 +72,6 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
       'customer', 
       'posting_date', 
       'lr_date',
-      'total_qty',
       'grand_total',
       'custom_nom_livreur'
     ],
@@ -117,7 +116,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
         
         // Calculer les totaux
         const total_colis = notesColis.length;
-        const total_articles = note.total_qty || 0;
+        const total_articles = notesColis.reduce((sum, colis) => sum + (colis.articles?.length || 0), 0);
 
         return {
           ...note,
@@ -175,7 +174,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
     <div className="w-full p-2 sm:p-4">
       <div className="w-full max-w-7xl mx-auto">
         {/* En-tête */}
-        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6 mb-4 sm:mb-6">
+        <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
           <Flex align="center" justify="between" mb="4" className="flex-col sm:flex-row gap-2 sm:gap-0">
             <div className="text-center sm:text-left">
               <Heading size="6" className="sm:text-2xl" style={{ color: '#1e293b' }}>
@@ -237,25 +236,33 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
         </div>
 
         {/* Vue desktop - Tableau */}
-        <div className="hidden lg:block bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="hidden lg:block" style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
           <Table.Root>
             <Table.Header>
-              <Table.Row>
-                <Table.ColumnHeaderCell>Bon de livraison</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Client</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Livreur</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Date de livraison</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Statut</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Colis</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Articles</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Montant</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
+              <Table.Row style={{ backgroundColor: '#1e293b' }}>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Bon de livraison</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Client</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Livreur</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Date de livraison</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Statut</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Colis</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Articles</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Montant</Table.ColumnHeaderCell>
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {finalFilteredNotes.map((note) => (
+              {finalFilteredNotes.map((note, index) => (
                 <React.Fragment key={note.name}>
-                  <Table.Row>
+                  <Table.Row 
+                    style={{ 
+                      backgroundColor: index % 2 === 0 ? 'white' : '#f8fafc', 
+                      transition: 'background-color 0.2s', 
+                      cursor: 'pointer' 
+                    }} 
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#f8fafc'}
+                    onClick={() => toggleNoteExpansion(note.name)}
+                  >
                     <Table.Cell>
                       <Text size="2" weight="bold" style={{ color: '#1e293b' }}>
                         {note.name}
@@ -296,26 +303,12 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                         {note.grand_total ? `${note.grand_total.toLocaleString('fr-FR')} DZD` : 'N/A'}
                       </Text>
                     </Table.Cell>
-                    <Table.Cell>
-                      <Button
-                        size="1"
-                        variant="ghost"
-                        onClick={() => toggleNoteExpansion(note.name)}
-                      >
-                        {expandedNotes.has(note.name) ? (
-                          <ChevronDownIcon className="w-4 h-4" />
-                        ) : (
-                          <ChevronRightIcon className="w-4 h-4" />
-                        )}
-                        Colis
-                      </Button>
-                    </Table.Cell>
                   </Table.Row>
                   
                   {/* Section des colis associés */}
                    {expandedNotes.has(note.name) && (
                      <Table.Row key={`${note.name}-expanded`}>
-                       <Table.Cell colSpan={9}>
+                       <Table.Cell colSpan={8}>
                         <div className="bg-gray-50 p-4 rounded-lg">
                           <Text size="2" weight="bold" mb="3" style={{ color: '#374151' }}>
                             Colis associés ({note.colis?.length || 0})
@@ -330,12 +323,15 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                                     <Table.ColumnHeaderCell>Client</Table.ColumnHeaderCell>
                                     <Table.ColumnHeaderCell>Statut</Table.ColumnHeaderCell>
                                     <Table.ColumnHeaderCell>Date</Table.ColumnHeaderCell>
-                                    <Table.ColumnHeaderCell>Actions</Table.ColumnHeaderCell>
                                   </Table.Row>
                                 </Table.Header>
                                 <Table.Body>
                                   {note.colis.map((colis) => (
-                                    <Table.Row key={colis.name}>
+                                    <Table.Row 
+                                      key={colis.name}
+                                      onClick={() => onColisSelect?.(colis.name)}
+                                      style={{ cursor: 'pointer' }}
+                                    >
                                       <Table.Cell>
                                         <Text size="2" weight="bold" style={{ color: '#1e293b' }}>
                                           {colis.custom_numero_sequence || colis.name}
@@ -355,16 +351,6 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                                         <Text size="2" style={{ color: '#64748b' }}>
                                           {colis.date_creation ? new Date(colis.date_creation).toLocaleDateString('fr-FR') : 'Date non définie'}
                                         </Text>
-                                      </Table.Cell>
-                                      <Table.Cell>
-                                        <Button
-                                          size="1"
-                                          variant="soft"
-                                          onClick={() => onColisSelect?.(colis.name)}
-                                        >
-                                          <EyeIcon size={14} />
-                                          Voir détails
-                                        </Button>
                                       </Table.Cell>
                                     </Table.Row>
                                   ))}
@@ -389,7 +375,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
         {/* Vue mobile - Cartes */}
         <div className="lg:hidden space-y-3">
           {finalFilteredNotes.map((note) => (
-            <div key={note.name} className="bg-white rounded-xl shadow-lg overflow-hidden">
+            <div key={note.name} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {/* En-tête de la carte */}
               <div className="p-4 border-b border-gray-100">
                 <Flex align="center" justify="between" mb="2">
@@ -520,7 +506,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
 
         {/* Message si aucun résultat */}
         {finalFilteredNotes.length === 0 && (
-          <div className="bg-white rounded-2xl shadow-lg p-12 text-center">
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
             <BoxIcon className="w-12 h-12 mx-auto mb-4" style={{ color: '#9ca3af' }} />
             <Heading size="4" mb="2" style={{ color: '#374151' }}>
               Aucun bon de livraison trouvé

@@ -648,7 +648,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     return (
       <div className="w-full p-4">
         <div className="w-full max-w-7xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <Text size="4" style={{ color: '#64748b' }}>Chargement des données du colis...</Text>
           </div>
         </div>
@@ -660,7 +660,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     return (
       <div className="w-full p-4">
         <div className="w-full max-w-7xl mx-auto">
-          <div className="bg-red-50 border border-red-200 rounded-2xl shadow-lg p-6">
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-6">
             <Text size="4" style={{ color: '#dc2626' }}>Erreur lors du chargement : {error.message}</Text>
           </div>
         </div>
@@ -672,7 +672,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     return (
       <div className="w-full p-4">
         <div className="w-full max-w-7xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-lg p-6">
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
             <Text size="4" style={{ color: '#64748b' }}>Aucune donnée disponible pour ce colis.</Text>
           </div>
         </div>
@@ -684,15 +684,20 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     <div className="w-full p-4">
       <div className="w-full max-w-7xl mx-auto">
         {/* En-tête */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
           <Flex align="center" justify="between" mb="4">
             <div>
               <Heading size="7" style={{ color: '#1e293b' }}>
                 Colis {localColisData.custom_numero_sequence}
               </Heading>
-              <Text size="3" style={{ color: '#64748b' }}>
-                {localColisData.id}
-              </Text>
+              <Flex align="center" gap="3" mt="2">
+                <Text size="3" style={{ color: '#64748b' }}>
+                  {localColisData.id}
+                </Text>
+                <Badge size="2" color={getStatusColor(localColisData.status) as any}>
+                  {localColisData.status}
+                </Badge>
+              </Flex>
               {isSaving && (
                 <Text size="2" style={{ color: '#3b82f6', fontStyle: 'italic' }}>
                   💾 Sauvegarde en cours...
@@ -728,11 +733,6 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                       ← {status}
                     </Button>
                   ))}
-                
-                {/* Statut actuel (au milieu) */}
-                <Badge size="1" color={getStatusColor(localColisData.status) as any}>
-                  {localColisData.status}
-                </Badge>
                 
                 {/* Statuts suivants (vert) */}
                 {getAvailableStatuses(localColisData.status)
@@ -826,22 +826,22 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
 
 
         {/* Articles */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
           <Heading size="5" mb="4" style={{ color: '#1e293b' }}>
             Articles ({localColisData.articles.length})
           </Heading>
           
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
             <Table.Root>
               <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeaderCell>Article</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Action</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Qté Totale</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Qté Livrée</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Qté Restante</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Statut</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Mise à jour</Table.ColumnHeaderCell>
+                <Table.Row style={{ backgroundColor: '#1e293b' }}>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Article</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Action</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Qté Totale</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Qté Livrée</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Qté Restante</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Statut</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Mise à jour</Table.ColumnHeaderCell>
                 </Table.Row>
               </Table.Header>
               
@@ -851,7 +851,15 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                   const articleKey = article.id || `article-${index}`;
                   
                   return (
-                    <Table.Row key={articleKey}>
+                    <Table.Row 
+                      key={articleKey}
+                      style={{ 
+                        backgroundColor: index % 2 === 0 ? 'white' : '#f8fafc', 
+                        transition: 'background-color 0.2s' 
+                      }} 
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#f8fafc'}
+                    >
                       <Table.Cell>
                         <Text size="3" weight="medium" style={{ color: '#1e293b' }}>
                           {article.article}
@@ -935,12 +943,14 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                         </Flex>
                       </Table.Cell>
                       <Table.Cell>
-                        <Flex align="center" gap="2">
-                          <Text size="3">{article.quantite_restante}</Text>
-                          {article.quantite_restante > 0 && (
-                            <CrossCircledIcon className="w-4 h-4" style={{ color: '#ef4444' }} />
-                          )}
-                        </Flex>
+                        <Text 
+                          size="3" 
+                          style={{ 
+                            color: article.quantite_restante !== 0 ? '#ef4444' : 'inherit' 
+                          }}
+                        >
+                          {article.quantite_restante}
+                        </Text>
                       </Table.Cell>
                       <Table.Cell>
                         <Badge size="1" color={getArticleStatusColor(article.statut_article) as any}>
@@ -1005,12 +1015,12 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
         </div>
 
         {/* Informations de livraison */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 mb-6">
           <Heading size="5" mb="4" style={{ color: '#1e293b' }}>
             Informations de livraison
           </Heading>
           
-          <div className="flex justify-center">
+          <div className="flex justify-center mb-6">
             <Box className="w-full max-w-md">
               <Text size="3" weight="medium" mb="2" style={{ color: '#374151' }}>
                 Photo de livraison
@@ -1110,70 +1120,72 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
               )}
             </Box>
           </div>
+          
+          {/* Commentaire */}
+          <div>
+            <Text size="3" weight="medium" mb="2" style={{ color: '#374151' }}>
+              Commentaire
+            </Text>
+            
+            {isEditingComment ? (
+              <div>
+                <textarea
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  className="w-full p-4 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  rows={4}
+                  placeholder="Ajoutez un commentaire..."
+                  style={{ fontSize: '14px', lineHeight: '1.6' }}
+                />
+                <Flex gap="2" mt="3" justify="end">
+                  <Button 
+                    size="2" 
+                    variant="outline"
+                    onClick={cancelEditComment}
+                    style={{ cursor: 'pointer', borderColor: '#6b7280', color: '#6b7280' }}
+                  >
+                    Annuler
+                  </Button>
+                  <Button 
+                    size="2" 
+                    onClick={saveComment}
+                    style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
+                  >
+                    <CheckIcon className="w-4 h-4" />
+                    Enregistrer
+                  </Button>
+                </Flex>
+              </div>
+            ) : (
+              <div>
+                <Box className="bg-gray-50 p-4 rounded-lg min-h-[100px] flex items-start">
+                  {commentText ? (
+                    <Text size="3" style={{ color: '#374151', lineHeight: '1.6' }}>
+                      {commentText}
+                    </Text>
+                  ) : (
+                    <Text size="3" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
+                      Aucun commentaire
+                    </Text>
+                  )}
+                </Box>
+                <div className="flex justify-end mt-3">
+                  <Button 
+                    size="2" 
+                    variant="outline"
+                    onClick={startEditingComment}
+                    style={{ cursor: 'pointer', borderColor: '#1e293b', color: '#1e293b' }}
+                  >
+                    <Pencil1Icon className="w-4 h-4" />
+                    Modifier
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Commentaires */}
-        <div className="bg-white rounded-2xl shadow-lg p-6">
-          <Heading size="5" mb="4" style={{ color: '#1e293b' }}>
-            Commentaire
-          </Heading>
-          
-          {isEditingComment ? (
-            <div>
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                className="w-full p-4 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                rows={4}
-                placeholder="Ajoutez un commentaire..."
-                style={{ fontSize: '14px', lineHeight: '1.6' }}
-              />
-              <Flex gap="2" mt="3" justify="end">
-                <Button 
-                  size="2" 
-                  variant="outline"
-                  onClick={cancelEditComment}
-                  style={{ cursor: 'pointer', borderColor: '#6b7280', color: '#6b7280' }}
-                >
-                  Annuler
-                </Button>
-                <Button 
-                  size="2" 
-                  onClick={saveComment}
-                  style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
-                >
-                  <CheckIcon className="w-4 h-4" />
-                  Enregistrer
-                </Button>
-              </Flex>
-            </div>
-          ) : (
-            <div>
-              <Box className="bg-gray-50 p-4 rounded-lg min-h-[100px] flex items-start">
-                {commentText ? (
-                  <Text size="3" style={{ color: '#374151', lineHeight: '1.6' }}>
-                    {commentText}
-                  </Text>
-                ) : (
-                  <Text size="3" style={{ color: '#9ca3af', fontStyle: 'italic' }}>
-                    Aucun commentaire
-                  </Text>
-                )}
-              </Box>
-              <div className="flex justify-end mt-3">
-                <Button 
-                  size="2" 
-                  variant="outline"
-                  onClick={startEditingComment}
-                  style={{ cursor: 'pointer', borderColor: '#1e293b', color: '#1e293b' }}
-                >
-                  <Pencil1Icon className="w-4 h-4" />
-                  Modifier
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
+
 
 
       </div>

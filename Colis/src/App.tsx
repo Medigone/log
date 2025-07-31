@@ -29,7 +29,7 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 	const displayName = userData?.full_name || userData?.email || currentUser;
 
 	return (
-		<div className="w-full bg-white shadow-lg border-b border-gray-200">
+		<div className="w-full bg-white border-b border-gray-200">
 			{/* En-tête avec titre et bouton de déconnexion */}
 			<div className="px-6 py-4">
 				<Flex align="center" justify="between">
