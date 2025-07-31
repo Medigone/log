@@ -29,6 +29,7 @@ interface DeliveryNote {
   custom_type?: string;
   custom_préparé?: boolean;
   grand_total?: number;
+  total_qty?: number;
   colis?: Colis[];
   total_colis?: number;
   total_articles?: number;
@@ -73,7 +74,8 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
       'posting_date', 
       'lr_date',
       'grand_total',
-      'custom_nom_livreur'
+      'custom_nom_livreur',
+      'total_qty'
     ],
     filters: filters,
     limit: 20,
@@ -116,7 +118,8 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
         
         // Calculer les totaux
         const total_colis = notesColis.length;
-        const total_articles = notesColis.reduce((sum, colis) => sum + (colis.articles?.length || 0), 0);
+        // Utiliser directement total_qty du Delivery Note au lieu de calculer manuellement
+        const total_articles = note.total_qty || 0;
 
         return {
           ...note,

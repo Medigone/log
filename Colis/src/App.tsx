@@ -8,6 +8,7 @@ import Login from './pages/auth/Login';
 import ColisDetails from './pages/colis/ColisDetails';
 import ColisPublicView from './pages/colis/ColisPublicView';
 import { DeliveryNotesList } from './pages/delivery-notes';
+import logoSvg from './assets/IntraPro_fleetmaster.svg';
 
 // Barre de navigation
 function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: string | null; onBackToList: () => void }) {
@@ -35,9 +36,11 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 			<div className="px-6 py-4">
 				<Flex align="center" justify="between">
 					<div>
-						<Text size="4" weight="bold" style={{ color: '#1e293b' }}>
-							Gestion Logistique
-						</Text>
+						<img 
+							src={logoSvg} 
+							alt="IntraPro FleetMaster" 
+							style={{ height: '40px', width: 'auto' }}
+						/>
 					</div>
 					<Flex align="center" gap="4">
 						<Text size="2" style={{ color: '#64748b' }}>
