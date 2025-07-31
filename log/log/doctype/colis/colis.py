@@ -946,3 +946,168 @@ def deliver_all_articles(docname, confirm=False):
 			'success': False,
 			'message': f'Erreur: {str(e)}'
 		}
+
+
+@frappe.whitelist()
+def upload_photo_livraison(colis_id, file_data, filename):
+	"""Upload une photo de livraison pour un colis
+	
+	Args:
+		colis_id (str): L'ID du colis
+		file_data (str): Les données du fichier en base64
+		filename (str): Le nom du fichier
+	
+	Returns:
+		dict: Résultat de l'upload avec l'URL du fichier
+	"""
+	try:
+		frappe.logger().info(f"Début upload_photo_livraison pour colis_id: {colis_id}")
+		
+		# Vérifier que colis_id n'est pas vide
+		if not colis_id or colis_id == 'undefined' or colis_id == 'null':
+			frappe.logger().error(f"colis_id invalide: {colis_id}")
+			return {
+				'success': False,
+				'message': f'ID du colis invalide: {colis_id}'
+			}
+		
+		# Vérifier que le colis existe
+		try:
+			colis = frappe.get_doc("Colis", colis_id)
+			frappe.logger().info(f"Colis trouvé: {colis.name}")
+		except frappe.DoesNotExistError:
+			frappe.logger().error(f"Colis {colis_id} introuvable")
+			return {
+				'success': False,
+				'message': f'Colis {colis_id} introuvable'
+			}
+		
+		# Décoder les données base64
+		import base64
+		file_content = base64.b64decode(file_data.split(',')[1] if ',' in file_data else file_data)
+		frappe.logger().info(f"Fichier décodé, taille: {len(file_content)} bytes")
+		
+		# Créer le document File directement
+		file_doc = frappe.get_doc({
+			"doctype": "File",
+			"file_name": filename,
+			"attached_to_doctype": "Colis",
+			"attached_to_name": colis_id,
+			"content": file_content,
+			"is_private": 0
+		})
+		
+		# Insérer le fichier et récupérer l'URL
+		file_doc.insert()
+		file_url = file_doc.file_url
+		frappe.logger().info(f"Fichier créé avec URL: {file_url}")
+		
+		# Mettre à jour le champ photo_livraison du colis
+		colis.photo_livraison = file_url
+		colis.save()
+		frappe.logger().info(f"Colis mis à jour avec photo_livraison: {file_url}")
+		
+		return {
+			'success': True,
+			'file_url': file_url,
+			'message': 'Photo uploadée avec succès'
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur upload_photo_livraison: {str(e)}")
+		frappe.logger().error(f"Exception détaillée: {e}")
+		return {
+			'success': False,
+			'message': f'Erreur lors de l\'upload: {str(e)}'
+		}
+
+
+@frappe.whitelist()
+def delete_photo_livraison(colis_id):
+	"""Supprime la photo de livraison d'un colis
+	
+	Args:
+		colis_id (str): L'ID du colis
+	
+	Returns:
+		dict: Résultat de la suppression
+	"""
+	try:
+		frappe.logger().info(f"Début delete_photo_livraison pour colis_id: {colis_id}")
+		
+		# Vérifier que colis_id n'est pas vide
+		if not colis_id or colis_id == 'undefined' or colis_id == 'null':
+			frappe.logger().error(f"colis_id invalide: {colis_id}")
+			return {
+				'success': False,
+				'message': f'ID du colis invalide: {colis_id}'
+			}
+		
+		# Vérifier que le colis existe
+		try:
+			colis = frappe.get_doc("Colis", colis_id)
+			frappe.logger().info(f"Colis trouvé: {colis.name}")
+		except frappe.DoesNotExistError:
+			frappe.logger().error(f"Colis {colis_id} introuvable")
+			return {
+				'success': False,
+				'message': f'Colis {colis_id} introuvable'
+			}
+		
+		# Vérifier s'il y a une photo à supprimer
+		if not colis.photo_livraison:
+			frappe.logger().info(f"Aucune photo à supprimer pour le colis {colis_id}")
+			return {
+				'success': True,
+				'message': 'Aucune photo à supprimer'
+			}
+		
+		# Extraire le nom du fichier depuis l'URL
+		file_url = colis.photo_livraison
+		file_name = file_url.split('/')[-1] if '/' in file_url else file_url
+		frappe.logger().info(f"Tentative de suppression du fichier: {file_name}")
+		
+		# Chercher et supprimer le document File correspondant
+		try:
+			# Chercher le fichier attaché à ce colis
+			files = frappe.get_all("File", 
+				filters={
+					"attached_to_doctype": "Colis",
+					"attached_to_name": colis_id,
+					"file_url": file_url
+				},
+				fields=["name"]
+			)
+			
+			if files:
+				for file_record in files:
+					file_doc = frappe.get_doc("File", file_record.name)
+					file_doc.delete()
+					frappe.logger().info(f"Fichier supprimé: {file_record.name}")
+			else:
+				frappe.logger().warning(f"Aucun fichier trouvé pour l'URL: {file_url}")
+			
+		except Exception as file_error:
+			frappe.logger().warning(f"Erreur lors de la suppression du fichier: {str(file_error)}")
+			# Continuer même si la suppression du fichier échoue
+		
+		# Mettre à jour le champ photo_livraison du colis (le vider)
+		colis.photo_livraison = None
+		colis.save()
+		frappe.logger().info(f"Champ photo_livraison vidé pour le colis {colis_id}")
+		
+		return {
+			'success': True,
+			'message': 'Photo supprimée avec succès'
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur delete_photo_livraison: {str(e)}")
+		frappe.logger().error(f"Exception détaillée: {e}")
+		return {
+			'success': False,
+			'message': f'Erreur lors de la suppression: {str(e)}'
+		}
+
+
+

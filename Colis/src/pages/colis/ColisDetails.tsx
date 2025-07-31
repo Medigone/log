@@ -1,7 +1,7 @@
 import { Flex, Box, Heading, Text, Badge, Card, Table, Button, Separator, TextField } from '@radix-ui/themes';
 import { useState, useRef, useEffect } from 'react';
 import { CalendarIcon, PersonIcon, BoxIcon, CheckIcon, CrossCircledIcon, Pencil1Icon, CameraIcon, FileTextIcon } from '@radix-ui/react-icons';
-import { useFrappeGetDoc, useFrappeDocTypeEventListener, useFrappeUpdateDoc, useFrappeGetCall } from 'frappe-react-sdk';
+import { useFrappeGetDoc, useFrappeDocTypeEventListener, useFrappeUpdateDoc, useFrappeGetCall, useFrappeAuth } from 'frappe-react-sdk';
 
 interface Article {
   id: string;
@@ -57,6 +57,62 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
 
   // Hook pour mettre à jour le document Frappe
   const { updateDoc: updateColis, loading: isUpdating, error: updateError } = useFrappeUpdateDoc();
+
+  // Hook pour l'authentification Frappe
+  const { currentUser } = useFrappeAuth();
+
+  // Fonction pour appeler l'API d'upload via l'API Frappe React SDK
+  const uploadPhoto = async (colisId: string, fileData: string, filename: string) => {
+    try {
+      console.log('Tentative d\'upload avec authentification Frappe...');
+      
+      // Récupérer le token CSRF depuis window.csrf_token
+      const csrfToken = (window as any).csrf_token;
+      
+      // Appeler notre méthode backend personnalisée avec authentification
+      const response = await fetch('/api/method/log.log.doctype.colis.colis.upload_photo_livraison', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Frappe-CSRF-Token': csrfToken
+        },
+        body: JSON.stringify({
+          colis_id: colisId,
+          file_data: fileData,
+          filename: filename
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Upload success:', result);
+        
+        if (result && result.message && result.message.file_url) {
+          // Mettre à jour le champ photo_livraison du colis
+          await updateColis('Colis', colisId, {
+            photo_livraison: result.message.file_url
+          });
+          
+          return {
+            success: true,
+            file_url: result.message.file_url
+          };
+        } else {
+          throw new Error('Réponse invalide du serveur');
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('Upload error:', errorText);
+        throw new Error(errorText);
+      }
+    } catch (error) {
+      console.error('Erreur upload:', error);
+      throw error;
+    }
+  };
+
+
 
   // Écouter les changements sur le doctype Colis - Commenté pour éviter les conflits de synchronisation
   // useFrappeDocTypeEventListener('Colis', () => {
@@ -203,37 +259,149 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.drawImage(video, 0, 0);
-        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setCapturedPhoto(photoDataUrl);
         
-        // Mettre à jour les données du colis
-        setLocalColisData(prevData => prevData ? ({
-          ...prevData,
-          photo_livraison: photoDataUrl
-        }) : null);
+        // Convertir le canvas en base64
+        const photoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        
+        try {
+          // Debug: Afficher les données envoyées
+          console.log('Capture photo - colisId:', colisId);
+          console.log('Capture photo - photoDataUrl length:', photoDataUrl.length);
+          
+          // Appeler notre API personnalisée
+          const result = await uploadPhoto(colisId || '', photoDataUrl, `photo_livraison_${colisId}_${Date.now()}.jpg`);
+          
+          console.log('Capture photo result:', result);
+          
+          if (result && result.success) {
+            const fileUrl = result.file_url; // URL du format /files/filename.png
+            
+            setCapturedPhoto(fileUrl);
+            
+            // Mettre à jour les données du colis
+            setLocalColisData(prevData => prevData ? ({
+              ...prevData,
+              photo_livraison: fileUrl
+            }) : null);
+          } else {
+            throw new Error('Erreur lors de l\'upload');
+          }
+        } catch (error) {
+          console.error('Erreur lors de l\'upload du fichier:', error);
+          alert('Erreur lors de l\'upload du fichier image');
+        }
         
         stopCamera();
-        
-        // Sauvegarder la photo dans Frappe
-        await saveToBackend({
-          photo_livraison: photoDataUrl
-        });
       }
     }
   };
 
+    // Fonction pour sélectionner une image depuis la galerie
+  const selectFromGallery = () => {
+    // Vérifier que colisId existe
+    if (!colisId) {
+      alert('Erreur: ID du colis manquant');
+      return;
+    }
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // Préférer la caméra arrière sur mobile
+    
+    input.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0];
+      if (file) {
+        try {
+          // Convertir le fichier en base64
+          const reader = new FileReader();
+          reader.onload = async (e) => {
+            const fileData = e.target?.result as string;
+            
+            // Debug: Afficher les données envoyées
+            console.log('Upload photo - colisId:', colisId);
+            console.log('Upload photo - filename:', file.name);
+            console.log('Upload photo - fileData length:', fileData.length);
+            
+            // Appeler notre API personnalisée
+            const result = await uploadPhoto(colisId, fileData, file.name);
+            
+            console.log('API result:', result);
+            
+            if (result && result.success) {
+              const fileUrl = result.file_url; // URL du format /files/filename.png
+              
+              setCapturedPhoto(fileUrl);
+              
+              // Mettre à jour les données du colis
+              setLocalColisData(prevData => prevData ? ({
+                ...prevData,
+                photo_livraison: fileUrl
+              }) : null);
+            } else {
+              throw new Error('Erreur lors de l\'upload');
+            }
+          };
+          reader.readAsDataURL(file);
+        } catch (error) {
+          console.error('Erreur lors de l\'upload du fichier:', error);
+          alert('Erreur lors de l\'upload du fichier image');
+        }
+      }
+    };
+    
+    input.click();
+  };
+
   // Fonction pour supprimer la photo
   const deletePhoto = async () => {
-    setCapturedPhoto(null);
-    setLocalColisData(prevData => prevData ? ({
-      ...prevData,
-      photo_livraison: undefined
-    }) : null);
+    if (!colisId) {
+      alert('Erreur: ID du colis manquant');
+      return;
+    }
     
-    // Sauvegarder la suppression dans Frappe
-    await saveToBackend({
-      photo_livraison: undefined
-    });
+    try {
+      console.log('Suppression de la photo pour le colis:', colisId);
+      
+      // Récupérer le token CSRF depuis window.csrf_token
+      const csrfToken = (window as any).csrf_token;
+      
+      // Appeler notre méthode backend pour supprimer la photo
+      const response = await fetch('/api/method/log.log.doctype.colis.colis.delete_photo_livraison', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-Frappe-CSRF-Token': csrfToken
+        },
+        body: JSON.stringify({
+          colis_id: colisId
+        })
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Suppression réussie:', result);
+        
+        if (result && result.message && result.message.success) {
+          // Mettre à jour l'interface utilisateur
+          setCapturedPhoto(null);
+          setLocalColisData(prevData => prevData ? ({
+            ...prevData,
+            photo_livraison: undefined
+          }) : null);
+        } else {
+          throw new Error(result.message?.message || 'Erreur lors de la suppression');
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('Erreur suppression:', errorText);
+        throw new Error(errorText);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la suppression de la photo:', error);
+      alert('Erreur lors de la suppression de la photo');
+    }
   };
 
   // Fonctions pour l'édition du commentaire
@@ -470,6 +638,10 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
   const canDeliver = () => {
     return localColisData?.status === 'Enlevé' || localColisData?.status === 'Partiellement Livré';
   };
+
+  // Debug: Afficher l'ID du colis
+  console.log('ColisDetails - colisId:', colisId);
+  console.log('ColisDetails - localColisData:', localColisData);
 
   // Gestion des états de chargement et d'erreur
   if (isLoading) {
@@ -880,23 +1052,31 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                     className="w-full h-48 object-cover rounded-lg border"
                   />
                   <Flex gap="2" mt="2" justify="center">
-                      <Button 
-                        size="2" 
-                        onClick={startCamera}
-                        style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
-                      >
-                        <CameraIcon className="w-4 h-4" />
-                        Nouvelle photo
-                      </Button>
-                      <Button 
-                        size="2" 
-                        variant="outline" 
-                        onClick={deletePhoto}
-                        style={{ cursor: 'pointer', borderColor: '#ef4444', color: '#ef4444' }}
-                      >
-                        Supprimer
-                      </Button>
-                    </Flex>
+                    <Button 
+                      size="2" 
+                      onClick={startCamera}
+                      style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
+                    >
+                      <CameraIcon className="w-4 h-4" />
+                      Nouvelle photo
+                    </Button>
+                    <Button 
+                      size="2" 
+                      variant="outline"
+                      onClick={selectFromGallery}
+                      style={{ cursor: 'pointer', borderColor: '#3b82f6', color: '#3b82f6' }}
+                    >
+                      📁 Galerie
+                    </Button>
+                    <Button 
+                      size="2" 
+                      variant="outline" 
+                      onClick={deletePhoto}
+                      style={{ cursor: 'pointer', borderColor: '#ef4444', color: '#ef4444' }}
+                    >
+                      Supprimer
+                    </Button>
+                  </Flex>
                 </div>
               ) : (
                 <div className="w-full">
@@ -908,17 +1088,24 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                       </Text>
                     </div>
                   </div>
-                  <div className="flex justify-center">
-                     <Button 
-                       size="2" 
-                       mt="2"
-                       onClick={startCamera}
-                       style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
-                     >
-                       <CameraIcon className="w-4 h-4" />
-                       Prendre une photo
-                     </Button>
-                   </div>
+                  <Flex gap="2" mt="2" justify="center">
+                    <Button 
+                      size="2" 
+                      onClick={startCamera}
+                      style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
+                    >
+                      <CameraIcon className="w-4 h-4" />
+                      Prendre une photo
+                    </Button>
+                    <Button 
+                      size="2" 
+                      variant="outline"
+                      onClick={selectFromGallery}
+                      style={{ cursor: 'pointer', borderColor: '#3b82f6', color: '#3b82f6' }}
+                    >
+                      📁 Sélectionner depuis la galerie
+                    </Button>
+                  </Flex>
                 </div>
               )}
             </Box>
