@@ -1110,4 +1110,56 @@ def delete_photo_livraison(colis_id):
 		}
 
 
+@frappe.whitelist(allow_guest=True)
+def get_public_colis_data(colis_id):
+	"""API publique pour récupérer les données limitées d'un colis sans authentification"""
+	try:
+		# Vérifier que le colis existe
+		if not frappe.db.exists('Colis', colis_id):
+			frappe.throw("Colis non trouvé", frappe.DoesNotExistError)
+		
+		# Récupérer les données du colis avec seulement les champs nécessaires
+		colis_data = frappe.get_doc('Colis', colis_id)
+		
+		# Préparer les données publiques (limitées)
+		public_data = {
+			'id': colis_data.name,
+			'custom_numero_sequence': colis_data.custom_numero_sequence,
+			'status': colis_data.status,
+			'client': colis_data.client,
+			'date_creation': colis_data.date_creation,
+			'bl': colis_data.bl,
+			'articles': []
+		}
+		
+		# Ajouter les articles avec seulement les informations nécessaires
+		if colis_data.articles:
+			for article in colis_data.articles:
+				public_data['articles'].append({
+					'id': article.name,
+					'article': article.article,
+					'statut_article': article.statut_article,
+					'quantite_totale': article.quantite_totale,
+					'quantite_livree': article.quantite_livree,
+					'quantite_restante': article.quantite_restante,
+					'date_derniere_livraison': article.date_derniere_livraison
+				})
+		
+		return public_data
+		
+	except frappe.DoesNotExistError:
+		frappe.local.response.http_status_code = 404
+		return {
+			'error': 'Colis non trouvé',
+			'message': 'Le colis demandé n\'existe pas ou n\'est pas accessible.'
+		}
+	except Exception as e:
+		frappe.log_error(f"Erreur get_public_colis_data: {str(e)}")
+		frappe.local.response.http_status_code = 500
+		return {
+			'error': 'Erreur serveur',
+			'message': 'Une erreur est survenue lors de la récupération des données.'
+		}
+
+
 

@@ -375,7 +375,11 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
         {/* Vue mobile - Cartes */}
         <div className="lg:hidden space-y-3">
           {finalFilteredNotes.map((note) => (
-            <div key={note.name} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div 
+              key={note.name} 
+              className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => toggleNoteExpansion(note.name)}
+            >
               {/* En-tête de la carte */}
               <div className="p-4 border-b border-gray-100">
                 <Flex align="center" justify="between" mb="2">
@@ -433,25 +437,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                   </div>
                 </div>
                 
-                {/* Bouton d'expansion */}
-                <Button
-                  size="2"
-                  variant="ghost"
-                  onClick={() => toggleNoteExpansion(note.name)}
-                  className="w-full mt-4"
-                >
-                  {expandedNotes.has(note.name) ? (
-                    <>
-                      <ChevronDownIcon className="w-4 h-4 mr-1" />
-                      Masquer les colis
-                    </>
-                  ) : (
-                    <>
-                      <ChevronRightIcon className="w-4 h-4 mr-1" />
-                      Voir les colis ({note.colis?.length || 0})
-                    </>
-                  )}
-                </Button>
+
               </div>
               
               {/* Section des colis associés */}
@@ -464,7 +450,14 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                   {note.colis && note.colis.length > 0 ? (
                     <div className="space-y-2">
                       {note.colis.map((colis) => (
-                        <div key={colis.name} className="bg-white p-3 rounded-lg border border-gray-200">
+                        <div 
+                          key={colis.name} 
+                          className="bg-white p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onColisSelect?.(colis.name);
+                          }}
+                        >
                           <div className="flex flex-col gap-3">
                             <div className="flex items-center justify-between">
                               <Text size="2" weight="bold" style={{ color: '#1e293b' }} className="truncate flex-1">
@@ -475,19 +468,10 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                               </Badge>
                             </div>
                             
-                            <div className="flex items-center justify-between">
+                            <div className="flex items-center">
                               <Text size="1" style={{ color: '#64748b' }} className="truncate flex-1">
                                 Client: {colis.client || 'Non défini'}
                               </Text>
-                              <Button
-                                size="1"
-                                variant="soft"
-                                onClick={() => onColisSelect?.(colis.name)}
-                                className="ml-2"
-                              >
-                                <EyeIcon size={12} className="mr-1" />
-                                Voir
-                              </Button>
                             </div>
                           </div>
                         </div>

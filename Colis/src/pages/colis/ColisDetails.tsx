@@ -296,62 +296,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
     }
   };
 
-    // Fonction pour sélectionner une image depuis la galerie
-  const selectFromGallery = () => {
-    // Vérifier que colisId existe
-    if (!colisId) {
-      alert('Erreur: ID du colis manquant');
-      return;
-    }
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.capture = 'environment'; // Préférer la caméra arrière sur mobile
-    
-    input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0];
-      if (file) {
-        try {
-          // Convertir le fichier en base64
-          const reader = new FileReader();
-          reader.onload = async (e) => {
-            const fileData = e.target?.result as string;
-            
-            // Debug: Afficher les données envoyées
-            console.log('Upload photo - colisId:', colisId);
-            console.log('Upload photo - filename:', file.name);
-            console.log('Upload photo - fileData length:', fileData.length);
-            
-            // Appeler notre API personnalisée
-            const result = await uploadPhoto(colisId, fileData, file.name);
-            
-            console.log('API result:', result);
-            
-            if (result && result.success) {
-              const fileUrl = result.file_url; // URL du format /files/filename.png
-              
-              setCapturedPhoto(fileUrl);
-              
-              // Mettre à jour les données du colis
-              setLocalColisData(prevData => prevData ? ({
-                ...prevData,
-                photo_livraison: fileUrl
-              }) : null);
-            } else {
-              throw new Error('Erreur lors de l\'upload');
-            }
-          };
-          reader.readAsDataURL(file);
-        } catch (error) {
-          console.error('Erreur lors de l\'upload du fichier:', error);
-          alert('Erreur lors de l\'upload du fichier image');
-        }
-      }
-    };
-    
-    input.click();
-  };
+
 
   // Fonction pour supprimer la photo
   const deletePhoto = async () => {
@@ -1070,14 +1015,7 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                       <CameraIcon className="w-4 h-4" />
                       Nouvelle photo
                     </Button>
-                    <Button 
-                      size="2" 
-                      variant="outline"
-                      onClick={selectFromGallery}
-                      style={{ cursor: 'pointer', borderColor: '#3b82f6', color: '#3b82f6' }}
-                    >
-                      📁 Galerie
-                    </Button>
+
                     <Button 
                       size="2" 
                       variant="outline" 
@@ -1105,16 +1043,9 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                       style={{ cursor: 'pointer', backgroundColor: '#1e293b', color: 'white' }}
                     >
                       <CameraIcon className="w-4 h-4" />
-                      Prendre une photo
+                      Photo
                     </Button>
-                    <Button 
-                      size="2" 
-                      variant="outline"
-                      onClick={selectFromGallery}
-                      style={{ cursor: 'pointer', borderColor: '#3b82f6', color: '#3b82f6' }}
-                    >
-                      📁 Sélectionner depuis la galerie
-                    </Button>
+
                   </Flex>
                 </div>
               )}

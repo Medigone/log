@@ -6,6 +6,7 @@ import { ExitIcon, BoxIcon, FileTextIcon } from '@radix-ui/react-icons';
 import { useState, useEffect } from 'react';
 import Login from './pages/auth/Login';
 import ColisDetails from './pages/colis/ColisDetails';
+import ColisPublicView from './pages/colis/ColisPublicView';
 import { DeliveryNotesList } from './pages/delivery-notes';
 
 // Barre de navigation
@@ -76,15 +77,22 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 function AppContent() {
 	const { currentUser, isLoading } = useFrappeAuth();
 	const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
+	const [isPublicAccess, setIsPublicAccess] = useState<boolean>(false);
 
 	// Vérifier les paramètres URL pour l'accès direct aux détails d'un colis
 	useEffect(() => {
 		const urlParams = new URLSearchParams(window.location.search);
 		const colisParam = urlParams.get('colis');
+		const publicParam = urlParams.get('public');
+		
 		if (colisParam) {
 			setSelectedColisId(colisParam);
+			// Si le paramètre public=1 est présent ou si l'utilisateur n'est pas connecté
+			if (publicParam === '1' || !currentUser) {
+				setIsPublicAccess(true);
+			}
 		}
-	}, []);
+	}, [currentUser]);
 
 	// Affichage d'un loader pendant la vérification de l'authentification
 	if (isLoading) {
@@ -98,8 +106,12 @@ function AppContent() {
 		);
 	}
 
+	// Si accès public demandé avec un colis spécifique, afficher la vue publique
+	if (isPublicAccess && selectedColisId) {
+		return <ColisPublicView colisId={selectedColisId} />;
+	}
+
 	// Si l'utilisateur est connecté, afficher la barre de navigation et le contenu selon la sélection
-	// Sinon, afficher la page de login
 	if (currentUser) {
 		return (
 			<div className="min-h-screen bg-gray-100">
@@ -115,6 +127,12 @@ function AppContent() {
 		);
 	}
 
+	// Si un colis est demandé mais l'utilisateur n'est pas connecté, afficher la vue publique
+	if (selectedColisId && !currentUser) {
+		return <ColisPublicView colisId={selectedColisId} />;
+	}
+
+	// Sinon, afficher la page de login
 	return <Login />;
 }
 
