@@ -1,0 +1,229 @@
+# Copyright (c) 2025, IntraPro and contributors
+# For license information, please see license.txt
+
+import frappe
+from frappe import _
+
+
+def update_livraisons_on_delivery_note_change(doc, method):
+	"""Update Livraisons when a Delivery Note's custom_date_de_livraison changes."""
+	# Get the old document to compare dates
+	if not doc.get("__islocal") and doc.has_value_changed("custom_date_de_livraison"):
+		old_date = doc.get_db_value("custom_date_de_livraison")
+		new_date = doc.custom_date_de_livraison
+		
+		# Find Livraisons that contain this Delivery Note
+		livraisons_with_this_dn = frappe.get_all(
+			"Livraison Bon de Livraison",
+			filters={"bon_de_livraison": doc.name},
+			fields=["parent"]
+		)
+		
+		for livraison_row in livraisons_with_this_dn:
+			livraison_doc = frappe.get_doc("Livraison", livraison_row.parent)
+			
+			# Remove this delivery note from current livraison
+			livraison_doc.bons_de_livraison = [
+				row for row in livraison_doc.bons_de_livraison 
+				if row.bon_de_livraison != doc.name
+			]
+			
+			# Re-sync colis and calculate totals
+			livraison_doc.sync_colis_from_bons_de_livraison()
+			livraison_doc.calculate_totals()
+			livraison_doc.save()
+			
+		# Find Livraisons with the new date and add this delivery note
+		if new_date:
+			livraisons_with_new_date = frappe.get_all(
+				"Livraison",
+				filters={"date_liv": new_date},
+				fields=["name"]
+			)
+			
+			for livraison_row in livraisons_with_new_date:
+				livraison_doc = frappe.get_doc("Livraison", livraison_row.name)
+				
+				# Check if this delivery note is not already in the livraison
+				existing_dns = [row.bon_de_livraison for row in livraison_doc.bons_de_livraison]
+				if doc.name not in existing_dns:
+					# Add the delivery note
+					livraison_doc.append("bons_de_livraison", {
+						"bon_de_livraison": doc.name,
+						"customer": doc.customer,
+						"custom_date_de_livraison": doc.custom_date_de_livraison,
+						"custom_commune": doc.custom_commune,
+						"custom_wilaya": doc.custom_wilaya,
+						"total_qty": doc.total_qty,
+						"grand_total": doc.grand_total,
+						"status": doc.status
+					})
+					
+					# Re-sync colis and calculate totals
+					livraison_doc.sync_colis_from_bons_de_livraison()
+					livraison_doc.calculate_totals()
+					livraison_doc.save()
+
+
+def update_livraison_on_date_change(doc, method):
+	"""Update Livraison's delivery notes when date_liv changes."""
+	if not doc.get("__islocal") and doc.has_value_changed("date_liv"):
+		# Clear existing delivery notes and reload based on new date
+		if doc.date_liv:
+			doc.auto_load_delivery_notes_by_date()
+		else:
+			# If no date, clear delivery notes
+			doc.bons_de_livraison = []
+			
+		# Re-sync colis and calculate totals
+		doc.sync_colis_from_bons_de_livraison()
+		doc.calculate_totals()
+
+
+def update_delivery_notes_on_livraison_change(doc, method):
+	"""Update Delivery Notes when livreur changes in Livraison."""
+	if doc.get("__islocal"):
+		return
+	
+	# Check if livreur has changed (vehicule is auto-fetched from livreur)
+	livreur_changed = doc.has_value_changed("livreur")
+	
+	if not livreur_changed:
+		return
+	
+	# Update all delivery notes in this livraison
+	for bon_row in doc.bons_de_livraison or []:
+		if bon_row.bon_de_livraison:
+			try:
+				delivery_note = frappe.get_doc("Delivery Note", bon_row.bon_de_livraison)
+				
+				# Update livreur and related fields
+				delivery_note.custom_livreur = doc.livreur
+				
+				# Update custom_nom_livreur and custom_véhicule by fetching from Livreur doctype
+				if doc.livreur:
+					livreur_doc = frappe.get_doc("Livreur", doc.livreur)
+					delivery_note.custom_nom_livreur = livreur_doc.nom
+					delivery_note.custom_véhicule = livreur_doc.vehicule
+				else:
+					delivery_note.custom_nom_livreur = None
+					delivery_note.custom_véhicule = None
+				
+				# Save the delivery note
+				delivery_note.save()
+				frappe.msgprint(f"Bon de livraison {bon_row.bon_de_livraison} mis à jour avec succès")
+				
+			except Exception as e:
+				frappe.log_error(
+					message=f"Erreur lors de la mise à jour du bon de livraison {bon_row.bon_de_livraison}: {str(e)}",
+					title="Erreur mise à jour Delivery Note"
+				)
+				frappe.msgprint(f"Erreur lors de la mise à jour du bon de livraison {bon_row.bon_de_livraison}: {str(e)}", indicator="red")
+
+
+def update_livraison_status_on_colis_change(doc, method):
+	"""Update Livraison status when Colis status changes."""
+	if doc.get("__islocal"):
+		return
+	
+	# Only proceed if status has changed
+	if not doc.has_value_changed("status"):
+		return
+	
+	try:
+		# Find all Livraisons that contain this Colis
+		livraisons = frappe.db.sql("""
+			SELECT DISTINCT parent
+			FROM `tabLivraison Colis`
+			WHERE colis = %s
+			AND parenttype = 'Livraison'
+		""", (doc.name,), as_dict=True)
+		
+		for livraison_row in livraisons:
+			livraison_name = livraison_row.parent
+			
+			try:
+				# Get the Livraison document
+				livraison_doc = frappe.get_doc("Livraison", livraison_name)
+				
+				# Calculate new status based on all colis in this livraison
+				new_status = calculate_livraison_status(livraison_doc)
+				
+				# Update status if it has changed
+				if livraison_doc.status != new_status:
+					livraison_doc.status = new_status
+					livraison_doc.save(ignore_permissions=True)
+					frappe.msgprint(
+						f"Statut de la livraison {livraison_name} mis à jour vers '{new_status}'",
+						indicator="green"
+					)
+				
+			except Exception as e:
+				frappe.log_error(
+					message=f"Erreur lors de la mise à jour de la livraison {livraison_name}: {str(e)}",
+					title="Erreur mise à jour statut Livraison"
+				)
+				frappe.msgprint(
+					f"Erreur lors de la mise à jour de la livraison {livraison_name}: {str(e)}",
+					indicator="red"
+				)
+				
+	except Exception as e:
+		frappe.log_error(
+			message=f"Erreur lors de la recherche des livraisons pour le colis {doc.name}: {str(e)}",
+			title="Erreur recherche Livraisons"
+		)
+
+
+def calculate_livraison_status(livraison_doc):
+	"""Calculate the appropriate status for a Livraison based on its Colis statuses."""
+	if not livraison_doc.colis:
+		return "Nouveau"
+	
+	# Get all colis statuses
+	colis_statuses = []
+	for colis_row in livraison_doc.colis:
+		if colis_row.colis:
+			try:
+				colis_doc = frappe.get_doc("Colis", colis_row.colis)
+				colis_statuses.append(colis_doc.status)
+			except:
+				continue
+	
+	if not colis_statuses:
+		return "Nouveau"
+	
+	# Count statuses
+	total_colis = len(colis_statuses)
+	livres = colis_statuses.count("Livré")
+	partiellement_livres = colis_statuses.count("Partiellement Livré")
+	non_livres = colis_statuses.count("Non Livré")
+	annules = colis_statuses.count("Annulé")
+	enleves = colis_statuses.count("Enlevé")
+	prepares = colis_statuses.count("Préparé")
+	nouveaux = colis_statuses.count("Nouveau")
+	
+	# Logic for determining Livraison status
+	# Phase 1: Livraison (priorité la plus haute)
+	if livres == total_colis:
+		return "Livré"
+	elif livres > 0 or partiellement_livres > 0:
+		return "Partiellement Livré"
+	
+	# Phase 2: Enlèvement
+	elif enleves == total_colis:
+		return "Enlevé"
+	elif enleves > 0:
+		return "Partiellement Enlevé"
+	
+	# Phase 3: Préparation
+	elif prepares == total_colis:
+		return "Préparé"
+	elif prepares > 0:
+		return "Partiellement Préparé"
+	
+	# Cas spéciaux
+	elif annules == total_colis:
+		return "Annulé"
+	else:
+		return "Nouveau"

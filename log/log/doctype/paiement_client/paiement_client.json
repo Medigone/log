@@ -6,16 +6,22 @@
  "engine": "InnoDB",
  "field_order": [
   "date",
-  "moyen_paiement",
+  "type_paiement",
   "column_break_azqa",
+  "livraison",
+  "section_break_client",
   "client",
   "nom_client",
+  "column_break_client",
+  "moyen_paiement",
   "section_break_uakz",
   "montant",
+  "colis_concernes",
+  "column_break_hvsb",
   "recu",
   "photo_cheque",
   "date_encaissement",
-  "column_break_hvsb",
+  "section_break_beneficiaire",
   "id_beneficiaire",
   "beneficiaire"
  ],
@@ -31,18 +37,31 @@
   },
   {
    "allow_in_quick_entry": 1,
-   "fieldname": "moyen_paiement",
+   "fieldname": "type_paiement",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Moyen de paiement",
-   "options": "Esp\u00e8ce\nCh\u00e8que",
+   "label": "Type de paiement",
+   "options": "Livraison\nPaiement libre\nRèglement de compte",
    "reqd": 1,
-   "set_only_once": 1
+   "default": "Paiement libre"
   },
   {
    "fieldname": "column_break_azqa",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "livraison",
+   "fieldtype": "Link",
+   "label": "Livraison",
+   "options": "Livraison",
+   "depends_on": "eval:(doc.type_paiement=='Livraison')",
+   "mandatory_depends_on": "eval:(doc.type_paiement=='Livraison')"
+  },
+  {
+   "fieldname": "section_break_client",
+   "fieldtype": "Section Break",
+   "label": "Informations Client"
   },
   {
    "allow_in_quick_entry": 1,
@@ -56,8 +75,30 @@
    "set_only_once": 1
   },
   {
+   "fetch_from": "client.customer_name",
+   "fieldname": "nom_client",
+   "fieldtype": "Data",
+   "label": "Nom Client",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_client",
+   "fieldtype": "Column Break"
+  },
+  {
+   "allow_in_quick_entry": 1,
+   "fieldname": "moyen_paiement",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Moyen de paiement",
+   "options": "Espèce\nChèque",
+   "reqd": 1
+  },
+  {
    "fieldname": "section_break_uakz",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Détails du Paiement"
   },
   {
    "allow_in_quick_entry": 1,
@@ -69,6 +110,13 @@
    "non_negative": 1,
    "precision": "2",
    "reqd": 1
+  },
+  {
+   "fieldname": "colis_concernes",
+   "fieldtype": "Small Text",
+   "label": "Colis concernés",
+   "description": "Liste des colis pour lesquels ce paiement est effectué",
+   "depends_on": "eval:(doc.type_paiement=='Livraison')"
   },
   {
    "fieldname": "column_break_hvsb",
@@ -115,11 +163,24 @@
    "mandatory_depends_on": "eval:(doc.moyen_paiement==\"Ch\u00e8que\")"
   },
   {
-   "fetch_from": "client.customer_name",
-   "fieldname": "nom_client",
+   "fieldname": "section_break_beneficiaire",
+   "fieldtype": "Section Break",
+   "label": "Bénéficiaire"
+  },
+  {
+   "default": "User",
+   "fieldname": "id_beneficiaire",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "in_standard_filter": 1,
+   "label": "ID Bénéficiaire",
+   "options": "User"
+  },
+  {
+   "fetch_from": "id_beneficiaire.full_name",
+   "fieldname": "beneficiaire",
    "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Nom Client",
+   "label": "Bénéficiaire",
    "read_only": 1
   }
  ],

@@ -146,7 +146,17 @@ doc_events = {
     "Colis": {
         "validate": "log.delivery_note_hooks.validate_colis_quantities",
         "on_trash": "log.delivery_note_hooks.on_trash_colis",
-        "after_delete": "log.delivery_note_hooks.after_delete_colis"
+        "after_delete": "log.delivery_note_hooks.after_delete_colis",
+        "on_update": "log.livraison_hooks.update_livraison_status_on_colis_change"
+    },
+    "Delivery Note": {
+        "on_update": "log.livraison_hooks.update_livraisons_on_delivery_note_change"
+    },
+    "Livraison": {
+        "on_update": [
+            "log.livraison_hooks.update_livraison_on_date_change",
+            "log.livraison_hooks.update_delivery_notes_on_livraison_change"
+        ]
     }
 }
 

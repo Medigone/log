@@ -6,19 +6,25 @@
  "engine": "InnoDB",
  "field_order": [
   "status",
-  "section_break_lkjp",
-  "date_liv",
   "section_break_zbae",
-  "livreur",
+  "date_liv",
   "vehicule",
   "column_break_wsgq",
+  "livreur",
   "nom_livreur",
-  "bons_de_livraison_tab",
-  "bl",
-  "colis_tab",
-  "liste_colis",
+  "section_break_ecye",
+  "bons_de_livraison",
+  "section_break_jbkb",
+  "colis",
+  "section_break_dzfh",
+  "nombre_bons_de_livraison",
+  "total_colis",
+  "column_break_egre",
+  "total_montant_a_encaisser",
+  "total_paiements",
+  "solde_restant",
   "paiements_tab",
-  "pe",
+  "paiements",
   "\u00e9tapes_de_livraison_tab",
   "rt"
  ],
@@ -26,12 +32,9 @@
   {
    "fieldname": "status",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Statut",
-   "options": "Nouveau\nEnlev\u00e9\nEn Cours\nPartiellement Livr\u00e9\nLivr\u00e9\nAnnul\u00e9"
-  },
-  {
-   "fieldname": "section_break_lkjp",
-   "fieldtype": "Section Break"
+   "options": "Nouveau\nPr\u00e9par\u00e9\nPartiellement Pr\u00e9par\u00e9\nEnlev\u00e9\nPartiellement Enlev\u00e9\nPartiellement Livr\u00e9\nLivr\u00e9\nAnnul\u00e9"
   },
   {
    "fieldname": "date_liv",
@@ -64,6 +67,7 @@
    "read_only": 1
   },
   {
+   "fetch_from": "livreur.vehicule",
    "fieldname": "vehicule",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -72,14 +76,35 @@
    "options": "Vehicule"
   },
   {
-   "fieldname": "bons_de_livraison_tab",
-   "fieldtype": "Tab Break",
-   "label": "Bons de Livraison"
+   "fieldname": "bons_de_livraison",
+   "fieldtype": "Table",
+   "label": "Bons de Livraison",
+   "options": "Livraison Bon de Livraison"
   },
   {
-   "fieldname": "bl",
-   "fieldtype": "Data",
-   "label": "Tableau BL"
+   "fieldname": "colis",
+   "fieldtype": "Table",
+   "label": "Liste des Colis",
+   "options": "Livraison Colis"
+  },
+  {
+   "fieldname": "total_colis",
+   "fieldtype": "Int",
+   "label": "Total Colis",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nombre_bons_de_livraison",
+   "fieldtype": "Int",
+   "label": "Nombre Bons de livraison",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_montant_a_encaisser",
+   "fieldtype": "Currency",
+   "label": "Total Montant \u00e0 Encaisser",
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "paiements_tab",
@@ -87,9 +112,24 @@
    "label": "Paiements"
   },
   {
-   "fieldname": "pe",
-   "fieldtype": "Data",
-   "label": "Paiements enregistr\u00e9s"
+   "fieldname": "paiements",
+   "fieldtype": "Table",
+   "label": "Paiements Enregistr\u00e9s",
+   "options": "Livraison Paiement"
+  },
+  {
+   "fieldname": "total_paiements",
+   "fieldtype": "Currency",
+   "label": "Total Paiements",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "solde_restant",
+   "fieldtype": "Currency",
+   "label": "Solde Restant",
+   "precision": "2",
+   "read_only": 1
   },
   {
    "fieldname": "\u00e9tapes_de_livraison_tab",
@@ -102,19 +142,25 @@
    "label": "Routing"
   },
   {
-   "fieldname": "colis_tab",
-   "fieldtype": "Tab Break",
-   "label": "Colis"
+   "fieldname": "section_break_ecye",
+   "fieldtype": "Section Break"
   },
   {
-   "fieldname": "liste_colis",
-   "fieldtype": "Data",
-   "label": "Liste Colis"
+   "fieldname": "section_break_dzfh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_egre",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_jbkb",
+   "fieldtype": "Section Break"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-06-30 18:11:53.883451",
+ "modified": "2025-08-02 17:28:22.381072",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Livraison",
@@ -133,31 +179,40 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [
   {
-   "color": "Blue",
+   "color": "Gray",
    "title": "Nouveau"
   },
   {
+   "color": "Blue",
+   "title": "Pr\u00e9par\u00e9"
+  },
+  {
    "color": "Light Blue",
-   "title": "En pr\u00e9paration"
+   "title": "Partiellement Pr\u00e9par\u00e9"
+  },
+  {
+   "color": "Yellow",
+   "title": "Enlev\u00e9"
+  },
+  {
+   "color": "Yellow",
+   "title": "Partiellement Enlev\u00e9"
   },
   {
    "color": "Orange",
-   "title": "En Cours"
+   "title": "Partiellement Livr\u00e9"
   },
   {
    "color": "Green",
    "title": "Livr\u00e9"
   },
   {
-   "color": "Pink",
-   "title": "Partiellement Livr\u00e9"
-  },
-  {
-   "color": "Gray",
+   "color": "Red",
    "title": "Annul\u00e9"
   }
  ]

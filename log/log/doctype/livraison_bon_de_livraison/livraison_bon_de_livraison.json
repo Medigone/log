@@ -1,0 +1,108 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-01-15 10:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "bon_de_livraison",
+  "type",
+  "customer",
+  "custom_date_de_livraison",
+  "custom_commune",
+  "custom_wilaya",
+  "total_qty",
+  "grand_total",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "bon_de_livraison",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bon de Livraison",
+   "options": "Delivery Note",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.customer",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Client",
+   "options": "Customer",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.custom_date_de_livraison",
+   "fieldname": "custom_date_de_livraison",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date de Livraison",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.total_qty",
+   "fieldname": "total_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantit\u00e9 Totale",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.grand_total",
+   "fieldname": "grand_total",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Montant Total",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.custom_commune",
+   "fieldname": "custom_commune",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Commune",
+   "options": "Commune",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.custom_wilaya",
+   "fieldname": "custom_wilaya",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Wilaya",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.status",
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Statut",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "bon_de_livraison.custom_type",
+   "fieldname": "type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Type"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-08-02 17:32:42.389537",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Livraison Bon de Livraison",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
