@@ -8,10 +8,23 @@ import Login from './pages/auth/Login';
 import ColisDetails from './pages/colis/ColisDetails';
 import ColisPublicView from './pages/colis/ColisPublicView';
 import { DeliveryNotesList } from './pages/delivery-notes';
+import { LivraisonsList, LivraisonDetails } from './pages/livraisons';
 import logoSvg from './assets/IntraPro_fleetmaster.svg';
 
 // Barre de navigation
-function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: string | null; onBackToList: () => void }) {
+function NavigationBar({ 
+	selectedColisId, 
+	selectedLivraisonId, 
+	activeView, 
+	onBackToList, 
+	onViewChange
+}: { 
+	selectedColisId: string | null; 
+	selectedLivraisonId: string | null;
+	activeView: 'delivery-notes' | 'livraisons';
+	onBackToList: () => void;
+	onViewChange: (view: string) => void;
+}) {
 	const { logout, currentUser } = useFrappeAuth();
 	// Récupérer les informations complètes de l'utilisateur
 	const { data: userData } = useFrappeGetDoc('User', currentUser || undefined);
@@ -59,8 +72,28 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 				</Flex>
 			</div>
 			
+			{/* Navigation par onglets */}
+			{!selectedColisId && !selectedLivraisonId && (
+				<div className="px-6 pb-4">
+					<Tabs.Root value={activeView} onValueChange={onViewChange}>
+						<Tabs.List>
+							<Tabs.Trigger value="delivery-notes">
+								<FileTextIcon className="w-4 h-4 mr-2" />
+								Bons de livraison
+							</Tabs.Trigger>
+							<Tabs.Trigger value="livraisons">
+								🚗
+								Livraisons
+							</Tabs.Trigger>
+						</Tabs.List>
+					</Tabs.Root>
+
+
+				</div>
+			)}
+			
 			{/* Navigation conditionnelle */}
-			{selectedColisId && (
+			{(selectedColisId || selectedLivraisonId) && (
 				<div className="px-6 pb-4">
 					<Button 
 						size="2" 
@@ -68,7 +101,7 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 						onClick={onBackToList}
 						style={{ cursor: 'pointer' }}
 					>
-						← Retour aux bons de livraison
+						← Retour à la liste
 					</Button>
 				</div>
 			)}
@@ -80,6 +113,9 @@ function NavigationBar({ selectedColisId, onBackToList }: { selectedColisId: str
 function AppContent() {
 	const { currentUser, isLoading } = useFrappeAuth();
 	const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
+	const [selectedLivraisonId, setSelectedLivraisonId] = useState<string | null>(null);
+	const [activeView, setActiveView] = useState<'delivery-notes' | 'livraisons'>('delivery-notes');
+
 	const [isPublicAccess, setIsPublicAccess] = useState<boolean>(false);
 
 	// Vérifier les paramètres URL pour l'accès direct aux détails d'un colis
@@ -118,10 +154,31 @@ function AppContent() {
 	if (currentUser) {
 		return (
 			<div className="min-h-screen bg-gray-100">
-				<NavigationBar selectedColisId={selectedColisId} onBackToList={() => setSelectedColisId(null)} />
+				<NavigationBar 
+					selectedColisId={selectedColisId} 
+					selectedLivraisonId={selectedLivraisonId}
+					activeView={activeView}
+					onBackToList={() => {
+						setSelectedColisId(null);
+						setSelectedLivraisonId(null);
+					}} 
+					onViewChange={(view) => {
+						setActiveView(view as 'delivery-notes' | 'livraisons');
+						setSelectedColisId(null);
+						setSelectedLivraisonId(null);
+					}}
+				/>
 				<div className="pt-4">
 					{selectedColisId ? (
 						<ColisDetails colisId={selectedColisId} />
+					) : selectedLivraisonId ? (
+						<LivraisonDetails 
+							livraisonId={selectedLivraisonId} 
+							onBack={() => setSelectedLivraisonId(null)}
+							onColisSelect={setSelectedColisId}
+						/>
+					) : activeView === 'livraisons' ? (
+						<LivraisonsList onLivraisonSelect={setSelectedLivraisonId} />
 					) : (
 						<DeliveryNotesList onColisSelect={setSelectedColisId} />
 					)}
@@ -163,4 +220,4 @@ function App() {
 	)
 }
 
-export default App
+export default App;
