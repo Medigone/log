@@ -56,11 +56,12 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
   // Filtres pour les bons de livraison
   const filters = useMemo(() => {
     const f: any[] = [];
-    if (statusFilter) {
+    if (statusFilter && statusFilter !== 'all') {
       f.push(['status', '=', statusFilter]);
     }
     if (searchTerm) {
-      f.push(['customer', 'like', `%${searchTerm}%`]);
+      // Recherche dans le nom du delivery note OU dans le nom du client
+      f.push(['name', 'like', `%${searchTerm}%`]);
     }
     return f;
   }, [statusFilter, searchTerm]);
@@ -132,6 +133,28 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
       setDeliveryNotesWithColis(notesWithColis);
     }
   }, [deliveryNotesData, colisData]);
+
+  // Fonction pour traduire les statuts en français
+  const translateStatus = (status: string) => {
+    switch (status) {
+      case 'Draft': return 'Brouillon';
+      case 'To Deliver': return 'À livrer';
+      case 'Completed': return 'Terminé';
+      case 'Cancelled': return 'Annulé';
+      case 'Return Issued': return 'Retour émis';
+      
+      // Statuts des colis (français) - pas de traduction nécessaire
+      case 'Nouveau': return 'Nouveau';
+      case 'Préparé': return 'Préparé';
+      case 'Enlevé': return 'Enlevé';
+      case 'Partiellement Livré': return 'Partiellement Livré';
+      case 'Livré': return 'Livré';
+      case 'Non Livré': return 'Non Livré';
+      case 'Annulé': return 'Annulé';
+      
+      default: return status;
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -216,13 +239,11 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                 <Select.Trigger placeholder="Statut" className="w-full" />
                 <Select.Content>
                   <Select.Item value="all">Tous les statuts</Select.Item>
-                  <Select.Item value="Nouveau">Nouveau</Select.Item>
-                  <Select.Item value="Préparé">Préparé</Select.Item>
-                  <Select.Item value="Enlevé">Enlevé</Select.Item>
-                  <Select.Item value="Partiellement Livré">Partiellement Livré</Select.Item>
-                  <Select.Item value="Livré">Livré</Select.Item>
-                  <Select.Item value="Non Livré">Non Livré</Select.Item>
-                  <Select.Item value="Annulé">Annulé</Select.Item>
+                  <Select.Item value="Draft">Brouillon</Select.Item>
+                  <Select.Item value="To Deliver">À livrer</Select.Item>
+                  <Select.Item value="Completed">Terminé</Select.Item>
+                  <Select.Item value="Cancelled">Annulé</Select.Item>
+                  <Select.Item value="Return Issued">Retour émis</Select.Item>
                 </Select.Content>
               </Select.Root>
             </div>
@@ -288,7 +309,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                     </Table.Cell>
                     <Table.Cell>
                       <Badge size="1" color={getStatusColor(note.status) as any}>
-                        {note.status}
+                        {translateStatus(note.status)}
                       </Badge>
                     </Table.Cell>
                     <Table.Cell>
@@ -347,7 +368,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                                       </Table.Cell>
                                       <Table.Cell>
                                         <Badge size="1" color={getStatusColor(colis.status) as any}>
-                                          {colis.status}
+                                          {translateStatus(colis.status)}
                                         </Badge>
                                       </Table.Cell>
                                       <Table.Cell>
@@ -395,7 +416,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                     </Text>
                   </div>
                   <Badge size="1" color={getStatusColor(note.status) as any} className="ml-2">
-                    {note.status}
+                    {translateStatus(note.status)}
                   </Badge>
                 </Flex>
                 
@@ -467,7 +488,7 @@ const DeliveryNotesList = ({ onColisSelect }: DeliveryNotesListProps) => {
                                 {colis.custom_numero_sequence || colis.name}
                               </Text>
                               <Badge size="1" color={getStatusColor(colis.status) as any} className="ml-2">
-                                {colis.status}
+                                {translateStatus(colis.status)}
                               </Badge>
                             </div>
                             
