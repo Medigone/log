@@ -1,7 +1,7 @@
 // Copyright (c) 2025, IntraPro and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on("Paiement", {
+frappe.ui.form.on("Paiement Client", {
 	/**
 	 * Handles changes to the 'montant' field.
 	 * @param {object} frm - The current form object.

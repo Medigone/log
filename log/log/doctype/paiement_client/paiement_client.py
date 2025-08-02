@@ -10,8 +10,8 @@ from frappe.model.document import Document
 from frappe import _
 from frappe.exceptions import ValidationError
 
-class Paiement(Document):
+class PaiementClient(Document):
 	def validate(self):
 		"""Validate the payment amount."""
 		if self.montant <= 0:
-			frappe.throw(_("Le montant du paiement doit être supérieur à zéro."), exc=ValidationError)
+			frappe.throw(_("Le montant du paiement_client doit être supérieur à zéro."), exc=ValidationError)

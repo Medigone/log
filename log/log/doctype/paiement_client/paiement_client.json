@@ -129,7 +129,7 @@
  "modified": "2025-05-01 16:38:05.377730",
  "modified_by": "Administrator",
  "module": "Log",
- "name": "Paiement",
+ "name": "Paiement Client",
  "owner": "Administrator",
  "permissions": [
   {

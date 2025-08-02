@@ -776,15 +776,16 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
             Articles ({localColisData.articles.length})
           </Heading>
           
-          <div className="overflow-x-auto" style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto" style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
             <Table.Root>
               <Table.Header>
                 <Table.Row style={{ backgroundColor: '#1e293b' }}>
                   <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Article</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Action</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Qté Totale</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Qté Livrée</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Qté Restante</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Total</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Livré</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Restant</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Statut</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Mise à jour</Table.ColumnHeaderCell>
                 </Table.Row>
@@ -923,6 +924,160 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
             </Table.Root>
           </div>
           
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3">
+            {localColisData.articles.map((article, index) => {
+              const articleKey = article.id || `article-${index}`;
+              
+              return (
+                <Card key={articleKey} className="p-4 border border-gray-200 rounded-lg">
+                   {/* Article Title - Centered at top */}
+                   <div className="text-center mb-4">
+                     <Text size="4" weight="bold" style={{ color: '#1e293b' }}>
+                       {article.article}
+                     </Text>
+                   </div>
+                   
+                   {/* Status and Actions */}
+                   <div className="flex justify-center items-center gap-2 mb-4">
+                     <Badge size="1" color={getArticleStatusColor(article.statut_article) as any}>
+                       {article.statut_article}
+                     </Badge>
+                     {article.quantite_restante > 0 && canDeliver() && (
+                       <Button
+                         size="1"
+                         onClick={() => markAllAsDelivered(articleKey)}
+                         style={{ 
+                           cursor: 'pointer', 
+                           backgroundColor: '#16a34a', 
+                           color: 'white',
+                           fontSize: '10px',
+                           padding: '2px 6px'
+                         }}
+                       >
+                         ✓
+                       </Button>
+                     )}
+                     {article.quantite_restante > 0 && !canDeliver() && (
+                       <Text size="1" style={{ color: '#f59e0b', fontSize: '10px' }}>
+                         ⚠️
+                       </Text>
+                     )}
+                   </div>
+                   
+                   {/* Quantities Grid - Centered */}
+                   <div className="flex justify-center mb-4">
+                     <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
+                       <div className="text-center p-2 bg-gray-50 rounded">
+                         <div className="mb-1">
+                           <Text size="1" style={{ color: '#64748b' }}>Total</Text>
+                         </div>
+                         <div>
+                           <Text size="3" weight="medium" style={{ color: '#1e293b' }}>
+                             {article.quantite_totale}
+                           </Text>
+                         </div>
+                       </div>
+                       <div className="text-center p-2 bg-green-50 rounded">
+                         <div className="mb-1">
+                           <Text size="1" style={{ color: '#64748b' }}>Livré</Text>
+                         </div>
+                         <div className="flex items-center justify-center gap-1">
+                           <Text size="3" weight="medium" style={{ color: '#16a34a' }}>
+                             {article.quantite_livree}
+                           </Text>
+                           {article.quantite_livree > 0 && (
+                             <CheckIcon className="w-3 h-3" style={{ color: '#10b981' }} />
+                           )}
+                         </div>
+                       </div>
+                       <div className="text-center p-2 bg-red-50 rounded">
+                         <div className="mb-1">
+                           <Text size="1" style={{ color: '#64748b' }}>Restant</Text>
+                         </div>
+                         <div>
+                           <Text 
+                             size="3" 
+                             weight="medium" 
+                             style={{ 
+                               color: article.quantite_restante !== 0 ? '#ef4444' : '#16a34a' 
+                             }}
+                           >
+                             {article.quantite_restante}
+                           </Text>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                   
+                   {/* Delivered Quantity Edit */}
+                   {editingArticle === articleKey ? (
+                     <div className="flex items-center gap-2 p-2 bg-blue-50 rounded mb-3">
+                       <Text size="2" style={{ color: '#64748b' }}>Modifier qté livrée:</Text>
+                       <TextField.Root
+                         size="1"
+                         style={{ width: '80px' }}
+                         type="number"
+                         min="0"
+                         max={article.quantite_totale}
+                         value={(tempQuantities[articleKey] || 0).toString()}
+                         onChange={(e) => setTempQuantities(prev => ({
+                           ...prev,
+                           [articleKey]: parseInt(e.target.value) || 0
+                         }))}
+                       />
+                       <Button
+                         size="1"
+                         onClick={() => saveQuantity(articleKey)}
+                         style={{ cursor: 'pointer' }}
+                       >
+                         <CheckIcon className="w-3 h-3" />
+                       </Button>
+                       <Button
+                         size="1"
+                         variant="outline"
+                         onClick={cancelEditing}
+                         style={{ cursor: 'pointer' }}
+                       >
+                         <CrossCircledIcon className="w-3 h-3" />
+                       </Button>
+                     </div>
+                   ) : (
+                     canDeliver() && (
+                       <div className="flex justify-center mb-3">
+                         <Button
+                           size="1"
+                           variant="ghost"
+                           onClick={() => startEditing(articleKey, article.quantite_livree)}
+                           style={{ cursor: 'pointer' }}
+                         >
+                           <Pencil1Icon className="w-3 h-3" />
+                           <Text size="1" ml="1">Modifier quantité</Text>
+                         </Button>
+                       </div>
+                     )
+                   )}
+                  
+                  {/* Last Delivery Date */}
+                  {article.date_derniere_livraison && (
+                    <div className="text-center p-2 bg-gray-50 rounded">
+                      <Text size="1" style={{ color: '#64748b' }}>Mise à jour : </Text>
+                      <Text size="2" style={{ color: '#374151' }}>
+                        {new Date(article.date_derniere_livraison).toLocaleString('fr-FR', {
+                          day: '2-digit',
+                          month: '2-digit', 
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </Text>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+          
           {/* Résumé des totaux */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-2">
@@ -954,8 +1109,6 @@ const ColisDetails = ({ colisId }: ColisDetailsProps) => {
                 Marquer comme livré
               </Button>
             )}
-            
-
           </div>
         </div>
 
