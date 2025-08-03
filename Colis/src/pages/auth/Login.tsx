@@ -1,301 +1,222 @@
-import { Flex, Box, Heading, Text, TextField, Button, Callout } from '@radix-ui/themes';
-import { useState } from 'react';
-import { useFrappeAuth } from 'frappe-react-sdk';
-import { ExclamationTriangleIcon, EyeOpenIcon, EyeClosedIcon } from '@radix-ui/react-icons';
-import logoSvg from '../../assets/IntraPro_fleetmaster.svg';
+import React, { useState } from "react";
+import { useFrappeAuth } from "frappe-react-sdk";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {
+  AlertTriangle,
+  Eye,
+  EyeOff,
+  Circle,
+} from "lucide-react";
+import logoSvg from "../../assets/IntraPro_fleetmaster.svg";
 
-const Login = () => {
+function srOnly(text: string) {
+  return (
+    <span
+      style={{
+        position: "absolute",
+        width: "1px",
+        height: "1px",
+        padding: 0,
+        margin: "-1px",
+        overflow: "hidden",
+        clip: "rect(0, 0, 0, 0)",
+        whiteSpace: "nowrap",
+        border: 0,
+      }}
+    >
+      {text}
+    </span>
+  );
+}
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+
+
+const Login: React.FC = () => {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [loginError, setLoginError] = useState<any>('');
+  const [loginError, setLoginError] = useState<any>("");
 
-  const {currentUser, login, logout, error, isLoading} = useFrappeAuth();
+  const { login, isLoading } = useFrappeAuth();
 
   const getErrorMessage = (error: any) => {
-    if (!error) return '';
-    
-    // Messages d'erreur courants traduits en français
+    if (!error) return "";
     const errorTranslations: { [key: string]: string } = {
-      'Invalid login credentials': 'Identifiants de connexion invalides',
-      'User disabled or does not exist': 'Utilisateur désactivé ou inexistant',
-      'Incorrect password': 'Mot de passe incorrect',
-      'User does not exist': 'Utilisateur inexistant',
-      'Authentication failed': 'Échec de l\'authentification',
-      'Network Error': 'Erreur de réseau',
-      'Server Error': 'Erreur du serveur',
-      'Unauthorized': 'Non autorisé',
-      'Incomplete login details': 'Détails de connexion incomplets'
+      "Invalid login credentials": "Identifiants de connexion invalides",
+      "User disabled or does not exist": "Utilisateur désactivé ou inexistant",
+      "Incorrect password": "Mot de passe incorrect",
+      "User does not exist": "Utilisateur inexistant",
+      "Authentication failed": "Échec de l'authentification",
+      "Network Error": "Erreur de réseau",
+      "Server Error": "Erreur du serveur",
+      Unauthorized: "Non autorisé",
+      "Incomplete login details": "Détails de connexion incomplets",
     };
-    
-    const message = error.message || error.httpStatusText || error.exc_type || 'Erreur de connexion';
-    
-    // Chercher une traduction exacte
-    if (errorTranslations[message]) {
-      return errorTranslations[message];
+
+    const message =
+      error?.message ||
+      error?.httpStatusText ||
+      error?.exc_type ||
+      "Erreur de connexion";
+
+    if (errorTranslations[message]) return errorTranslations[message];
+    for (const [en, fr] of Object.entries(errorTranslations)) {
+      if (String(message).toLowerCase().includes(en.toLowerCase())) return fr;
     }
-    
-    // Chercher une traduction partielle
-    for (const [englishMsg, frenchMsg] of Object.entries(errorTranslations)) {
-      if (message.toLowerCase().includes(englishMsg.toLowerCase())) {
-        return frenchMsg;
-      }
-    }
-    
     return message;
   };
 
-  const onSubmit = () => {
-    console.log(username, password);
-    login({
-      username: username, 
-      password: password
-    }).then(res => {
-      console.log(res)
-      setLoginError('')
-      // Forcer un rechargement pour déclencher la redirection
-      window.location.reload();
-    }).catch(err => {
-      setLoginError(err)
-    })
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      onSubmit();
+  const onSubmit = async () => {
+    if (!username || !password) {
+      setLoginError({ message: "Détails de connexion incomplets" });
+      return;
     }
-  }
+    try {
+      await login({ username, password });
+      setLoginError("");
+      window.location.reload();
+    } catch (err) {
+      setLoginError(err);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") onSubmit();
+  };
 
   return (
-    <div className="w-full min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      {/* Vue mobile */}
-      <div className="md:hidden w-full max-w-sm bg-white rounded-2xl shadow-2xl overflow-hidden">
-        {/* Logo en haut avec fond blanc */}
-         <div className="bg-white p-4 flex justify-start">
-           <img 
-             src={logoSvg} 
-             alt="IntraPro FleetMaster" 
-             style={{ height: '40px', width: 'auto' }}
-           />
-         </div>
-        
-        {/* Formulaire de connexion */}
-        <div className="bg-white p-4">
-          <div className="w-full">
-
-            {/* Formulaire */}
-            <Box>
-              <Heading size="6" mb="2" style={{ color: '#1e293b' }}>Bienvenue</Heading>
-
-
-              {/* Messages d'erreur */}
-              {loginError && (
-                <Box mb="4">
-                  <Callout.Root color="red" role="alert">
-                    <Callout.Icon>
-                      <ExclamationTriangleIcon />
-                    </Callout.Icon>
-                    <Callout.Text>
-                      {getErrorMessage(loginError)}
-                    </Callout.Text>
-                  </Callout.Root>
-                </Box>
-              )}
-
-              {/* Champ identifiant */}
-              <Box mb="3">
-                <Text as="label" size="2" weight="medium" style={{ color: '#64748b' }}>
-                  Identifiant
-                </Text>
-                <TextField.Root
-                   placeholder="Votre identifiant"
-                   value={username}
-                   onChange={(e) => setUsername(e.target.value)}
-                   onKeyPress={handleKeyPress}
-                   style={{ marginTop: '0.5rem' }}
-                 />
-              </Box>
-
-              {/* Champ mot de passe */}
-              <Box mb="4">
-                <Text as="label" size="2" weight="medium" style={{ color: '#64748b' }}>
-                  Mot de passe
-                </Text>
-                <div style={{ position: 'relative', marginTop: '0.5rem' }}>
-                  <TextField.Root
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="Votre mot de passe"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    style={{ paddingRight: '2.5rem' }}
+    <div className="min-h-screen bg-background grid place-items-center p-4">
+      {/* Container */}
+      <div className="w-full max-w-4xl grid grid-cols-1 gap-0">
+        {/* Wrapper card */}
+        <div className="w-full grid grid-cols-1 bg-card rounded-2xl border shadow-lg overflow-hidden">
+          {/* Header translucide */}
+          <div className="bg-muted/50 border-b">
+            <div className="px-4 py-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 text-muted-foreground md:hidden">
+                  <img
+                    src={logoSvg}
+                    alt="IntraPro FleetMaster"
+                    className="h-6 w-auto"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{
-                      position: 'absolute',
-                      right: '0.75rem',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: '#64748b'
-                    }}
-                  >
-                    {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-                  </button>
                 </div>
-              </Box>
-
-              {/* Bouton de connexion */}
-              <Button
-                size="3"
-                style={{
-                  width: '100%',
-                  backgroundColor: '#1e293b',
-                  color: 'white',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-                onClick={onSubmit}
-                 disabled={isLoading}
-               >
-                 {isLoading ? 'Connexion...' : 'Se connecter'}
-              </Button>
-            </Box>
-          </div>
-        </div>
-      </div>
-
-      {/* Vue desktop */}
-      <div className="hidden md:flex w-full max-w-6xl bg-white rounded-2xl shadow-2xl overflow-hidden">
-        {/* Section gauche - Contenu promotionnel */}
-        <div className="flex-1 bg-gray-50 relative overflow-hidden border-r border-gray-200">
-          {/* Contenu aligné à gauche */}
-          <div className="flex flex-col justify-center w-full h-full px-8">
-            {/* Logo */}
-            <div className="mb-8">
-              <img
-                src={logoSvg}
-                alt="IntraPro FleetMaster"
-                className="h-12 w-auto"
-              />
-            </div>
-
-            {/* Texte */}
-            <div className="max-w-lg">
-              <Heading size="6" className="text-4xl" style={{ color: '#1e293b', lineHeight: '1.2' }}>
-                Les flottes sont le pont qui nous rassemble.
-              </Heading>
+                <div className="w-6 hidden md:block"></div>
+                <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
+                  <span>Connexion</span>
+                  <Circle className="w-1 h-1 fill-current" />
+                  <span className="text-foreground">Compte</span>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Section droite - Formulaire de connexion */}
-        <div className="w-full max-w-md bg-white flex items-center justify-center p-8">
-          <div className="w-full max-w-sm">
-
-            {/* Formulaire */}
-            <Box>
-              <Heading size="6" mb="2" style={{ color: '#1e293b' }}>Bienvenue</Heading>
-
-
-              {/* Messages d'erreur */}
-              {loginError && (
-                <Box mb="4">
-                  <Callout.Root color="red" role="alert">
-                    <Callout.Icon>
-                      <ExclamationTriangleIcon />
-                    </Callout.Icon>
-                    <Callout.Text>
-                      {getErrorMessage(loginError)}
-                    </Callout.Text>
-                  </Callout.Root>
-                </Box>
-              )}
-
-              <Flex direction="column" gap="4">
-                {/* Champ Email/Utilisateur */}
-                <Box>
-                  <Text as="label" size="2" weight="medium" mb="2" style={{ color: '#374151' }}>
-                    Identifiant
-                  </Text>
-                  <TextField.Root
-                    placeholder="guru.phianotracodet.com"
-                    size="3"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    style={{ 
-                      backgroundColor: '#f8fafc',
-                      border: '1px solid #e2e8f0'
-                    }}
+          <div className="grid grid-cols-1 md:grid-cols-2 min-h-[420px]">
+            {/* Left panel (message) */}
+            <div className="hidden md:block bg-muted/50 border-r">
+              <div className="px-10 py-12">
+                <div className="mb-8">
+                  <img
+                    src={logoSvg}
+                    alt="IntraPro FleetMaster"
+                    className="h-12 w-auto"
                   />
-                </Box>
+                </div>
 
-                {/* Champ Mot de passe */}
-                <Box>
-                  <Text as="label" size="2" weight="medium" mb="2" style={{ color: '#374151' }}>
-                    Mot de passe
-                  </Text>
-                  <Box style={{ position: 'relative' }}>
-                    <TextField.Root
-                      placeholder="••••••••"
-                      type={showPassword ? 'text' : 'password'}
-                      size="3"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onKeyPress={handleKeyPress}
-                      style={{ 
-                        backgroundColor: '#f8fafc',
-                        border: '1px solid #e2e8f0',
-                        paddingRight: '2.5rem'
-                      }}
+                <h1 className="text-4xl font-bold text-foreground leading-tight tracking-tight">
+                  Gérez vos livraisons avec sérénité.
+                </h1>
+                <p className="text-muted-foreground mt-3">
+                  IntraPro FleetMaster vous aide à superviser, analyser et
+                  optimiser vos opérations en toute simplicité.
+                </p>
+              </div>
+            </div>
+
+            {/* Right panel (form) */}
+            <div className="w-full grid place-items-center">
+              <div className="w-full max-w-[380px] p-6">
+                <h2 className="text-2xl font-semibold text-foreground mb-3">
+                  Connexion
+                </h2>
+
+                {loginError && (
+                  <div className="mb-4 p-3 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span className="text-sm">{getErrorMessage(loginError)}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="text-sm font-medium text-foreground block mb-2">
+                      Identifiant
+                    </label>
+                    <Input
+                      placeholder="nom.utilisateur@exemple.com"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      className="w-full"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      style={{
-                        position: 'absolute',
-                        right: '0.75rem',
-                        top: '50%',
-                        transform: 'translateY(-50%)',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        color: '#64748b'
-                      }}
-                    >
-                      {showPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
-                    </button>
-                  </Box>
-                </Box>
+                  </div>
 
-                {/* Bouton de connexion */}
-                <Button
-                  size="3"
-                  onClick={onSubmit}
-                  disabled={isLoading}
-                  style={{
-                    backgroundColor: '#1e293b',
-                    color: 'white',
-                    width: '100%',
-                    marginTop: '1rem',
-                    cursor: isLoading ? 'not-allowed' : 'pointer'
-                  }}
-                >
-                  {isLoading ? 'Connexion...' : 'Se connecter'}
-                </Button>
-              </Flex>
-            </Box>
+                  <div>
+                    <label className="text-sm font-medium text-foreground block mb-2">
+                      Mot de passe
+                    </label>
+                    <div className="relative">
+                      <Input
+                        placeholder="••••••••"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        className="w-full pr-10"
+                      />
+                      <button
+                        type="button"
+                        aria-label={
+                          showPassword
+                            ? "Masquer le mot de passe"
+                            : "Afficher le mot de passe"
+                        }
+                        onClick={() => setShowPassword((v) => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md grid place-items-center"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        {srOnly(
+                          showPassword
+                            ? "Masquer le mot de passe"
+                            : "Afficher le mot de passe"
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={onSubmit}
+                    disabled={isLoading}
+                    className="w-full mt-1.5"
+                  >
+                    {isLoading ? "Connexion..." : "Se connecter"}
+                  </Button>
+                </div>
+
+                <Separator className="my-4" />
+
+                <p className="text-sm text-muted-foreground">
+                  Besoin d'aide ? Contactez l'administrateur.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
-  )
-}
+  );
+};
 
 export default Login;

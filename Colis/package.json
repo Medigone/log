@@ -11,15 +11,19 @@
     "copy-html-entry": "cp ../log/public/Colis/index.html ../log/www/Colis.html"
   },
   "dependencies": {
-    "@radix-ui/react-icons": "^1.3.2",
-    "@radix-ui/themes": "^3.2.1",
+    "@radix-ui/react-select": "^2.2.5",
+    "@radix-ui/react-separator": "^1.1.7",
+    "@radix-ui/react-slot": "^1.2.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "frappe-react-sdk": "^1.12.0",
-    "lucide-react": "^0.263.1",
+    "lucide-react": "^0.536.0",
     "postcss": "^8.5.6",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.61.1",
-    "react-router-dom": "^6.30.1"
+    "react-router-dom": "^6.30.1",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
@@ -33,6 +37,7 @@
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "tailwindcss": "^4.1.11",
+    "tw-animate-css": "^1.3.6",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
     "vite": "^5.4.10"

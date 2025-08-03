@@ -10,12 +10,17 @@ export interface LivraisonColis {
 export interface LivraisonBonDeLivraison {
   name: string;
   bon_de_livraison: string;
+  customer?: string;
+  custom_date_de_livraison?: string;
   custom_commune?: string;
+  custom_wilaya?: string;
   custom_nom_livreur?: string;
   custom_vehicule?: string;
   custom_nombre_colis?: number;
   grand_total?: number;
   total_qty?: number;
+  status?: string;
+  type?: string;
 }
 
 export interface Livraison {
@@ -23,6 +28,7 @@ export interface Livraison {
   date_liv: string;
   status: string;
   livreur?: string;
+  nom_livreur?: string;
   vehicule?: string;
   total_colis?: number;
   total_montant_a_encaisser?: number;

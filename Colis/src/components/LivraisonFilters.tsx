@@ -1,7 +1,111 @@
-import React, { useState } from 'react';
-import { Flex, Button, Text, TextField, Select, Card, Badge } from '@radix-ui/themes';
-import { MagnifyingGlassIcon, Cross2Icon, MixerHorizontalIcon } from '@radix-ui/react-icons';
-import type { LivraisonFilters as ILivraisonFilters } from '../types/Livraison';
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import {
+  Search,
+  X,
+  Settings2,
+} from "lucide-react";
+import type { LivraisonFilters as ILivraisonFilters } from "../types/Livraison";
+
+
+
+type BadgeTone =
+  | "gray"
+  | "blue"
+  | "cyan"
+  | "orange"
+  | "yellow"
+  | "green"
+  | "red"
+  | "purple"
+  | "violet";
+
+function statusToTone(status: string): BadgeTone {
+  switch (status) {
+    case "Livré":
+      return "green";
+    case "Partiellement Livré":
+      return "blue";
+    case "Enlevé":
+      return "orange";
+    case "Partiellement Enlevé":
+      return "yellow";
+    case "Préparé":
+      return "purple";
+    case "Partiellement Préparé":
+      return "violet";
+    case "Annulé":
+      return "red";
+    case "Nouveau":
+    default:
+      return "gray";
+  }
+}
+
+/* Chip/Badge dark lisible */
+function StatusBadge({
+  children,
+  tone,
+  onClear,
+}: {
+  children: React.ReactNode;
+  tone: BadgeTone;
+  onClear?: () => void;
+}) {
+  const toneClasses = {
+    gray: "bg-muted/20 border-border text-foreground",
+    blue: "bg-blue-500/10 border-blue-500 text-blue-200",
+    cyan: "bg-cyan-500/10 border-cyan-500 text-cyan-200",
+    orange: "bg-orange-500/10 border-orange-500 text-orange-200",
+    yellow: "bg-yellow-500/10 border-yellow-500 text-yellow-200",
+    green: "bg-green-500/10 border-green-500 text-green-200",
+    red: "bg-red-500/10 border-red-500 text-red-200",
+    purple: "bg-purple-500/10 border-purple-500 text-purple-200",
+    violet: "bg-violet-500/10 border-violet-500 text-violet-200",
+  };
+  
+  const dotClasses = {
+    gray: "bg-muted",
+    blue: "bg-blue-500",
+    cyan: "bg-cyan-500",
+    orange: "bg-orange-500",
+    yellow: "bg-yellow-500",
+    green: "bg-green-500",
+    red: "bg-red-500",
+    purple: "bg-purple-500",
+    violet: "bg-violet-500",
+  };
+  
+  return (
+    <span
+      className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-bold tracking-wide ${toneClasses[tone]}`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full ${dotClasses[tone]}`}
+      />
+      {children}
+      {onClear && (
+        <button
+          onClick={onClear}
+          className="ml-1.5 grid place-items-center w-4 h-4 rounded-md bg-transparent border border-white/10 cursor-pointer hover:bg-white/5"
+          aria-label="Retirer ce filtre"
+          title="Retirer ce filtre"
+        >
+          <X className="w-2.5 h-2.5" />
+        </button>
+      )}
+    </span>
+  );
+}
 
 interface LivraisonFiltersProps {
   filters: ILivraisonFilters;
@@ -20,278 +124,259 @@ const LivraisonFiltersComponent = ({
   onSearchChange,
   livreurs = [],
   vehicules = [],
-  communes = []
+  communes = [],
 }: LivraisonFiltersProps) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const statusOptions = [
-    { value: '', label: 'Tous les statuts' },
-    { value: 'Nouveau', label: 'Nouveau' },
-    { value: 'Préparé', label: 'Préparé' },
-    { value: 'Partiellement Préparé', label: 'Partiellement Préparé' },
-    { value: 'Enlevé', label: 'Enlevé' },
-    { value: 'Partiellement Enlevé', label: 'Partiellement Enlevé' },
-    { value: 'Livré', label: 'Livré' },
-    { value: 'Partiellement Livré', label: 'Partiellement Livré' },
-    { value: 'Annulé', label: 'Annulé' }
+    { value: "", label: "Tous les statuts" },
+    { value: "Nouveau", label: "Nouveau" },
+    { value: "Préparé", label: "Préparé" },
+    { value: "Partiellement Préparé", label: "Partiellement Préparé" },
+    { value: "Enlevé", label: "Enlevé" },
+    { value: "Partiellement Enlevé", label: "Partiellement Enlevé" },
+    { value: "Livré", label: "Livré" },
+    { value: "Partiellement Livré", label: "Partiellement Livré" },
+    { value: "Annulé", label: "Annulé" },
   ];
 
   const handleFilterChange = (key: keyof ILivraisonFilters, value: string) => {
     onFiltersChange({
       ...filters,
-      [key]: value || undefined
+      [key]: value || undefined,
     });
   };
 
   const clearFilters = () => {
     onFiltersChange({});
-    onSearchChange('');
+    onSearchChange("");
   };
 
-  const getActiveFiltersCount = () => {
-    return Object.values(filters).filter(value => value && value !== '').length;
-  };
-
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case 'Livré':
-        return 'green';
-      case 'Partiellement Livré':
-        return 'blue';
-      case 'Enlevé':
-        return 'orange';
-      case 'Partiellement Enlevé':
-        return 'yellow';
-      case 'Préparé':
-        return 'purple';
-      case 'Partiellement Préparé':
-        return 'violet';
-      case 'Annulé':
-        return 'red';
-      case 'Nouveau':
-      default:
-        return 'gray';
-    }
-  };
+  const activeCount = Object.values(filters).filter(
+    (v) => v !== undefined && v !== ""
+  ).length;
 
   return (
-    <Card className="p-4 mb-4">
-      <Flex direction="column" gap="3">
-        {/* Barre de recherche principale */}
-        <Flex align="center" gap="3">
-          <div className="flex-1">
-            <TextField.Root
-              placeholder="Rechercher par nom, livreur, véhicule..."
+    <div className="bg-card border rounded-lg shadow-sm p-4 mb-4">
+      <div className="flex flex-col gap-3">
+        {/* Barre de recherche */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-[220px] relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
-              size="2"
-            >
-              <TextField.Slot>
-                <MagnifyingGlassIcon height="16" width="16" />
-              </TextField.Slot>
-            </TextField.Root>
+              placeholder="Rechercher par nom, livreur, véhicule…"
+              className="pl-10"
+            />
           </div>
-          
+
           <Button
-            variant={showAdvanced ? 'solid' : 'outline'}
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            size="2"
+            variant={showAdvanced ? "default" : "outline"}
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="gap-2"
           >
-            <MixerHorizontalIcon />
+            <Settings2 className="w-4 h-4" />
             Filtres
-            {getActiveFiltersCount() > 0 && (
-              <Badge color="blue" size="1" className="ml-1">
-                {getActiveFiltersCount()}
-              </Badge>
+            {activeCount > 0 && (
+              <span className="ml-1 inline-grid place-items-center px-1.5 h-4 rounded-full bg-muted border text-xs">
+                {activeCount}
+              </span>
             )}
           </Button>
-          
-          {(getActiveFiltersCount() > 0 || searchTerm) && (
+
+          {(activeCount > 0 || searchTerm) && (
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={clearFilters}
-              size="2"
-              color="red"
+              className="gap-2"
             >
-              <Cross2Icon />
+              <X className="w-4 h-4" />
               Effacer
             </Button>
           )}
-        </Flex>
+        </div>
 
         {/* Filtres avancés */}
         {showAdvanced && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t">
-            {/* Filtre par statut */}
-            <div>
-              <Text size="2" weight="medium" className="block mb-1">Statut</Text>
-              <Select.Root
-                value={filters.status || ''}
-                onValueChange={(value) => handleFilterChange('status', value)}
-              >
-                <Select.Trigger className="w-full" />
-                <Select.Content>
-                  {statusOptions.map((option) => (
-                    <Select.Item key={option.value} value={option.value}>
-                      {option.label}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </div>
+          <>
+            <Separator />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+              {/* Statut */}
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Statut
+                </label>
+                <Select
+                  value={filters.status || ""}
+                  onValueChange={(value) => handleFilterChange("status", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Tous les statuts" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Filtre par livreur */}
-            <div>
-              <Text size="2" weight="medium" className="block mb-1">Livreur</Text>
-              <Select.Root
-                value={filters.livreur || ''}
-                onValueChange={(value) => handleFilterChange('livreur', value)}
-              >
-                <Select.Trigger className="w-full" />
-                <Select.Content>
-                  <Select.Item value="">Tous les livreurs</Select.Item>
-                  {livreurs.map((livreur) => (
-                    <Select.Item key={livreur} value={livreur}>
-                      {livreur}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </div>
+              {/* Livreur */}
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Livreur
+                </label>
+                <Select
+                  value={filters.livreur || ""}
+                  onValueChange={(value) => handleFilterChange("livreur", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Tous les livreurs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Tous les livreurs</SelectItem>
+                    {livreurs.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Filtre par véhicule */}
-            <div>
-              <Text size="2" weight="medium" className="block mb-1">Véhicule</Text>
-              <Select.Root
-                value={filters.vehicule || ''}
-                onValueChange={(value) => handleFilterChange('vehicule', value)}
-              >
-                <Select.Trigger className="w-full" />
-                <Select.Content>
-                  <Select.Item value="">Tous les véhicules</Select.Item>
-                  {vehicules.map((vehicule) => (
-                    <Select.Item key={vehicule} value={vehicule}>
-                      {vehicule}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </div>
+              {/* Véhicule */}
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Véhicule
+                </label>
+                <Select
+                  value={filters.vehicule || ""}
+                  onValueChange={(value) => handleFilterChange("vehicule", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Tous les véhicules" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Tous les véhicules</SelectItem>
+                    {vehicules.map((v) => (
+                      <SelectItem key={v} value={v}>
+                        {v}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Filtre par commune */}
-            <div>
-              <Text size="2" weight="medium" className="block mb-1">Commune</Text>
-              <Select.Root
-                value={filters.commune || ''}
-                onValueChange={(value) => handleFilterChange('commune', value)}
-              >
-                <Select.Trigger className="w-full" />
-                <Select.Content>
-                  <Select.Item value="">Toutes les communes</Select.Item>
-                  {communes.map((commune) => (
-                    <Select.Item key={commune} value={commune}>
-                      {commune}
-                    </Select.Item>
-                  ))}
-                </Select.Content>
-              </Select.Root>
-            </div>
+              {/* Commune */}
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Commune
+                </label>
+                <Select
+                  value={filters.commune || ""}
+                  onValueChange={(value) => handleFilterChange("commune", value)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Toutes les communes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Toutes les communes</SelectItem>
+                    {communes.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Filtre par date de début */}
-            <div>
-              <Text size="2" weight="medium" className="block mb-1">Date de début</Text>
-              <TextField.Root
-                type="date"
-                value={filters.date_from || ''}
-                onChange={(e) => handleFilterChange('date_from', e.target.value)}
-                size="2"
-              />
-            </div>
+              {/* Date de début */}
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Date de début
+                </label>
+                <Input
+                  type="date"
+                  value={filters.date_from || ""}
+                  onChange={(e) => handleFilterChange("date_from", e.target.value)}
+                />
+              </div>
 
-            {/* Filtre par date de fin */}
-            <div>
-              <Text size="2" weight="medium" className="block mb-1">Date de fin</Text>
-              <TextField.Root
-                type="date"
-                value={filters.date_to || ''}
-                onChange={(e) => handleFilterChange('date_to', e.target.value)}
-                size="2"
-              />
+              {/* Date de fin */}
+              <div>
+                <label className="text-sm font-medium text-foreground block mb-2">
+                  Date de fin
+                </label>
+                <Input
+                  type="date"
+                  value={filters.date_to || ""}
+                  onChange={(e) => handleFilterChange("date_to", e.target.value)}
+                />
+              </div>
             </div>
-          </div>
+          </>
         )}
 
-        {/* Affichage des filtres actifs */}
-        {getActiveFiltersCount() > 0 && (
-          <Flex align="center" gap="2" wrap="wrap" className="pt-2 border-t">
-            <Text size="2" color="gray">Filtres actifs:</Text>
-            {filters.status && (
-              <Badge color={getStatusBadgeColor(filters.status)} size="1">
-                {filters.status}
-                <button
-                  onClick={() => handleFilterChange('status', '')}
-                  className="ml-1 hover:bg-white/20 rounded"
+        {/* Filtres actifs */}
+        {activeCount > 0 && (
+          <>
+            <Separator className="my-4" />
+            <div className="flex items-center gap-2 flex-wrap pt-1.5">
+              <span className="text-sm text-muted-foreground">
+                Filtres actifs:
+              </span>
+              {filters.status && (
+                <StatusBadge
+                  tone={statusToTone(filters.status)}
+                  onClear={() => handleFilterChange("status", "")}
                 >
-                  <Cross2Icon width="10" height="10" />
-                </button>
-              </Badge>
-            )}
-            {filters.livreur && (
-              <Badge color="blue" size="1">
-                {filters.livreur}
-                <button
-                  onClick={() => handleFilterChange('livreur', '')}
-                  className="ml-1 hover:bg-white/20 rounded"
+                  {filters.status}
+                </StatusBadge>
+              )}
+              {filters.livreur && (
+                <StatusBadge tone="blue" onClear={() => handleFilterChange("livreur", "")}>
+                  {filters.livreur}
+                </StatusBadge>
+              )}
+              {filters.vehicule && (
+                <StatusBadge
+                  tone="orange"
+                  onClear={() => handleFilterChange("vehicule", "")}
                 >
-                  <Cross2Icon width="10" height="10" />
-                </button>
-              </Badge>
-            )}
-            {filters.vehicule && (
-              <Badge color="orange" size="1">
-                {filters.vehicule}
-                <button
-                  onClick={() => handleFilterChange('vehicule', '')}
-                  className="ml-1 hover:bg-white/20 rounded"
+                  {filters.vehicule}
+                </StatusBadge>
+              )}
+              {filters.commune && (
+                <StatusBadge
+                  tone="green"
+                  onClear={() => handleFilterChange("commune", "")}
                 >
-                  <Cross2Icon width="10" height="10" />
-                </button>
-              </Badge>
-            )}
-            {filters.commune && (
-              <Badge color="green" size="1">
-                {filters.commune}
-                <button
-                  onClick={() => handleFilterChange('commune', '')}
-                  className="ml-1 hover:bg-white/20 rounded"
-                >
-                  <Cross2Icon width="10" height="10" />
-                </button>
-              </Badge>
-            )}
-            {(filters.date_from || filters.date_to) && (
-              <Badge color="purple" size="1">
-                {filters.date_from && filters.date_to
-                  ? `${filters.date_from} - ${filters.date_to}`
-                  : filters.date_from
-                  ? `Depuis ${filters.date_from}`
-                  : `Jusqu'au ${filters.date_to}`
-                }
-                <button
-                  onClick={() => {
-                    handleFilterChange('date_from', '');
-                    handleFilterChange('date_to', '');
+                  {filters.commune}
+                </StatusBadge>
+              )}
+              {(filters.date_from || filters.date_to) && (
+                <StatusBadge
+                  tone="purple"
+                  onClear={() => {
+                    handleFilterChange("date_from", "");
+                    handleFilterChange("date_to", "");
                   }}
-                  className="ml-1 hover:bg-white/20 rounded"
                 >
-                  <Cross2Icon width="10" height="10" />
-                </button>
-              </Badge>
-            )}
-          </Flex>
+                  {filters.date_from && filters.date_to
+                    ? `${filters.date_from} — ${filters.date_to}`
+                    : filters.date_from
+                    ? `Depuis ${filters.date_from}`
+                    : `Jusqu'au ${filters.date_to}`}
+                </StatusBadge>
+              )}
+            </div>
+          </>
         )}
-      </Flex>
-    </Card>
+      </div>
+    </div>
   );
 };
 

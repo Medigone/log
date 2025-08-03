@@ -1,10 +1,21 @@
-import { Flex, Heading, Text, Badge, Card, Table, Button, TextField, Select } from '@radix-ui/themes';
-import React, { useState, useMemo, useEffect } from 'react';
-import { CalendarIcon, PersonIcon, BoxIcon, MagnifyingGlassIcon, ChevronDownIcon, ChevronRightIcon } from '@radix-ui/react-icons';
-import { Truck as TruckIcon, Package as PackageIcon, Eye as EyeIcon } from 'lucide-react';
-import { useFrappeDocTypeEventListener, useFrappeGetDocList } from 'frappe-react-sdk';
+import React, { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Package as PackageIcon,
+  Search as SearchIcon,
+  AlertTriangle as AlertTriangleIcon,
+  User as UserIcon,
+  Truck as TruckIcon,
+  Dot as DotIcon
+} from 'lucide-react';
+import { useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
 
-// Types locaux
+/* =========================
+   Types
+   ========================= */
 interface LivraisonColis {
   name: string;
   colis: string;
@@ -41,18 +52,134 @@ interface Livraison {
   bons_de_livraison?: LivraisonBonDeLivraison[];
 }
 
-type Filter = [string, '=' | 'like' | 'in', any];
-
 interface LivraisonsListProps {
   onLivraisonSelect?: (livraisonId: string) => void;
 }
 
+
+
+/* =========================
+   Helpers
+   ========================= */
+type BadgeColor = "gray" | "blue" | "cyan" | "orange" | "yellow" | "green" | "red";
+
+function formatDate(dateStr?: string) {
+  if (!dateStr) return "—";
+  try {
+    return new Date(dateStr).toLocaleDateString("fr-FR", {
+      year: "numeric",
+      month: "long",
+      day: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
+function formatAmount(amount: number | undefined) {
+  if (!amount) return "0,00 DZD";
+  return new Intl.NumberFormat('fr-FR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount) + ' DZD';
+}
+
+function statusToColor(status?: string): BadgeColor {
+  switch (status) {
+    case "Livré":
+      return "green";
+    case "Partiellement Livré":
+      return "yellow";
+    case "Enlevé":
+      return "orange";
+    case "Partiellement Enlevé":
+      return "yellow";
+    case "Préparé":
+      return "cyan";
+    case "Partiellement Préparé":
+      return "blue";
+    case "Annulé":
+      return "red";
+    case "Nouveau":
+    default:
+      return "gray";
+  }
+}
+
+/* Badge dark mode contrasté */
+function StatusBadge({ text, tone }: { text?: string; tone: BadgeColor }) {
+  const colorClasses: Record<BadgeColor, string> = {
+    gray: "bg-muted/20 border-border text-foreground",
+    blue: "bg-blue-500/20 border-blue-500 text-blue-200",
+    cyan: "bg-cyan-500/20 border-cyan-400 text-cyan-200",
+    orange: "bg-orange-500/20 border-orange-400 text-orange-200",
+    yellow: "bg-yellow-500/20 border-yellow-400 text-yellow-200",
+    green: "bg-green-500/20 border-green-500 text-green-200",
+    red: "bg-red-500/20 border-red-500 text-red-200",
+  };
+  
+  const dotClasses: Record<BadgeColor, string> = {
+    gray: "bg-muted",
+    blue: "bg-blue-500",
+    cyan: "bg-cyan-400",
+    orange: "bg-orange-400",
+    yellow: "bg-yellow-400",
+    green: "bg-green-500",
+    red: "bg-red-500",
+  };
+  
+  return text ? (
+    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-semibold tracking-wide ${colorClasses[tone] || colorClasses.gray}`}>
+      <span className={`w-1 h-1 rounded-full ${dotClasses[tone] || dotClasses.gray}`} />
+      {text}
+    </span>
+  ) : null;
+}
+
+/* Chips */
+function MetaChip({
+  icon,
+  label,
+  value,
+  title,
+}: {
+  icon: React.ReactNode;
+  label?: string;
+  value: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <div
+      title={title}
+      className="inline-flex items-center gap-2 px-3 py-2.5 bg-card/60 border border-border rounded-xl leading-none"
+    >
+      <span
+        aria-hidden
+        className="grid place-items-center w-4.5 h-4.5 text-foreground"
+      >
+        {icon}
+      </span>
+      <span className="inline-flex items-baseline gap-1.5 text-foreground text-sm">
+        {label && (
+          <span className="text-muted-foreground font-medium">
+            {label}
+          </span>
+        )}
+        <span className="font-semibold">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+/* =========================
+   Component
+   ========================= */
 const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [pageLimitStart, setPageLimitStart] = useState(0);
   const [livraisonsWithDetails, setLivraisonsWithDetails] = useState<Livraison[]>([]);
-  const [expandedLivraisons, setExpandedLivraisons] = useState<Set<string>>(new Set());
+  const [statusFilterOpen, setStatusFilterOpen] = useState(false);
 
   // Filtres pour les livraisons
   const filters = useMemo(() => {
@@ -60,15 +187,15 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
     if (statusFilter && statusFilter !== 'all') {
       f.push(['status', '=', statusFilter]);
     }
-    if (searchTerm) {
-      // Recherche dans le nom de la livraison
-      f.push(['name', 'like', `%${searchTerm}%`]);
-    }
+    // Supprimer la recherche côté serveur pour éviter les rechargements
+    // if (debouncedSearchTerm) {
+    //   f.push(['name', 'like', `%${debouncedSearchTerm}%`]);
+    // }
     return f;
-  }, [statusFilter, searchTerm]);
+  }, [statusFilter]);
 
   // Récupération des livraisons
-  const { data: livraisonsData, mutate: mutateLivraisons, error } = useFrappeGetDocList<Livraison>('Livraison', {
+  const { data: livraisonsData, mutate: mutateLivraisons, error, isLoading } = useFrappeGetDocList<Livraison>('Livraison', {
     fields: [
       'name',
       'date_liv',
@@ -103,8 +230,37 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
       'articles'
     ],
     filters: livraisonsData ? [['bl', 'in', livraisonsData.map(l => l.name)]] : [],
-    limit: 1000 // Limite élevée pour récupérer tous les colis
+    limit: 1000
   });
+
+  // Récupération des véhicules pour mapper les IDs aux noms
+  const { data: vehiculesData } = useFrappeGetDocList<any>('Vehicule', {
+    fields: ['name', 'nom'],
+    limit: 1000
+  });
+
+  // Récupération des livreurs pour mapper les IDs aux noms
+  const { data: livreursData } = useFrappeGetDocList<any>('Livreur', {
+    fields: ['name', 'nom'],
+    limit: 1000
+  });
+
+  // Création des mappings
+  const vehiculesMapping = React.useMemo(() => {
+    if (!vehiculesData) return {};
+    return vehiculesData.reduce((acc, vehicule) => {
+      acc[vehicule.name] = vehicule.nom;
+      return acc;
+    }, {} as Record<string, string>);
+  }, [vehiculesData]);
+
+  const livreursMapping = React.useMemo(() => {
+    if (!livreursData) return {};
+    return livreursData.reduce((acc, livreur) => {
+      acc[livreur.name] = livreur.nom;
+      return acc;
+    }, {} as Record<string, string>);
+  }, [livreursData]);
 
   // Écouter les changements sur les doctypes
   useFrappeDocTypeEventListener('Livraison', () => {
@@ -119,7 +275,6 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
   useEffect(() => {
     if (livraisonsData && colisData) {
       const enriched = livraisonsData.map(livraison => {
-        // Trouver les colis liés à cette livraison
         const livraisonColis = colisData.filter(colis => colis.bl === livraison.name);
         
         return {
@@ -133,407 +288,310 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
     }
   }, [livraisonsData, colisData]);
 
-  // Fonction pour traduire les statuts en français
-  const translateStatus = (status: string) => {
-    switch (status) {
-      case 'Nouveau': return 'Nouveau';
-      case 'Préparé': return 'Préparé';
-      case 'Partiellement Préparé': return 'Partiellement Préparé';
-      case 'Enlevé': return 'Enlevé';
-      case 'Partiellement Enlevé': return 'Partiellement Enlevé';
-      case 'Partiellement Livré': return 'Partiellement Livré';
-      case 'Livré': return 'Livré';
-      case 'Annulé': return 'Annulé';
-      default: return status;
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Nouveau': return 'blue';
-      case 'Préparé': return 'purple';
-      case 'Partiellement Préparé': return 'violet';
-      case 'Enlevé': return 'orange';
-      case 'Partiellement Enlevé': return 'yellow';
-      case 'Partiellement Livré': return 'amber';
-      case 'Livré': return 'green';
-      case 'Annulé': return 'red';
-      default: return 'gray';
-    }
-  };
-
-  const toggleLivraisonExpansion = (livraisonName: string) => {
-    const newExpanded = new Set(expandedLivraisons);
-    if (newExpanded.has(livraisonName)) {
-      newExpanded.delete(livraisonName);
-    } else {
-      newExpanded.add(livraisonName);
-    }
-    setExpandedLivraisons(newExpanded);
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    });
-  };
-
-  const formatAmount = (amount: number | undefined) => {
-    if (!amount) return '0,00';
-    return new Intl.NumberFormat('fr-FR', {
-      style: 'currency',
-      currency: 'DZD'
-    }).format(amount);
-  };
-
   const filteredLivraisons = livraisonsWithDetails.filter(livraison => 
     livraison.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const finalFilteredLivraisons = filteredLivraisons;
 
+  if (isLoading)
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
+    <div className="bg-card rounded-2xl p-5 shadow-lg border border-border">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white/40 mx-auto mb-3" />
+      <span className="text-muted-foreground">Chargement…</span>
+        </div>
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
+    <div className="bg-card rounded-2xl p-5 shadow-lg border border-border max-w-md w-full">
+          <Alert className="border-red-500/50 bg-red-500/10">
+            <AlertTriangleIcon className="h-4 w-4 text-red-400" />
+            <AlertDescription className="text-red-300">
+              Erreur lors du chargement: {String((error as any)?.message || error)}
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+
   return (
-    <div className="w-full p-2 sm:p-4">
-      <div className="w-full max-w-7xl mx-auto">
-        {/* En-tête */}
-        <div className="bg-white rounded-xl sm:rounded-2xl border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
-          <Flex align="center" justify="between" mb="4" className="flex-col sm:flex-row gap-2 sm:gap-0">
-            <div className="text-center sm:text-left">
-              <Heading size="6" className="sm:text-2xl" style={{ color: '#1e293b' }}>
-                Livraisons
-              </Heading>
-              <Text size="2" className="sm:text-base" style={{ color: '#64748b' }}>
-                Gestion des livraisons et colis associés
-              </Text>
+    <div className="bg-background min-h-screen">
+    {/* Header */}
+    <div className="border-b border-border">
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-2 flex-wrap justify-between">
+            <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
+              <span>Livraisons</span>
+              <DotIcon className="w-3 h-3" />
+              <span>Liste</span>
             </div>
-            <Badge size="1" color="blue" className="text-xs sm:text-sm">
-              {finalFilteredLivraisons.length} livraison(s)
-            </Badge>
-          </Flex>
-          
-          {/* Barre de recherche */}
-          <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
-            <div className="flex-1 lg:flex-[3]">
-              <TextField.Root
-                size="3"
+            <div className="flex items-center gap-3">
+              <MetaChip
+                icon={<PackageIcon width={16} height={16} />}
+                label="Total"
+                value={finalFilteredLivraisons.length}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="max-w-6xl mx-auto px-4 pt-6 pb-8">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
+          <h1 className="text-2xl font-semibold text-foreground">
+            Livraisons
+          </h1>
+        </div>
+
+        {/* Filtres */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2">
+              Recherche
+            </label>
+            <div className="relative">
+              <Input
+                type="text"
                 placeholder="Rechercher par numéro de livraison..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-              >
-                <TextField.Slot>
-                  <MagnifyingGlassIcon height="18" width="18" />
-                </TextField.Slot>
-              </TextField.Root>
-            </div>
-            
-            <div className="lg:flex-[1] lg:max-w-[200px]">
-              <Select.Root
-                size="3"
-                value={statusFilter}
-                onValueChange={setStatusFilter}
-              >
-                <Select.Trigger placeholder="Statut" className="w-full" />
-                <Select.Content>
-                  <Select.Item value="all">Tous les statuts</Select.Item>
-                  <Select.Item value="Nouveau">Nouveau</Select.Item>
-                  <Select.Item value="Préparé">Préparé</Select.Item>
-                  <Select.Item value="Partiellement Préparé">Partiellement Préparé</Select.Item>
-                  <Select.Item value="Enlevé">Enlevé</Select.Item>
-                  <Select.Item value="Partiellement Enlevé">Partiellement Enlevé</Select.Item>
-                  <Select.Item value="Partiellement Livré">Partiellement Livré</Select.Item>
-                  <Select.Item value="Livré">Livré</Select.Item>
-                  <Select.Item value="Annulé">Annulé</Select.Item>
-                </Select.Content>
-              </Select.Root>
+                className="pl-9"
+              />
+              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             </div>
           </div>
           
-          {/* Affichage des erreurs */}
-           {error && (
-             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mt-4">
-               <Text size="2" style={{ color: '#dc2626' }}>
-                 Erreur lors du chargement des données : {error.message}
-               </Text>
+          <div>
+              <label className="block text-sm text-muted-foreground mb-2">
+                Statut
+              </label>
+              <div className="relative" data-select-container>
+                <button
+                  onClick={() => setStatusFilterOpen(!statusFilterOpen)}
+                  className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
+                >
+                  <span>
+                    {statusFilter === "all" ? "Tous les statuts" : 
+                     statusFilter === "Nouveau" ? "Nouveau" :
+                     statusFilter === "Préparé" ? "Préparé" :
+                     statusFilter === "Partiellement Préparé" ? "Partiellement Préparé" :
+                     statusFilter === "Enlevé" ? "Enlevé" :
+                     statusFilter === "Partiellement Enlevé" ? "Partiellement Enlevé" :
+                     statusFilter === "Partiellement Livré" ? "Partiellement Livré" :
+                     statusFilter === "Livré" ? "Livré" :
+                     statusFilter === "Annulé" ? "Annulé" : "Tous les statuts"}
+                  </span>
+                  <span className="text-xs">▼</span>
+                </button>
+                
+                {statusFilterOpen && (
+                  <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                    {[
+                      { value: "all", label: "Tous les statuts" },
+                      { value: "Nouveau", label: "Nouveau" },
+                      { value: "Préparé", label: "Préparé" },
+                      { value: "Partiellement Préparé", label: "Partiellement Préparé" },
+                      { value: "Enlevé", label: "Enlevé" },
+                      { value: "Partiellement Enlevé", label: "Partiellement Enlevé" },
+                      { value: "Partiellement Livré", label: "Partiellement Livré" },
+                      { value: "Livré", label: "Livré" },
+                      { value: "Annulé", label: "Annulé" },
+                    ].map((option) => (
+                      <div
+                        key={option.value}
+                        onClick={() => {
+                          setStatusFilter(option.value);
+                          setStatusFilterOpen(false);
+                        }}
+                        className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
+                          statusFilter === option.value ? 'bg-accent' : 'bg-card'
+                        }`}
+                      >
+                        {option.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+        </div>
+
+        {/* Titre de la section */}
+        <div className="px-4 py-3">
+          <h2 className="text-lg font-medium text-foreground">Liste des livraisons</h2>
+        </div>
+
+        {/* Tableau des livraisons */}
+        <div className="bg-card/50 rounded-2xl overflow-hidden">
+          {finalFilteredLivraisons.length > 0 ? (
+            <>
+              {/* Vue desktop - Tableau */}
+              <div className="hidden lg:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-card/60 border-none hover:bg-card/60">
+                      {[
+                        "Livraison",
+                        "Date",
+                        "Livreur",
+                        "Véhicule",
+                        "Colis",
+                        "Montant",
+                        "Statut",
+                      ].map((h) => (
+                        <TableHead
+                          key={h}
+                          className="text-muted-foreground font-semibold p-3 border-none"
+                        >
+                          {h}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                     {finalFilteredLivraisons.map((livraison, index) => (
+                       <TableRow
+                         key={livraison.name}
+                         className={`cursor-pointer border-none transition-colors hover:bg-card/30 ${
+                           index % 2 === 0 ? 'bg-card/60' : 'bg-card/40'
+                         }`}
+                         onClick={() => onLivraisonSelect?.(livraison.name)}
+                       >
+                        <TableCell className="p-3 border-none">
+                           <span className="text-foreground font-medium">
+                             {livraison.name}
+                           </span>
+                         </TableCell>
+                         <TableCell className="p-3 border-none">
+                           <span className="text-muted-foreground">
+                             {formatDate(livraison.date_liv)}
+                           </span>
+                         </TableCell>
+                         <TableCell className="p-3 border-none">
+                           <span className="text-muted-foreground">
+                             {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : "—"}
+                           </span>
+                         </TableCell>
+                         <TableCell className="p-3 border-none">
+                           <span className="text-muted-foreground">
+                             {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : "—"}
+                           </span>
+                         </TableCell>
+                         <TableCell className="p-3 border-none">
+                           <span className="text-muted-foreground">
+                             {livraison.total_colis || 0}
+                           </span>
+                         </TableCell>
+                         <TableCell className="p-3 border-none">
+                           <span className="text-foreground">
+                             {formatAmount(livraison.total_montant_a_encaisser)}
+                           </span>
+                         </TableCell>
+                         <TableCell className="p-3 border-none">
+                           <StatusBadge
+                             text={livraison.status}
+                             tone={statusToColor(livraison.status)}
+                           />
+                         </TableCell>
+                      </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+               </div>
+
+              {/* Vue mobile - Cartes */}
+               <div className="lg:hidden space-y-3">
+                 {finalFilteredLivraisons.map((livraison) => (
+                   <div
+                     key={livraison.name}
+                     onClick={() => onLivraisonSelect?.(livraison.name)}
+                     className="bg-card rounded-xl border border-border p-4 cursor-pointer transition-all duration-200 hover:bg-accent hover:-translate-y-0.5"
+                   >
+                    {/* En-tête de la carte */}
+                     <div className="flex justify-between items-start mb-3">
+                       <div>
+                         <h3 className="text-lg font-bold text-foreground mb-1">
+                           {livraison.name}
+                         </h3>
+                         <span className="text-xs text-muted-foreground">
+                           {formatDate(livraison.date_liv)}
+                         </span>
+                       </div>
+                       <StatusBadge
+                         text={livraison.status}
+                         tone={statusToColor(livraison.status)}
+                       />
+                     </div>
+
+                    {/* Informations principales */}
+                     <div className="grid gap-2 mb-3">
+                       <div className="flex items-center gap-2">
+                         <UserIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                           {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : "—"}
+                         </span>
+                       </div>
+                       
+                       <div className="flex items-center gap-2">
+                         <TruckIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                           {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : "—"}
+                         </span>
+                       </div>
+                       
+                       <div className="flex items-center gap-2">
+                         <PackageIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                           {livraison.total_colis || 0} colis
+                         </span>
+                       </div>
+                     </div>
+
+                    {/* Montant */}
+                     <div className="flex justify-between items-center pt-2 border-t border-border">
+                       <span className="text-xs text-muted-foreground">
+                         Montant total
+                       </span>
+                       <span className="text-lg font-bold text-green-400">
+                         {formatAmount(livraison.total_montant_a_encaisser)}
+                       </span>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </>
+           ) : (
+             <div className="p-8 text-center">
+               <PackageIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+               <span className="text-muted-foreground">Aucune livraison trouvée</span>
              </div>
            )}
         </div>
 
-        {/* Vue desktop - Tableau */}
-        <div className="hidden lg:block" style={{ backgroundColor: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-          <Table.Root>
-            <Table.Header>
-              <Table.Row style={{ backgroundColor: '#1e293b' }}>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Livraison</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Livreur</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Véhicule</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Date de livraison</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Statut</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Colis</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Montant</Table.ColumnHeaderCell>
-                <Table.ColumnHeaderCell style={{ color: 'white', fontWeight: '600', padding: '16px', borderBottom: 'none' }}>Actions</Table.ColumnHeaderCell>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {finalFilteredLivraisons.map((livraison, index) => (
-                <React.Fragment key={livraison.name}>
-                  <Table.Row 
-                    style={{ 
-                      backgroundColor: index % 2 === 0 ? 'white' : '#f8fafc', 
-                      transition: 'background-color 0.2s', 
-                      cursor: 'pointer' 
-                    }} 
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} 
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? 'white' : '#f8fafc'}
-                    onClick={() => toggleLivraisonExpansion(livraison.name)}
-                  >
-                    <Table.Cell>
-                      <Text size="2" weight="bold" style={{ color: '#1e293b' }}>
-                        {livraison.name}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {livraison.livreur || '-'}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {livraison.vehicule || '-'}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {formatDate(livraison.date_liv)}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Badge color={getStatusColor(livraison.status)} size="1">
-                        {translateStatus(livraison.status)}
-                      </Badge>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {livraison.total_colis || 0}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {formatAmount(livraison.total_montant_a_encaisser)}
-                      </Text>
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Flex gap="2">
-                        <Button
-                          size="1"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onLivraisonSelect?.(livraison.name);
-                          }}
-                        >
-                          <EyeIcon className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="1"
-                          variant="ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleLivraisonExpansion(livraison.name);
-                          }}
-                        >
-                          {expandedLivraisons.has(livraison.name) ? (
-                            <ChevronDownIcon className="w-4 h-4" />
-                          ) : (
-                            <ChevronRightIcon className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </Flex>
-                    </Table.Cell>
-                  </Table.Row>
-                  
-                  {/* Détails étendus */}
-                  {expandedLivraisons.has(livraison.name) && (
-                    <Table.Row style={{ backgroundColor: '#f8fafc' }}>
-                      <Table.Cell colSpan={8}>
-                        <div className="p-4">
-                          <Flex direction="column" gap="4">
-                            
-                            
-                                                         {/* Colis */}
-                             {livraison.colis && livraison.colis.length > 0 && (
-                               <div>
-                                 <Text size="2" weight="bold" style={{ color: '#1e293b', marginBottom: '8px' }}>
-                                   Colis ({livraison.colis.length})
-                                 </Text>
-                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                                   {livraison.colis.map((colis: any) => (
-                                     <div key={colis.name} className="p-2 bg-white rounded border">
-                                       <Text size="2" style={{ color: '#374151' }}>
-                                         {colis.custom_numero_sequence || colis.name}
-                                         {colis.client && ` - ${colis.client}`}
-                                       </Text>
-                                       <Text size="1" style={{ color: '#6b7280' }}>
-                                         {colis.status} - {formatDate(colis.date_creation)}
-                                       </Text>
-                                     </div>
-                                   ))}
-                                 </div>
-                               </div>
-                             )}
-                          </Flex>
-                        </div>
-                      </Table.Cell>
-                    </Table.Row>
-                  )}
-                </React.Fragment>
-              ))}
-            </Table.Body>
-          </Table.Root>
-        </div>
-
-        {/* Vue mobile - Cards */}
-        <div className="lg:hidden space-y-4">
-          {finalFilteredLivraisons.map((livraison) => (
-            <Card key={livraison.name} className="p-4">
-              <Flex direction="column" gap="3">
-                {/* En-tête de la livraison */}
-                <Flex align="center" justify="between">
-                  <Flex align="center" gap="3">
-                    <Button
-                      variant="ghost"
-                      size="1"
-                      onClick={() => toggleLivraisonExpansion(livraison.name)}
-                    >
-                      {expandedLivraisons.has(livraison.name) ? (
-                        <ChevronDownIcon width="16" height="16" />
-                      ) : (
-                        <ChevronRightIcon width="16" height="16" />
-                      )}
-                    </Button>
-                    
-                    <div>
-                      <Text size="3" weight="bold" style={{ color: '#1e293b' }}>
-                        {livraison.name}
-                      </Text>
-                      <Text size="1" style={{ color: '#64748b' }}>
-                        {formatDate(livraison.date_liv)}
-                      </Text>
-                    </div>
-                  </Flex>
-
-                  <Flex align="center" gap="2">
-                    <Badge color={getStatusColor(livraison.status)} size="1">
-                      {translateStatus(livraison.status)}
-                    </Badge>
-                    
-                    <Button
-                      size="1"
-                      onClick={() => onLivraisonSelect?.(livraison.name)}
-                    >
-                      <EyeIcon className="w-4 h-4" />
-                    </Button>
-                  </Flex>
-                </Flex>
-
-                {/* Informations de base */}
-                <Flex gap="4" wrap="wrap">
-                  {livraison.livreur && (
-                    <Flex align="center" gap="2">
-                      <PersonIcon className="w-4 h-4" style={{ color: '#6b7280' }} />
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {livraison.livreur}
-                      </Text>
-                    </Flex>
-                  )}
-                  
-                  {livraison.vehicule && (
-                    <Flex align="center" gap="2">
-                      <Text size="2">🚗</Text>
-                      <Text size="2" style={{ color: '#374151' }}>
-                        {livraison.vehicule}
-                      </Text>
-                    </Flex>
-                  )}
-                  
-                  <Flex align="center" gap="2">
-                    <PackageIcon className="w-4 h-4" style={{ color: '#6b7280' }} />
-                    <Text size="2" style={{ color: '#374151' }}>
-                      {livraison.total_colis || 0} colis
-                    </Text>
-                  </Flex>
-                  
-                  <Text size="2" weight="bold" style={{ color: '#059669' }}>
-                    {formatAmount(livraison.total_montant_a_encaisser)}
-                  </Text>
-                </Flex>
-
-                {/* Détails étendus */}
-                {expandedLivraisons.has(livraison.name) && (
-                  <div className="pt-3 border-t border-gray-200">
-                    <Flex direction="column" gap="3">
-                      
-                      
-                                             {/* Colis */}
-                       {livraison.colis && livraison.colis.length > 0 && (
-                         <div>
-                           <Text size="2" weight="bold" style={{ color: '#1e293b', marginBottom: '4px' }}>
-                             Colis ({livraison.colis.length})
-                           </Text>
-                           <div className="space-y-2">
-                             {livraison.colis.map((colis: any) => (
-                               <div key={colis.name} className="p-2 bg-gray-50 rounded">
-                                 <Text size="2" style={{ color: '#374151' }}>
-                                   {colis.custom_numero_sequence || colis.name}
-                                   {colis.client && ` - ${colis.client}`}
-                                 </Text>
-                                 <Text size="1" style={{ color: '#6b7280' }}>
-                                   {colis.status} - {formatDate(colis.date_creation)}
-                                 </Text>
-                               </div>
-                             ))}
-                           </div>
-                         </div>
-                       )}
-                    </Flex>
-                  </div>
-                )}
-              </Flex>
-            </Card>
-          ))}
-        </div>
-
         {/* Pagination */}
         {finalFilteredLivraisons.length === 20 && (
-          <div className="flex justify-center gap-2 mt-6">
+          <div className="mt-6 flex justify-center gap-3">
             <Button
               variant="outline"
               disabled={pageLimitStart === 0}
               onClick={() => setPageLimitStart(Math.max(0, pageLimitStart - 20))}
+              className="border-border text-foreground bg-card/50 hover:bg-accent"
             >
               Précédent
             </Button>
             <Button
               variant="outline"
               onClick={() => setPageLimitStart(pageLimitStart + 20)}
+              className="border-border text-foreground bg-card/50 hover:bg-accent"
             >
               Suivant
             </Button>
           </div>
-        )}
-
-        {/* Message si aucune livraison */}
-        {finalFilteredLivraisons.length === 0 && (
-          <Card className="p-8 text-center">
-            <PackageIcon className="w-12 h-12" style={{ color: '#9ca3af', margin: '0 auto 16px' }} />
-            <Heading size="4" style={{ color: '#6b7280', marginBottom: '8px' }}>
-              Aucune livraison trouvée
-            </Heading>
-            <Text size="2" style={{ color: '#9ca3af' }}>
-              Essayez de modifier vos critères de recherche
-            </Text>
-          </Card>
         )}
       </div>
     </div>
