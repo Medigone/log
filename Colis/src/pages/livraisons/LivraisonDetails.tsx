@@ -10,7 +10,9 @@ import {
   ArrowLeft,
   User,
   Truck,
-  Calendar
+  Calendar,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { useFrappeGetDoc, useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
 import type { Livraison, LivraisonColis, LivraisonBonDeLivraison } from '../../types/Livraison';
@@ -73,10 +75,13 @@ function formatAmount(amount: number | undefined) {
 function statusToColor(status?: string): BadgeColor {
   switch (status) {
     case "Livré":
+    case "Delivered":
       return "green";
     case "Partiellement Livré":
+    case "Partially Delivered":
       return "yellow";
     case "Enlevé":
+    case "To Deliver":
       return "orange";
     case "Partiellement Enlevé":
       return "yellow";
@@ -85,11 +90,54 @@ function statusToColor(status?: string): BadgeColor {
     case "Partiellement Préparé":
       return "blue";
     case "Annulé":
+    case "Cancelled":
       return "red";
     case "Nouveau":
+    case "Brouillon":
+    case "Draft":
+    case "New":
+      return "blue";  // Draft/Nouveau/Brouillon status in blue
+    case "À facturer":
+    case "To Bill":
+      return "orange";  // To Bill status in Frappe
+    case "Terminé":
+    case "Completed":
+      return "green";   // Completed status in Frappe
+    case "Retour émis":
+    case "Return Issued":
+      return "gray";   // Return Issued status in Frappe
+    case "Fermé":
+    case "Closed":
+      return "green";  // Closed status in Frappe
     default:
       return "gray";
   }
+}
+
+// Fonction pour traduire les statuts en français
+function translateStatus(status?: string): string {
+  if (!status) return "Nouveau";
+  
+  const translations: Record<string, string> = {
+    "Draft": "Brouillon",
+    "To Deliver": "À Livrer",
+    "Delivered": "Livré",
+    "Partially Delivered": "Partiellement Livré",
+    "Cancelled": "Annulé",
+    "Closed": "Fermé",
+    "Submitted": "Soumis",
+    "New": "Nouveau",
+    "Nouveau": "Nouveau",
+    "Livré": "Livré",
+    "Partiellement Livré": "Partiellement Livré",
+    "Enlevé": "Enlevé",
+    "Partiellement Enlevé": "Partiellement Enlevé",
+    "Préparé": "Préparé",
+    "Partiellement Préparé": "Partiellement Préparé",
+    "Annulé": "Annulé"
+  };
+  
+  return translations[status] || status;
 }
 
 /* Badge dark mode contrasté */
@@ -161,6 +209,22 @@ function MetaChip({
    Component
    ========================= */
 const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetailsProps) => {
+  // État pour gérer l'ouverture/fermeture des bons de livraison (accordéon)
+  const [expandedBons, setExpandedBons] = useState<Set<string>>(new Set());
+
+  // Fonction pour basculer l'état d'un bon de livraison
+  const toggleBonExpansion = (bonId: string) => {
+    setExpandedBons(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(bonId)) {
+        newSet.delete(bonId);
+      } else {
+        newSet.add(bonId);
+      }
+      return newSet;
+    });
+  };
+
   // Récupération des détails de la livraison
   const { data: livraison, mutate: mutateLivraison, error, isLoading } = useFrappeGetDoc<LivraisonData>(
     "Livraison",
@@ -431,23 +495,37 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                 const colisDuBon = (colisData || []).filter(
                   colis => colis.bl === bonLivraison.bon_de_livraison
                 );
+                const isExpanded = expandedBons.has(bonLivraison.bon_de_livraison);
 
                 return (
                   <div 
                     key={bonLivraison.name}
-                    className="bg-card/50 rounded-xl border border-border overflow-hidden"
+                    className="bg-card/50 rounded-xl border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
                   >
-                    {/* En-tête du bon de livraison */}
-                    <div className="p-4">
+                    {/* En-tête du bon de livraison - Cliquable */}
+                    <div 
+                      className="p-4 cursor-pointer hover:bg-accent/30 transition-colors duration-200"
+                      onClick={() => toggleBonExpansion(bonLivraison.bon_de_livraison)}
+                    >
                       <div className="mb-4">
-                        {/* Titre du bon de livraison */}
-                        <div className="mb-3">
+                        {/* Titre du bon de livraison avec icône chevron */}
+                        <div className="mb-3 flex items-center justify-between">
                           <h3 className="text-base font-bold text-foreground">
                             {bonLivraison.bon_de_livraison}
                           </h3>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              {colisDuBon.length} colis
+                            </span>
+                            {isExpanded ? (
+                              <ChevronDown className="w-5 h-5 text-muted-foreground transition-transform duration-200" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-muted-foreground transition-transform duration-200" />
+                            )}
+                          </div>
                         </div>
                         
-                        {/* Informations client et date + Badge et nombre de colis */}
+                        {/* Informations client et date + Badge */}
                         <div className="flex items-center justify-between flex-wrap gap-3">
                           <div className="mt-1">
                             <span className="text-xs text-muted-foreground">
@@ -457,17 +535,14 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             <StatusBadge
-                              text={bonLivraison.status || 'Nouveau'}
+                              text={translateStatus(bonLivraison.status || 'Nouveau')}
                               tone={statusToColor(bonLivraison.status)}
                             />
-                            <span className="text-xs text-muted-foreground">
-                              {colisDuBon.length} colis
-                            </span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Détails du bon de livraison */}
+                      {/* Détails du bon de livraison - Toujours visible */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 pb-2 border-t border-border mb-2">
                         <div className="flex flex-col gap-1">
                           <span className="text-xs text-muted-foreground">Commune</span>
@@ -494,9 +569,9 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                       </div>
                     </div>
 
-                    {/* Liste des colis */}
-                    {colisDuBon.length > 0 ? (
-                      <div>
+                    {/* Liste des colis - Affichage conditionnel avec animation */}
+                    {isExpanded && colisDuBon.length > 0 ? (
+                      <div className="animate-in slide-in-from-top-4 duration-500">
                         <div className="border-t border-border"></div>
                         
                         {/* Vue desktop - Tableau */}
@@ -621,12 +696,12 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                           })}
                         </div>
                       </div>
-                    ) : (
-                      <div className="p-6 text-center">
+                    ) : isExpanded && colisDuBon.length === 0 ? (
+                      <div className="p-6 text-center animate-in fade-in duration-300">
                         <Package className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
                         <span className="text-sm text-muted-foreground">Aucun colis pour ce bon de livraison</span>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}

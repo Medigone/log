@@ -1,14 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
-  Package as PackageIcon,
   Search as SearchIcon,
   AlertTriangle as AlertTriangleIcon,
-  User as UserIcon,
-  Truck as TruckIcon,
   Dot as DotIcon
 } from 'lucide-react';
 import { useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
@@ -87,10 +84,13 @@ function formatAmount(amount: number | undefined) {
 function statusToColor(status?: string): BadgeColor {
   switch (status) {
     case "Livré":
+    case "Delivered":
       return "green";
     case "Partiellement Livré":
+    case "Partially Delivered":
       return "yellow";
     case "Enlevé":
+    case "To Deliver":
       return "orange";
     case "Partiellement Enlevé":
       return "yellow";
@@ -99,8 +99,16 @@ function statusToColor(status?: string): BadgeColor {
     case "Partiellement Préparé":
       return "blue";
     case "Annulé":
+    case "Cancelled":
       return "red";
+    case "Fermé":
+    case "Closed":
+      return "green";
     case "Nouveau":
+    case "Brouillon":
+    case "Draft":
+    case "New":
+      return "blue";  // Draft/Nouveau/Brouillon status in blue
     default:
       return "gray";
   }
@@ -183,7 +191,7 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
 
   // Filtres pour les livraisons
   const filters = useMemo(() => {
-    const f: any[] = [];
+    const f: [string, string, string][] = [];
     if (statusFilter && statusFilter !== 'all') {
       f.push(['status', '=', statusFilter]);
     }
@@ -219,7 +227,15 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
   });
 
   // Récupération des colis pour toutes les livraisons
-  const { data: colisData, mutate: mutateAllColis } = useFrappeGetDocList<any>('Colis', {
+  const { data: colisData, mutate: mutateAllColis } = useFrappeGetDocList<{
+    name: string;
+    custom_numero_sequence?: string;
+    status: string;
+    client?: string;
+    date_creation?: string;
+    bl?: string;
+    articles?: string;
+  }>('Colis', {
     fields: [
       'name',
       'custom_numero_sequence',
@@ -234,13 +250,19 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
   });
 
   // Récupération des véhicules pour mapper les IDs aux noms
-  const { data: vehiculesData } = useFrappeGetDocList<any>('Vehicule', {
+  const { data: vehiculesData } = useFrappeGetDocList<{
+    name: string;
+    nom: string;
+  }>('Vehicule', {
     fields: ['name', 'nom'],
     limit: 1000
   });
 
   // Récupération des livreurs pour mapper les IDs aux noms
-  const { data: livreursData } = useFrappeGetDocList<any>('Livreur', {
+  const { data: livreursData } = useFrappeGetDocList<{
+    name: string;
+    nom: string;
+  }>('Livreur', {
     fields: ['name', 'nom'],
     limit: 1000
   });
@@ -275,6 +297,7 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
   useEffect(() => {
     if (livraisonsData && colisData) {
       const enriched = livraisonsData.map(livraison => {
+        console.log("Status from API:", livraison.status);
         const livraisonColis = colisData.filter(colis => colis.bl === livraison.name);
         
         return {
@@ -284,7 +307,16 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
         };
       });
       
-      setLivraisonsWithDetails(enriched);
+      setLivraisonsWithDetails(enriched.map(livraison => ({
+        ...livraison,
+        colis: livraison.colis.map(colis => ({
+          name: colis.name,
+          colis: colis.name,
+          numero_sequence: colis.custom_numero_sequence,
+          client: colis.client,
+          status: colis.status
+        }))
+      })));
     }
   }, [livraisonsData, colisData]);
 
@@ -311,7 +343,7 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
           <Alert className="border-red-500/50 bg-red-500/10">
             <AlertTriangleIcon className="h-4 w-4 text-red-400" />
             <AlertDescription className="text-red-300">
-              Erreur lors du chargement: {String((error as any)?.message || error)}
+              Erreur lors du chargement: {String((error as unknown as Error)?.message || error)}
             </AlertDescription>
           </Alert>
         </div>
@@ -331,7 +363,7 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
             </div>
             <div className="flex items-center gap-3">
               <MetaChip
-                icon={<PackageIcon width={16} height={16} />}
+                icon={<DotIcon width={16} height={16} />}
                 label="Total"
                 value={finalFilteredLivraisons.length}
               />
@@ -426,148 +458,75 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
           <h2 className="text-lg font-medium text-foreground">Liste des livraisons</h2>
         </div>
 
-        {/* Tableau des livraisons */}
-        <div className="bg-card/50 rounded-2xl overflow-hidden">
+        {/* Liste des livraisons en cartes */}
+        <div className="space-y-4">
           {finalFilteredLivraisons.length > 0 ? (
-            <>
-              {/* Vue desktop - Tableau */}
-              <div className="hidden lg:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-card/60 border-none hover:bg-card/60">
-                      {[
-                        "Livraison",
-                        "Date",
-                        "Livreur",
-                        "Véhicule",
-                        "Colis",
-                        "Montant",
-                        "Statut",
-                      ].map((h) => (
-                        <TableHead
-                          key={h}
-                          className="text-muted-foreground font-semibold p-3 border-none"
-                        >
-                          {h}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                     {finalFilteredLivraisons.map((livraison, index) => (
-                       <TableRow
-                         key={livraison.name}
-                         className={`cursor-pointer border-none transition-colors hover:bg-card/30 ${
-                           index % 2 === 0 ? 'bg-card/60' : 'bg-card/40'
-                         }`}
-                         onClick={() => onLivraisonSelect?.(livraison.name)}
-                       >
-                        <TableCell className="p-3 border-none">
-                           <span className="text-foreground font-medium">
-                             {livraison.name}
-                           </span>
-                         </TableCell>
-                         <TableCell className="p-3 border-none">
-                           <span className="text-muted-foreground">
-                             {formatDate(livraison.date_liv)}
-                           </span>
-                         </TableCell>
-                         <TableCell className="p-3 border-none">
-                           <span className="text-muted-foreground">
-                             {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : "—"}
-                           </span>
-                         </TableCell>
-                         <TableCell className="p-3 border-none">
-                           <span className="text-muted-foreground">
-                             {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : "—"}
-                           </span>
-                         </TableCell>
-                         <TableCell className="p-3 border-none">
-                           <span className="text-muted-foreground">
-                             {livraison.total_colis || 0}
-                           </span>
-                         </TableCell>
-                         <TableCell className="p-3 border-none">
-                           <span className="text-foreground">
-                             {formatAmount(livraison.total_montant_a_encaisser)}
-                           </span>
-                         </TableCell>
-                         <TableCell className="p-3 border-none">
-                           <StatusBadge
-                             text={livraison.status}
-                             tone={statusToColor(livraison.status)}
-                           />
-                         </TableCell>
-                      </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
-               </div>
+            finalFilteredLivraisons.map((livraison) => (
+              <div 
+                key={livraison.name}
+                className="bg-card/50 rounded-xl border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
+              >
+                {/* En-tête de la livraison - Cliquable */}
+                <div 
+                  className="p-4 cursor-pointer hover:bg-accent/30 transition-colors duration-200"
+                  onClick={() => onLivraisonSelect?.(livraison.name)}
+                >
+                  <div className="mb-4">
+                    {/* Titre de la livraison avec badge statut */}
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="text-base font-bold text-foreground">
+                        {livraison.name}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {livraison.total_colis || 0} colis
+                        </span>
+                        <StatusBadge
+                          text={livraison.status}
+                          tone={statusToColor(livraison.status)}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Informations date */}
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          Date de livraison : {formatDate(livraison.date_liv)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Vue mobile - Cartes */}
-               <div className="lg:hidden space-y-3">
-                 {finalFilteredLivraisons.map((livraison) => (
-                   <div
-                     key={livraison.name}
-                     onClick={() => onLivraisonSelect?.(livraison.name)}
-                     className="bg-card rounded-xl border border-border p-4 cursor-pointer transition-all duration-200 hover:bg-accent hover:-translate-y-0.5"
-                   >
-                    {/* En-tête de la carte */}
-                     <div className="flex justify-between items-start mb-3">
-                       <div>
-                         <h3 className="text-lg font-bold text-foreground mb-1">
-                           {livraison.name}
-                         </h3>
-                         <span className="text-xs text-muted-foreground">
-                           {formatDate(livraison.date_liv)}
-                         </span>
-                       </div>
-                       <StatusBadge
-                         text={livraison.status}
-                         tone={statusToColor(livraison.status)}
-                       />
-                     </div>
-
-                    {/* Informations principales */}
-                     <div className="grid gap-2 mb-3">
-                       <div className="flex items-center gap-2">
-                         <UserIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                           {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : "—"}
-                         </span>
-                       </div>
-                       
-                       <div className="flex items-center gap-2">
-                         <TruckIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                           {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : "—"}
-                         </span>
-                       </div>
-                       
-                       <div className="flex items-center gap-2">
-                         <PackageIcon className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                           {livraison.total_colis || 0} colis
-                         </span>
-                       </div>
-                     </div>
-
-                    {/* Montant */}
-                     <div className="flex justify-between items-center pt-2 border-t border-border">
-                       <span className="text-xs text-muted-foreground">
-                         Montant total
-                       </span>
-                       <span className="text-lg font-bold text-green-400">
-                         {formatAmount(livraison.total_montant_a_encaisser)}
-                       </span>
-                     </div>
-                   </div>
-                 ))}
-               </div>
-             </>
+                  {/* Détails de la livraison - Toujours visible */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 pb-2 border-t border-border mb-2">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Livreur</span>
+                      <span className="text-sm text-foreground">
+                        {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : '—'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Véhicule</span>
+                      <span className="text-sm text-foreground">
+                        {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : '—'}
+                      </span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Nombre de colis</span>
+                      <span className="text-sm text-foreground">{livraison.total_colis || 0}</span>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">Montant total</span>
+                      <span className="text-sm text-foreground">{formatAmount(livraison.total_montant_a_encaisser)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
            ) : (
              <div className="p-8 text-center">
-               <PackageIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+               <DotIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
                <span className="text-muted-foreground">Aucune livraison trouvée</span>
              </div>
            )}
