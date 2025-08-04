@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
   Rows3,
   IdCard,
@@ -8,7 +9,9 @@ import {
   Circle,
   AlertTriangle,
   Clipboard,
+  LogIn,
 } from "lucide-react";
+import logoSvg from "../../assets/IntraPro_fleetmaster.svg";
 
 /* =========================
    Types
@@ -280,6 +283,41 @@ function DeliveryHistorySection() {
   );
 }
 
+/* Navigation Bar for Public View */
+function PublicNavigationBar() {
+  const handleLogin = () => {
+    window.location.href = window.location.origin + window.location.pathname;
+  };
+
+  return (
+    <div className="border-b border-border">
+      <div className="max-w-6xl mx-auto px-4 py-2.5">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <img
+              src={logoSvg}
+              alt="IntraPro FleetMaster"
+              style={{ height: 28, width: "auto" }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogin}
+              className="cursor-pointer flex items-center gap-2"
+            >
+              <LogIn className="h-4 w-4" />
+              Connexion
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* =========================
    Main component
    ========================= */
@@ -320,6 +358,9 @@ const ColisPublicView: React.FC<{ colisId?: string }> = ({ colisId }) => {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Navigation Bar */}
+      <PublicNavigationBar />
+      
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background/75 backdrop-blur-sm border-b border-border">
         <div className="max-w-4xl mx-auto px-4 py-3">

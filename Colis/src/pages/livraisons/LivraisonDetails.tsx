@@ -264,14 +264,21 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
       return total + (colis.total_art || 0);
     }, 0);
 
+    // Calcul des communes uniques à partir des bons de livraison
+    const uniqueCommunes = new Set(
+      livraisonBonsLivraison
+        .map(bon => bon.custom_commune)
+        .filter(Boolean)
+    );
+
     return {
       totalColis: colisToUse.length,
       totalArticles,
       statusCounts,
       uniqueClients: uniqueClients.size,
-      uniqueCommunes: 0
+      uniqueCommunes: uniqueCommunes.size
     };
-  }, [colisData]);
+  }, [colisData, livraisonBonsLivraison]);
 
   if (isLoading)
     return (

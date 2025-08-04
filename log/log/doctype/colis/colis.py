@@ -9,6 +9,24 @@ import base64
 
 
 class Colis(Document):
+	def autoname(self):
+		"""Génère automatiquement le nom du document au format {bl}-{numero_fixe}"""
+		if self.bl:
+			# Compter le nombre de colis existants pour cette delivery note
+			existing_colis = frappe.db.count("Colis", {"bl": self.bl, "docstatus": ["<", 2]})
+			
+			# Calculer le numéro fixe du nouveau colis (nombre existant + 1)
+			numero_fixe = existing_colis + 1
+			
+			# Stocker le numéro fixe dans custom_numero_sequence
+			self.custom_numero_sequence = str(numero_fixe)
+			
+			# Générer le nom au format {bl}-{numero_fixe}
+			self.name = f"{self.bl}-{numero_fixe}"
+		else:
+			# Fallback au comportement par défaut si bl n'est pas défini
+			pass
+
 	def validate(self):
 		# Générer le QR code seulement si le document est nouveau et n'a pas encore d'image
 		if self.is_new() and (not self.image or not self.image.strip()):

@@ -12,6 +12,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Rows3,
   IdCard,
   Clock,
@@ -24,6 +40,7 @@ import {
   Camera,
   FileText,
   ArrowLeft,
+  Settings,
 } from "lucide-react";
 import { useFrappeGetDoc, useFrappeUpdateDoc, useFrappeAuth, useFrappeGetDocList } from "frappe-react-sdk";
 
@@ -245,6 +262,20 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
   // Commentaire
   const [isEditingComment, setIsEditingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
+
+  // Changement de statut
+  const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
+  const [selectedStatus, setSelectedStatus] = useState<string>("");
+
+  const statusOptions = [
+    "Nouveau",
+    "Préparé",
+    "Enlevé",
+    "Partiellement Livré",
+    "Livré",
+    "Non Livré",
+    "Annulé"
+  ];
 
   useEffect(() => {
     if (data) {
@@ -484,6 +515,25 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
     });
   };
 
+  const handleStatusChange = async () => {
+    if (!selectedStatus || !colisId) return;
+    
+    try {
+      await saveToBackend({ status: selectedStatus });
+      setLocalColisData((prev) => prev ? { ...prev, status: selectedStatus } : prev);
+      setIsStatusDialogOpen(false);
+      setSelectedStatus("");
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors du changement de statut");
+    }
+  };
+
+  const openStatusDialog = () => {
+    setSelectedStatus(localColisData?.status || "");
+    setIsStatusDialogOpen(true);
+  };
+
   if (isLoading)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
@@ -554,10 +604,65 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                   value={colisDocId}
                 />
               )}
-              <StatusBadge
-                text={localColisData.status}
-                tone={statusToColor(localColisData.status)}
-              />
+              <div className="flex items-center gap-2">
+                <StatusBadge
+                  text={localColisData.status}
+                  tone={statusToColor(localColisData.status)}
+                />
+                <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={openStatusDialog}
+                      className="h-8 px-2"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Changer le statut du colis</DialogTitle>
+                      <DialogDescription>
+                        Sélectionnez le nouveau statut pour ce colis.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                      <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Sélectionner un statut" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              <div className="flex items-center gap-2">
+                                <StatusBadge
+                                  text={status}
+                                  tone={statusToColor(status)}
+                                />
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => setIsStatusDialogOpen(false)}
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        onClick={handleStatusChange}
+                        disabled={!selectedStatus || selectedStatus === localColisData.status || isSaving}
+                      >
+                        {isSaving ? "Mise à jour..." : "Confirmer"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </div>
           </div>
         </div>
