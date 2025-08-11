@@ -143,6 +143,9 @@ doc_events = {
                 "log.log.customer_hooks.uppercase_customer_name",
             ]
         },
+    "Articles Colis": {
+        "validate": "log.articles_colis_hooks.validate_articles_colis"
+    },
     "Colis": {
         "validate": "log.delivery_note_hooks.validate_colis_quantities",
         "on_trash": "log.delivery_note_hooks.on_trash_colis",
@@ -153,10 +156,23 @@ doc_events = {
         "on_update": "log.livraison_hooks.update_livraisons_on_delivery_note_change"
     },
     "Livraison": {
+        "validate": "log.livraison_hooks.validate_livraison",
         "on_update": [
             "log.livraison_hooks.update_livraison_on_date_change",
             "log.livraison_hooks.update_delivery_notes_on_livraison_change"
         ]
+    },
+    "Paiement Client": {
+        "validate": "log.paiement_hooks.validate_paiement_client",
+        "after_insert": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "on_update": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "on_trash": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "after_delete": "log.paiement_hooks.update_livraison_totals_on_paiement_change"
+    },
+    "Transferts Marchandise": {
+        "validate": "log.transferts_marchandise_hooks.validate_transferts_marchandise",
+        "on_submit": "log.transferts_marchandise_hooks.on_submit_transferts_marchandise",
+        "on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
     }
 }
 

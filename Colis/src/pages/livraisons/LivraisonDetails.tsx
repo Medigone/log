@@ -535,39 +535,47 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
           <div className="border-t border-border"></div>
           <div className="p-4">
             {/* Vue desktop - Grid */}
-            <div className="hidden md:grid grid-cols-5 gap-6">
-              <div className="grid gap-1.5">
-                <span className="text-sm text-muted-foreground">Articles</span>
-                <span className="text-lg font-bold text-foreground">
-                  {stats?.totalArticles || 0}
-                </span>
+            <div className="hidden md:block">
+              {/* Première ligne - Informations générales */}
+              <div className="grid grid-cols-3 gap-6 mb-6">
+                <div className="grid gap-1.5">
+                  <span className="text-sm text-muted-foreground">Articles</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {stats?.totalArticles || 0}
+                  </span>
+                </div>
+                <div className="grid gap-1.5">
+                  <span className="text-sm text-muted-foreground">Clients</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {stats?.uniqueClients || 0}
+                  </span>
+                </div>
+                <div className="grid gap-1.5">
+                  <span className="text-sm text-muted-foreground">Communes</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {stats?.uniqueCommunes || 0}
+                  </span>
+                </div>
               </div>
-              <div className="grid gap-1.5">
-                <span className="text-sm text-muted-foreground">Clients</span>
-                <span className="text-lg font-bold text-foreground">
-                  {stats?.uniqueClients || 0}
-                </span>
-              </div>
-              <div className="grid gap-1.5">
-                <span className="text-sm text-muted-foreground">Communes</span>
-                <span className="text-lg font-bold text-foreground">
-                  {stats?.uniqueCommunes || 0}
-                </span>
-              </div>
-              <div className="grid gap-1.5">
-                <span className="text-sm text-muted-foreground">Total à encaisser</span>
-                <span className="text-lg font-bold text-green-400">
-                  {formatAmount(livraison.total_montant_a_encaisser)}
-                </span>
-              </div>
-              <div className="grid gap-1.5">
-                <span className="text-sm text-muted-foreground">Paiements reçus</span>
-                <span className="text-lg font-bold text-blue-400">
-                  {formatAmount(totalPaiements)}
-                </span>
-              </div>
-              {soldeRestant !== undefined && soldeRestant !== 0 && (
-                <div className="grid gap-1.5 col-span-5 mt-4 pt-4 border-t border-border">
+              
+              {/* Séparateur */}
+              <div className="border-t border-border mb-6"></div>
+              
+              {/* Deuxième ligne - Informations financières */}
+              <div className="grid grid-cols-3 gap-6">
+                <div className="grid gap-1.5">
+                  <span className="text-sm text-muted-foreground">Total à encaisser</span>
+                  <span className="text-lg font-bold text-green-400">
+                    {formatAmount(livraison.total_montant_a_encaisser)}
+                  </span>
+                </div>
+                <div className="grid gap-1.5">
+                  <span className="text-sm text-muted-foreground">Paiements reçus</span>
+                  <span className="text-lg font-bold text-blue-400">
+                    {formatAmount(totalPaiements)}
+                  </span>
+                </div>
+                <div className="grid gap-1.5">
                   <span className="text-sm text-muted-foreground">Solde restant</span>
                   <span className={`text-lg font-bold ${
                     soldeRestant > 0 ? 'text-orange-400' : 'text-green-400'
@@ -575,52 +583,60 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     {formatAmount(soldeRestant)}
                   </span>
                 </div>
-              )}
+              </div>
             </div>
             
             {/* Vue mobile - Cartes */}
-            <div className="md:hidden space-y-3">
-              <div className="bg-card/50 rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Articles</span>
-                  <span className="text-lg font-bold text-foreground">
-                    {stats?.totalArticles || 0}
-                  </span>
+            <div className="md:hidden">
+              {/* Informations générales */}
+              <div className="space-y-3 mb-6">
+                <div className="bg-card/50 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Articles</span>
+                    <span className="text-lg font-bold text-foreground">
+                      {stats?.totalArticles || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-card/50 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Clients</span>
+                    <span className="text-lg font-bold text-foreground">
+                      {stats?.uniqueClients || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-card/50 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Communes</span>
+                    <span className="text-lg font-bold text-foreground">
+                      {stats?.uniqueCommunes || 0}
+                    </span>
+                  </div>
                 </div>
               </div>
-              <div className="bg-card/50 rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Clients</span>
-                  <span className="text-lg font-bold text-foreground">
-                    {stats?.uniqueClients || 0}
-                  </span>
+              
+              {/* Séparateur */}
+              <div className="border-t border-border mb-6"></div>
+              
+              {/* Informations financières */}
+              <div className="space-y-3">
+                <div className="bg-card/50 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total à encaisser</span>
+                    <span className="text-lg font-bold text-green-400">
+                      {formatAmount(livraison.total_montant_a_encaisser)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="bg-card/50 rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Communes</span>
-                  <span className="text-lg font-bold text-foreground">
-                    {stats?.uniqueCommunes || 0}
-                  </span>
+                <div className="bg-card/50 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Paiements reçus</span>
+                    <span className="text-lg font-bold text-blue-400">
+                      {formatAmount(totalPaiements)}
+                    </span>
+                  </div>
                 </div>
-              </div>
-              <div className="bg-card/50 rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Total à encaisser</span>
-                  <span className="text-lg font-bold text-green-400">
-                    {formatAmount(livraison.total_montant_a_encaisser)}
-                  </span>
-                </div>
-              </div>
-              <div className="bg-card/50 rounded-lg border border-border p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Paiements reçus</span>
-                  <span className="text-lg font-bold text-blue-400">
-                    {formatAmount(totalPaiements)}
-                  </span>
-                </div>
-              </div>
-              {soldeRestant !== undefined && soldeRestant !== 0 && (
                 <div className="bg-card/50 rounded-lg border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Solde restant</span>
@@ -631,7 +647,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     </span>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           </div>
         </div>

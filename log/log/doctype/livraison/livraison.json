@@ -23,8 +23,6 @@
   "total_montant_a_encaisser",
   "total_paiements",
   "solde_restant",
-  "paiements_tab",
-  "paiements",
   "\u00e9tapes_de_livraison_tab",
   "rt"
  ],
@@ -106,17 +104,7 @@
    "precision": "2",
    "read_only": 1
   },
-  {
-   "fieldname": "paiements_tab",
-   "fieldtype": "Tab Break",
-   "label": "Paiements"
-  },
-  {
-   "fieldname": "paiements",
-   "fieldtype": "Table",
-   "label": "Paiements Enregistr\u00e9s",
-   "options": "Livraison Paiement"
-  },
+
   {
    "fieldname": "total_paiements",
    "fieldtype": "Currency",

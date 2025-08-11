@@ -7,17 +7,9 @@ from frappe import _
 
 
 class Livraison(Document):
-	def validate(self):
-		"""Validate the livraison document."""
-		# Auto-load delivery notes by date if date_liv is set and no delivery notes exist
-		if self.date_liv and not self.bons_de_livraison:
-			self.auto_load_delivery_notes_by_date()
-		self.sync_colis_from_bons_de_livraison()
-		self.calculate_totals()
+
 	
-	def on_update(self):
-		"""Update related documents after saving."""
-		self.sync_paiements_from_paiement_client()
+
 	
 	def calculate_totals(self):
 		"""Calculate total colis, nombre bons de livraison, total amount to collect, total payments and remaining balance."""
@@ -34,42 +26,21 @@ class Livraison(Document):
 				total_montant += bon_row.grand_total
 		self.total_montant_a_encaisser = total_montant
 		
-		# Calculate total payments
+		# Calculate total payments from Paiement Client doctype
 		total_paiements = 0
-		for paiement_row in self.paiements or []:
-			if paiement_row.montant:
-				total_paiements += paiement_row.montant
+		paiements = frappe.get_all("Paiement Client", 
+			filters={"livraison": self.name}, 
+			fields=["montant"]
+		)
+		for paiement in paiements:
+			if paiement.montant:
+				total_paiements += paiement.montant
 		self.total_paiements = total_paiements
 		
 		# Calculate remaining balance
 		self.solde_restant = self.total_montant_a_encaisser - self.total_paiements
 	
-	def sync_paiements_from_paiement_client(self):
-		"""Sync payments from Paiement Client doctype."""
-		# Get all payments linked to this livraison
-		paiements = frappe.get_all("Paiement Client",
-			filters={"livraison": self.name, "docstatus": ["<", 2]},
-			fields=["name", "date", "client", "nom_client", "montant", "moyen_paiement", "type_paiement", "colis_concernes"]
-		)
-		
-		# Clear existing payment rows
-		self.paiements = []
-		
-		# Add payment rows
-		for paiement in paiements:
-			self.append("paiements", {
-				"paiement_client": paiement.name,
-				"date": paiement.date,
-				"client": paiement.client,
-				"nom_client": paiement.nom_client,
-				"montant": paiement.montant,
-				"moyen_paiement": paiement.moyen_paiement,
-				"type_paiement": paiement.type_paiement,
-				"colis_concernes": paiement.colis_concernes
-			})
-		
-		# Recalculate totals after syncing payments
-		self.calculate_totals()
+
 	
 	def sync_colis_from_bons_de_livraison(self):
 		"""Synchronize colis from bons de livraison and remove orphaned colis."""

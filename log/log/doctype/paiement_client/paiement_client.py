@@ -11,24 +11,7 @@ from frappe import _
 from frappe.exceptions import ValidationError
 
 class PaiementClient(Document):
-	def validate(self):
-		"""Validate the payment."""
-		# Validate amount
-		if self.montant <= 0:
-			frappe.throw(_("Le montant du paiement doit être supérieur à zéro."), exc=ValidationError)
-		
-		# Validate livraison if specified
-		if self.livraison:
-			# Check if livraison is not cancelled
-			livraison_doc = frappe.get_doc("Livraison", self.livraison)
-			if livraison_doc.status == "Annulé":
-				frappe.throw(_("Impossible d'effectuer un paiement pour une livraison annulée."), exc=ValidationError)
-			
-			# Validate client has colis in this livraison
-			if self.client:
-				client_has_colis = self.check_client_has_colis_in_livraison()
-				if not client_has_colis:
-					frappe.throw(_("Le client sélectionné n'a aucun colis dans cette livraison."), exc=ValidationError)
+
 	
 	def check_client_has_colis_in_livraison(self):
 		"""Check if the selected client has any colis in the selected livraison."""
@@ -63,27 +46,7 @@ class PaiementClient(Document):
 		
 		return delivery_notes
 	
-	def on_update(self):
-		"""Update related livraison after payment update."""
-		if self.livraison:
-			self.update_livraison_totals()
-	
-	def on_cancel(self):
-		"""Update related livraison after payment cancellation."""
-		if self.livraison:
-			self.update_livraison_totals()
-	
-	def update_livraison_totals(self):
-		"""Update totals in the related livraison document."""
-		if not self.livraison:
-			return
-		
-		try:
-			livraison_doc = frappe.get_doc("Livraison", self.livraison)
-			livraison_doc.sync_paiements_from_paiement_client()
-			livraison_doc.save(ignore_permissions=True)
-		except Exception as e:
-			frappe.log_error(f"Error updating livraison totals: {str(e)}", "Paiement Client Update Error")
+
 	
 	@frappe.whitelist()
 	def get_available_colis_for_livraison(self):

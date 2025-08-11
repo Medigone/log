@@ -7,11 +7,6 @@ from frappe.model.document import Document
 from frappe.utils import now_datetime
 
 class ArticlesColis(Document):
-	def validate(self):
-		"""Validation et calculs automatiques"""
-		self.calculate_quantite_restante()
-		self.update_statut_article()
-	
 	def calculate_quantite_restante(self):
 		"""Calculer la quantité restante"""
 		if self.quantite_totale and self.quantite_livree:

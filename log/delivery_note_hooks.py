@@ -260,33 +260,108 @@ def _update_sequences_after_delete(delivery_note_name):
 
 def validate_colis_quantities(doc, method):
     """
-    Bloque si somme(qtés des autres colis + qtés de ce colis)
-    > qtés de la DN.
+    Valide les quantités, génère le QR code et calcule le statut global.
     """
-    if not doc.bl:
+    # Validation des quantités
+    if doc.bl:
+        dn = frappe.get_doc("Delivery Note", doc.bl)
+        dn_qty = {i.item_code: i.qty for i in dn.items}
+
+        autres = [c.name for c in frappe.get_all("Colis",
+            filters={"bl": doc.bl, "name": ("!=", doc.name)},
+            fields=["name"])]
+        cumul = {}
+        if autres:
+            for r in frappe.get_all("Articles Colis",
+                filters={"parent": ["in", autres]},
+                fields=["article", "quantite_totale"]):
+                cumul[r.article] = cumul.get(r.article, 0) + (r.quantite_totale or 0)
+
+        for line in doc.articles:
+            code = line.article
+            qt   = line.quantite_totale or 0
+            if cumul.get(code, 0) + qt > dn_qty.get(code, 0):
+                frappe.throw(_(
+                    "Quantité trop élevée pour l'article « {0} » : "
+                    "{1} déjà colisé + {2} ici > {3} sur la DN."
+                ).format(code, cumul.get(code, 0), qt, dn_qty.get(code, 0)))
+    
+    # Générer le QR code seulement si le document est nouveau et n'a pas encore d'image
+    if doc.is_new() and (not doc.image or not doc.image.strip()):
+        _generate_qr_code_for_colis(doc)
+    
+    # Calculer le statut global basé sur les articles
+    _calculate_global_status_for_colis(doc)
+
+def _generate_qr_code_for_colis(doc):
+    """Génère un QR code pour le document Colis"""
+    import qrcode
+    import io
+    import base64
+    
+    if not doc.name or doc.name == "new-colis":
         return
+    
+    # Construire l'URL complète vers l'interface livreurs React
+    site_url = frappe.utils.get_url()
+    frontend_url = f"{site_url}/Colis?colis={doc.name}"
+    app_url = f"{site_url}/app/colis/{doc.name}"
+    
+    # Préparer les données à encoder dans le QR code
+    qr_data = {
+        "id": doc.name,
+        "url": frontend_url,
+        "app_url": app_url,
+        "client": doc.client if doc.client else "",
+        "date": str(doc.date) if doc.date else "",
+        "status": doc.status if doc.status else ""
+    }
+    
+    # Créer le QR code
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(str(qr_data))
+    qr.make(fit=True)
+    
+    # Générer l'image
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convertir en base64
+    buffer = io.BytesIO()
+    img.save(buffer, format='PNG')
+    img_str = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Stocker l'image en base64 dans le champ image
+    doc.image = f"data:image/png;base64,{img_str}"
 
-    dn = frappe.get_doc("Delivery Note", doc.bl)
-    dn_qty = {i.item_code: i.qty for i in dn.items}
-
-    autres = [c.name for c in frappe.get_all("Colis",
-        filters={"bl": doc.bl, "name": ("!=", doc.name)},
-        fields=["name"])]
-    cumul = {}
-    if autres:
-        for r in frappe.get_all("Articles Colis",
-            filters={"parent": ["in", autres]},
-            fields=["article", "quantite_totale"]):
-            cumul[r.article] = cumul.get(r.article, 0) + (r.quantite_totale or 0)
-
-    for line in doc.articles:
-        code = line.article
-        qt   = line.quantite_totale or 0
-        if cumul.get(code, 0) + qt > dn_qty.get(code, 0):
-            frappe.throw(_(
-                "Quantité trop élevée pour l'article « {0} » : "
-                "{1} déjà colisé + {2} ici > {3} sur la DN."
-            ).format(code, cumul.get(code, 0), qt, dn_qty.get(code, 0)))
+def _calculate_global_status_for_colis(doc):
+    """Calcule automatiquement le statut global du colis basé sur les statuts des articles"""
+    if not doc.articles:
+        return
+    
+    # Compter les statuts des articles
+    article_statuses = [article.statut_article for article in doc.articles if article.statut_article]
+    
+    if not article_statuses:
+        return
+    
+    # Logique de calcul du statut global
+    if all(status == "Livré" for status in article_statuses):
+        doc.status = "Livré"
+    elif all(status == "En attente" for status in article_statuses):
+        # Définir le statut "Nouveau" si tous les articles sont en attente et aucun statut n'est défini
+        if not doc.status or doc.status in ["Draft", ""]:
+            doc.status = "Nouveau"
+    elif any(status == "Partiellement livré" for status in article_statuses) or \
+         (any(status == "Livré" for status in article_statuses) and 
+          any(status in ["En attente", "Partiellement livré"] for status in article_statuses)):
+        doc.status = "Partiellement Livré"
+    elif all(status == "Non livré" for status in article_statuses):
+        doc.status = "Non Livré"
 
 def on_trash_colis(doc, method):
     """

@@ -175,6 +175,14 @@ def update_livraison_status_on_colis_change(doc, method):
 		)
 
 
+def validate_livraison(doc, method):
+	"""Validate the livraison document."""
+	# Auto-load delivery notes by date if date_liv is set and no delivery notes exist
+	if doc.date_liv and not doc.bons_de_livraison:
+		doc.auto_load_delivery_notes_by_date()
+	doc.sync_colis_from_bons_de_livraison()
+	doc.calculate_totals()
+
 def calculate_livraison_status(livraison_doc):
 	"""Calculate the appropriate status for a Livraison based on its Colis statuses."""
 	if not livraison_doc.colis:

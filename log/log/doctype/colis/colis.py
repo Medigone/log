@@ -27,16 +27,9 @@ class Colis(Document):
 			# Fallback au comportement par défaut si bl n'est pas défini
 			pass
 
-	def validate(self):
-		# Générer le QR code seulement si le document est nouveau et n'a pas encore d'image
-		if self.is_new() and (not self.image or not self.image.strip()):
-			self.generate_qr_code()
-		# Calculer le statut global basé sur les articles
-		self.calculate_global_status()
+
 	
-	def on_update(self):
-		"""Hook appelé après la mise à jour du document"""
-		self.sync_with_delivery_note()
+
 	
 	def sync_with_delivery_note(self):
 		"""Synchronise les quantités livrées avec le Delivery Note associé"""
