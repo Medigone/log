@@ -19,6 +19,7 @@
   "section_break_dzfh",
   "nombre_bons_de_livraison",
   "total_colis",
+  "total_articles",
   "column_break_egre",
   "total_montant_a_encaisser",
   "total_paiements",
@@ -104,7 +105,6 @@
    "precision": "2",
    "read_only": 1
   },
-
   {
    "fieldname": "total_paiements",
    "fieldtype": "Currency",
@@ -144,12 +144,18 @@
   {
    "fieldname": "section_break_jbkb",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "total_articles",
+   "fieldtype": "Int",
+   "label": "Total Articles",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-02 17:28:22.381072",
- "modified_by": "Administrator",
+ "modified": "2025-08-11 23:53:08.882242",
+ "modified_by": "admin@medigo.one",
  "module": "Log",
  "name": "Livraison",
  "owner": "Administrator",

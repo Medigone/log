@@ -130,6 +130,11 @@ function AppContent() {
 
   const [isPublicAccess, setIsPublicAccess] = useState<boolean>(false);
 
+  // Apply dark theme
+  useEffect(() => {
+    document.body.classList.add('dark');
+  }, []);
+
   const returnToMainPage = () => {
     setSelectedColisId(null);
     setSelectedLivraisonId(null);

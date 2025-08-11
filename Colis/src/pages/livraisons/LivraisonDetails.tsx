@@ -673,18 +673,18 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
             </div>
             
             {/* Vue en cartes pour toutes les tailles d'écran */}
-            <div className="p-4">
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="p-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3">
                 {paiements.map((paiement) => (
-                  <div key={paiement.name} className="bg-card/50 rounded-xl border border-border p-4 hover:border-blue-400 transition-all duration-200">
+                  <div key={paiement.name} className="bg-card/50 rounded-lg border border-border p-3 hover:border-blue-400 transition-all duration-200">
                     {/* En-tête avec client, montant et actions */}
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-start justify-between mb-2">
                       <div className="min-w-0 flex-1">
-                        <div className="font-medium text-foreground truncate">{paiement.nom_client || paiement.client}</div>
-                        <div className="text-sm text-muted-foreground truncate">{paiement.client}</div>
+                        <div className="font-medium text-foreground text-sm truncate">{paiement.nom_client || paiement.client}</div>
+                        <div className="text-xs text-muted-foreground truncate">{paiement.client}</div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-green-500 text-lg">
+                      <div className="flex items-center gap-1 ml-2">
+                        <span className="font-semibold text-green-500 text-sm">
                           {formatAmount(paiement.montant)}
                         </span>
                         <PaiementActionsDialog
@@ -698,20 +698,20 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     </div>
                     
                     {/* Détails du paiement */}
-                    <div className="grid grid-cols-1 gap-3 pt-3 border-t border-border">
-                      <div className="flex flex-col gap-1">
-                        <span className="text-xs text-muted-foreground">Moyen de paiement</span>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium w-fit ${
+                    <div className="grid grid-cols-1 gap-2 pt-2 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Moyen</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${
                           paiement.moyen_paiement === 'Espèce' 
-                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                            ? 'bg-green-500/20 text-green-400' 
+                            : 'bg-blue-500/20 text-blue-400'
                         }`}>
                           {paiement.moyen_paiement}
                         </span>
                       </div>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">Date</span>
-                        <span className="text-sm text-foreground">
+                        <span className="text-xs text-foreground">
                           {formatDate(paiement.date)}
                         </span>
                       </div>
@@ -719,15 +719,14 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     
                     {/* Fichiers */}
                     {(paiement.recu || paiement.photo_cheque) && (
-                      <div className="mt-3 pt-3 border-t border-border">
-                        <span className="text-xs text-muted-foreground block mb-2">Fichiers</span>
-                        <div className="flex gap-2 flex-wrap">
+                      <div className="mt-2 pt-2 border-t border-border">
+                        <div className="flex gap-1 flex-wrap">
                           {paiement.recu && (
                             <a
                               href={paiement.recu}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-xs hover:bg-blue-500/30 transition-colors"
+                              className="inline-flex items-center px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs hover:bg-blue-500/30 transition-colors"
                             >
                               Reçu
                             </a>
@@ -737,9 +736,9 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                               href={paiement.photo_cheque}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-xs hover:bg-blue-500/30 transition-colors"
+                              className="inline-flex items-center px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs hover:bg-blue-500/30 transition-colors"
                             >
-                              Photo chèque
+                              Photo
                             </a>
                           )}
                         </div>

@@ -104,10 +104,10 @@ const Login: React.FC = () => {
                   />
                 </div>
                 <div className="w-6 hidden md:block"></div>
-                <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
+                <div className="inline-flex items-center gap-2 text-white text-sm">
                   <span>Connexion</span>
                   <Circle className="w-1 h-1 fill-current" />
-                  <span className="text-foreground">Compte</span>
+                  <span className="text-white">Compte</span>
                 </div>
               </div>
             </div>
@@ -125,10 +125,10 @@ const Login: React.FC = () => {
                   />
                 </div>
 
-                <h1 className="text-4xl font-bold text-foreground leading-tight tracking-tight">
+                <h1 className="text-4xl font-bold text-white leading-tight tracking-tight">
                   Gérez vos livraisons avec sérénité.
                 </h1>
-                <p className="text-muted-foreground mt-3">
+                <p className="text-white mt-3">
                   IntraPro FleetMaster vous aide à superviser, analyser et
                   optimiser vos opérations en toute simplicité.
                 </p>
@@ -138,7 +138,7 @@ const Login: React.FC = () => {
             {/* Right panel (form) */}
             <div className="w-full grid place-items-center">
               <div className="w-full max-w-[380px] p-6">
-                <h2 className="text-2xl font-semibold text-foreground mb-3">
+                <h2 className="text-2xl font-semibold text-white mb-3">
                   Connexion
                 </h2>
 
@@ -151,7 +151,7 @@ const Login: React.FC = () => {
 
                 <div className="flex flex-col gap-3">
                   <div>
-                    <label className="text-sm font-medium text-foreground block mb-2">
+                    <label className="text-sm font-medium text-white block mb-2">
                       Identifiant
                     </label>
                     <Input
@@ -164,7 +164,7 @@ const Login: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-sm font-medium text-foreground block mb-2">
+                    <label className="text-sm font-medium text-white block mb-2">
                       Mot de passe
                     </label>
                     <div className="relative">
@@ -184,7 +184,7 @@ const Login: React.FC = () => {
                             : "Afficher le mot de passe"
                         }
                         onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md grid place-items-center"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white hover:text-gray-300 transition-colors p-1 rounded-md grid place-items-center"
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         {srOnly(
@@ -207,7 +207,7 @@ const Login: React.FC = () => {
 
                 <Separator className="my-4" />
 
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-white">
                   Besoin d'aide ? Contactez l'administrateur.
                 </p>
               </div>

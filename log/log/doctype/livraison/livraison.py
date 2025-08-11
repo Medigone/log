@@ -8,16 +8,28 @@ from frappe import _
 
 class Livraison(Document):
 
-	
+	def validate(self):
+		"""Validate the document and calculate totals."""
+		self.calculate_totals()
 
-	
+	def before_save(self):
+		"""Calculate totals before saving."""
+		self.calculate_totals()
+
 	def calculate_totals(self):
-		"""Calculate total colis, nombre bons de livraison, total amount to collect, total payments and remaining balance."""
+		"""Calculate total colis, nombre bons de livraison, total articles, total amount to collect, total payments and remaining balance."""
 		# Calculate total colis
 		self.total_colis = len(self.colis) if self.colis else 0
 		
 		# Calculate nombre bons de livraison
 		self.nombre_bons_de_livraison = len(self.bons_de_livraison) if self.bons_de_livraison else 0
+		
+		# Calculate total articles from bons de livraison total_qty
+		total_articles = 0
+		for bon_row in self.bons_de_livraison or []:
+			if bon_row.total_qty:
+				total_articles += bon_row.total_qty
+		self.total_articles = total_articles
 		
 		# Calculate total amount to collect from bons de livraison grand_total
 		total_montant = 0
@@ -95,7 +107,7 @@ class Livraison(Document):
 			filters={
 				"custom_date_de_livraison": self.date_liv
 			},
-			fields=["name", "customer", "custom_date_de_livraison", "custom_commune", "custom_wilaya", "total_qty", "grand_total", "status"]
+			fields=["name", "customer", "custom_date_de_livraison", "custom_commune", "custom_wilaya", "total_qty", "grand_total", "status", "custom_type"]
 		)
 		
 		# Clear existing delivery notes
@@ -111,7 +123,8 @@ class Livraison(Document):
 				"custom_wilaya": dn.custom_wilaya,
 				"total_qty": dn.total_qty,
 				"grand_total": dn.grand_total,
-				"status": dn.status
+				"status": dn.status,
+				"type": dn.custom_type
 			})
 	
 
