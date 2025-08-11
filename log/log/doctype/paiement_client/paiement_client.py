@@ -17,11 +17,8 @@ class PaiementClient(Document):
 		if self.montant <= 0:
 			frappe.throw(_("Le montant du paiement doit être supérieur à zéro."), exc=ValidationError)
 		
-		# Validate livraison for payment type "Livraison"
-		if self.type_paiement == "Livraison":
-			if not self.livraison:
-				frappe.throw(_("Une livraison doit être sélectionnée pour un paiement de type 'Livraison'."), exc=ValidationError)
-			
+		# Validate livraison if specified
+		if self.livraison:
 			# Check if livraison is not cancelled
 			livraison_doc = frappe.get_doc("Livraison", self.livraison)
 			if livraison_doc.status == "Annulé":
@@ -56,12 +53,12 @@ class PaiementClient(Document):
 	
 	def on_update(self):
 		"""Update related livraison after payment update."""
-		if self.livraison and self.type_paiement == "Livraison":
+		if self.livraison:
 			self.update_livraison_totals()
 	
 	def on_cancel(self):
 		"""Update related livraison after payment cancellation."""
-		if self.livraison and self.type_paiement == "Livraison":
+		if self.livraison:
 			self.update_livraison_totals()
 	
 	def update_livraison_totals(self):

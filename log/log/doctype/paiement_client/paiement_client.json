@@ -6,14 +6,14 @@
  "engine": "InnoDB",
  "field_order": [
   "date",
-  "type_paiement",
   "column_break_azqa",
-  "livraison",
+  "moyen_paiement",
   "section_break_client",
   "client",
   "nom_client",
   "column_break_client",
-  "moyen_paiement",
+  "livraison",
+  "bon_livraison",
   "section_break_uakz",
   "montant",
   "colis_concernes",
@@ -36,17 +36,6 @@
    "read_only": 1
   },
   {
-   "allow_in_quick_entry": 1,
-   "fieldname": "type_paiement",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Type de paiement",
-   "options": "Livraison\nPaiement libre\nRèglement de compte",
-   "reqd": 1,
-   "default": "Paiement libre"
-  },
-  {
    "fieldname": "column_break_azqa",
    "fieldtype": "Column Break"
   },
@@ -54,9 +43,7 @@
    "fieldname": "livraison",
    "fieldtype": "Link",
    "label": "Livraison",
-   "options": "Livraison",
-   "depends_on": "eval:(doc.type_paiement=='Livraison')",
-   "mandatory_depends_on": "eval:(doc.type_paiement=='Livraison')"
+   "options": "Livraison"
   },
   {
    "fieldname": "section_break_client",
@@ -92,17 +79,16 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Moyen de paiement",
-   "options": "Espèce\nChèque",
+   "options": "Esp\u00e8ce\nCh\u00e8que",
    "reqd": 1
   },
   {
    "fieldname": "section_break_uakz",
    "fieldtype": "Section Break",
-   "label": "Détails du Paiement"
+   "label": "D\u00e9tails du Paiement"
   },
   {
    "allow_in_quick_entry": 1,
-   "description": "Le montant du paiement doit \u00eatre sup\u00e9rieur \u00e0 z\u00e9ro.",
    "fieldname": "montant",
    "fieldtype": "Currency",
    "in_list_view": 1,
@@ -112,11 +98,10 @@
    "reqd": 1
   },
   {
+   "description": "Liste des colis pour lesquels ce paiement est effectu\u00e9",
    "fieldname": "colis_concernes",
    "fieldtype": "Small Text",
-   "label": "Colis concernés",
-   "description": "Liste des colis pour lesquels ce paiement est effectué",
-   "depends_on": "eval:(doc.type_paiement=='Livraison')"
+   "label": "Colis concern\u00e9s"
   },
   {
    "fieldname": "column_break_hvsb",
@@ -165,7 +150,7 @@
   {
    "fieldname": "section_break_beneficiaire",
    "fieldtype": "Section Break",
-   "label": "Bénéficiaire"
+   "label": "B\u00e9n\u00e9ficiaire"
   },
   {
    "default": "User",
@@ -173,22 +158,28 @@
    "fieldtype": "Link",
    "hidden": 1,
    "in_standard_filter": 1,
-   "label": "ID Bénéficiaire",
+   "label": "ID B\u00e9n\u00e9ficiaire",
    "options": "User"
   },
   {
    "fetch_from": "id_beneficiaire.full_name",
    "fieldname": "beneficiaire",
    "fieldtype": "Data",
-   "label": "Bénéficiaire",
+   "label": "B\u00e9n\u00e9ficiaire",
    "read_only": 1
+  },
+  {
+   "fieldname": "bon_livraison",
+   "fieldtype": "Link",
+   "label": "Bon de livraison",
+   "options": "Delivery Note"
   }
  ],
  "image_field": "recu",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-01 16:38:05.377730",
- "modified_by": "Administrator",
+ "modified": "2025-08-11 11:19:40.365492",
+ "modified_by": "admin@medigo.one",
  "module": "Log",
  "name": "Paiement Client",
  "owner": "Administrator",
@@ -207,6 +198,7 @@
   }
  ],
  "quick_entry": 1,
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
