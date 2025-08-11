@@ -7,7 +7,8 @@
  "field_order": [
   "date",
   "column_break_azqa",
-  "moyen_paiement",
+  "id_beneficiaire",
+  "beneficiaire",
   "section_break_client",
   "client",
   "nom_client",
@@ -15,15 +16,12 @@
   "livraison",
   "bon_livraison",
   "section_break_uakz",
+  "moyen_paiement",
   "montant",
-  "colis_concernes",
   "column_break_hvsb",
   "recu",
   "photo_cheque",
-  "date_encaissement",
-  "section_break_beneficiaire",
-  "id_beneficiaire",
-  "beneficiaire"
+  "date_encaissement"
  ],
  "fields": [
   {
@@ -98,12 +96,6 @@
    "reqd": 1
   },
   {
-   "description": "Liste des colis pour lesquels ce paiement est effectu\u00e9",
-   "fieldname": "colis_concernes",
-   "fieldtype": "Small Text",
-   "label": "Colis concern\u00e9s"
-  },
-  {
    "fieldname": "column_break_hvsb",
    "fieldtype": "Column Break"
   },
@@ -148,11 +140,6 @@
    "mandatory_depends_on": "eval:(doc.moyen_paiement==\"Ch\u00e8que\")"
   },
   {
-   "fieldname": "section_break_beneficiaire",
-   "fieldtype": "Section Break",
-   "label": "B\u00e9n\u00e9ficiaire"
-  },
-  {
    "default": "User",
    "fieldname": "id_beneficiaire",
    "fieldtype": "Link",
@@ -178,7 +165,7 @@
  "image_field": "recu",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-11 11:19:40.365492",
+ "modified": "2025-08-11 11:25:04.450617",
  "modified_by": "admin@medigo.one",
  "module": "Log",
  "name": "Paiement Client",
