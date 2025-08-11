@@ -50,6 +50,18 @@ class PaiementClient(Document):
 		"""Get all delivery notes associated with this livraison."""
 		if not self.livraison:
 			return []
+		
+		# Get all delivery notes from the livraison
+		livraison_doc = frappe.get_doc("Livraison", self.livraison)
+		delivery_notes = []
+		
+		# Check if livraison has bons_de_livraison field
+		if hasattr(livraison_doc, 'bons_de_livraison'):
+			for dn in livraison_doc.bons_de_livraison:
+				if dn.bon_de_livraison:
+					delivery_notes.append(dn.bon_de_livraison)
+		
+		return delivery_notes
 	
 	def on_update(self):
 		"""Update related livraison after payment update."""

@@ -41,7 +41,8 @@
    "fieldname": "livraison",
    "fieldtype": "Link",
    "label": "Livraison",
-   "options": "Livraison"
+   "options": "Livraison",
+   "read_only": 1
   },
   {
    "fieldname": "section_break_client",
@@ -100,7 +101,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "User",
    "fieldname": "id_beneficiaire",
    "fieldtype": "Link",
    "hidden": 1,
@@ -140,32 +140,17 @@
    "mandatory_depends_on": "eval:(doc.moyen_paiement==\"Ch\u00e8que\")"
   },
   {
-   "default": "User",
-   "fieldname": "id_beneficiaire",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "in_standard_filter": 1,
-   "label": "ID B\u00e9n\u00e9ficiaire",
-   "options": "User"
-  },
-  {
-   "fetch_from": "id_beneficiaire.full_name",
-   "fieldname": "beneficiaire",
-   "fieldtype": "Data",
-   "label": "B\u00e9n\u00e9ficiaire",
-   "read_only": 1
-  },
-  {
    "fieldname": "bon_livraison",
    "fieldtype": "Link",
    "label": "Bon de livraison",
-   "options": "Delivery Note"
+   "options": "Delivery Note",
+   "read_only": 1
   }
  ],
  "image_field": "recu",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-11 11:25:04.450617",
+ "modified": "2025-08-11 14:14:10.699631",
  "modified_by": "admin@medigo.one",
  "module": "Log",
  "name": "Paiement Client",

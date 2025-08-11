@@ -12,10 +12,14 @@ import {
   Truck,
   Calendar,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  CreditCard,
+  DollarSign
 } from 'lucide-react';
 import { useFrappeGetDoc, useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
 import type { Livraison, LivraisonColis, LivraisonBonDeLivraison } from '../../types/Livraison';
+import PaiementClientDialog from '../../components/PaiementClientDialog';
+import PaiementActionsDialog from '../../components/PaiementActionsDialog';
 
 interface LivraisonDetailsProps {
   livraisonId: string;
@@ -202,8 +206,8 @@ function MetaChip({
         <span className="font-semibold">{value}</span>
       </span>
     </div>
-  );
-}
+    );
+  }
 
 /* =========================
    Component
@@ -211,6 +215,8 @@ function MetaChip({
 const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetailsProps) => {
   // État pour gérer l'ouverture/fermeture des bons de livraison (accordéon)
   const [expandedBons, setExpandedBons] = useState<Set<string>>(new Set());
+  // État pour gérer l'affichage de la liste des paiements
+  const [showPaiements, setShowPaiements] = useState(false);
 
   // Fonction pour basculer l'état d'un bon de livraison
   const toggleBonExpansion = (bonId: string) => {
@@ -250,6 +256,25 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
     fields: ['name', 'nom'],
     enabled: !!livraison?.vehicule
   });
+
+  // Récupération des paiements liés à cette livraison
+  const { data: paiements, mutate: mutatePaiements } = useFrappeGetDocList<any>('Paiement Client', {
+    fields: ['name', 'client', 'nom_client', 'montant', 'moyen_paiement', 'date', 'recu', 'photo_cheque', 'bon_livraison'],
+    filters: [['livraison', '=', livraisonId]],
+    limit: 1000
+  });
+
+  // Calcul du montant total des paiements
+  const totalPaiements = useMemo(() => {
+    if (!paiements) return 0;
+    return paiements.reduce((total, paiement) => total + (paiement.montant || 0), 0);
+  }, [paiements]);
+
+  // Calcul du solde restant
+  const soldeRestant = useMemo(() => {
+    const montantAEncaisser = livraison?.total_montant_a_encaisser || 0;
+    return montantAEncaisser - totalPaiements;
+  }, [livraison?.total_montant_a_encaisser, totalPaiements]);
 
   // Récupération des communes pour mapper les IDs aux noms
   const { data: communesData } = useFrappeGetDocList<any>('Commune', {
@@ -371,8 +396,8 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
   if (!livraison)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
-    <div className="bg-card rounded-2xl p-5 shadow-2xl border border-border">
-      <span className="text-muted-foreground">
+        <div className="bg-card rounded-2xl p-5 shadow-2xl border border-border">
+          <span className="text-muted-foreground">
             Aucune donnée disponible pour cette livraison.
           </span>
         </div>
@@ -448,39 +473,268 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
 
         {/* Informations générales */}
         <div className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden mb-5">
-        <div className="px-4 py-3">
-          <h2 className="text-lg font-semibold text-foreground">Informations générales</h2>
-        </div>
-        <div className="border-t border-border"></div>
-          <div className="px-4 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          {/* Vue desktop - En-tête horizontal */}
+          <div className="hidden md:flex px-4 py-3 items-center justify-between">
+            <h2 className="text-lg font-semibold text-foreground">Informations générales</h2>
+            <div className="flex items-center gap-2">
+              {paiements && paiements.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPaiements(!showPaiements)}
+                  className="h-9 px-3 text-xs min-w-[140px]"
+                >
+                  <CreditCard className="w-3 h-3 mr-1" />
+                  Voir paiements ({paiements.length})
+                </Button>
+              )}
+              <PaiementClientDialog 
+                livraisonId={livraisonId}
+                onSuccess={() => {
+                  // Refresh payments data after payment creation
+                  mutatePaiements();
+                }}
+                trigger={
+                  <Button variant="outline" className="h-9 px-3 text-xs border-blue-500 hover:bg-blue-50 min-w-[140px]">
+                    <CreditCard className="w-3 h-3 mr-1" />
+                    Saisir paiement
+                  </Button>
+                }
+              />
+            </div>
+          </div>
+          
+          {/* Vue mobile - En-tête vertical */}
+          <div className="md:hidden px-4 py-3">
+            <h2 className="text-lg font-semibold text-foreground mb-3">Informations générales</h2>
+            <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
+              {paiements && paiements.length > 0 && (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPaiements(!showPaiements)}
+                  className="h-9 px-3 text-xs w-full sm:flex-1"
+                >
+                  <CreditCard className="w-3 h-3 mr-1" />
+                  Voir paiements ({paiements.length})
+                </Button>
+              )}
+              <PaiementClientDialog 
+                livraisonId={livraisonId}
+                onSuccess={() => {
+                  // Refresh payments data after payment creation
+                  mutatePaiements();
+                }}
+                trigger={
+                  <Button variant="outline" className="h-9 px-3 text-xs border-blue-500 hover:bg-blue-50 w-full sm:flex-1">
+                    <CreditCard className="w-3 h-3 mr-1" />
+                    Saisir paiement
+                  </Button>
+                }
+              />
+            </div>
+          </div>
+          <div className="border-t border-border"></div>
+          <div className="p-4">
+            {/* Vue desktop - Grid */}
+            <div className="hidden md:grid grid-cols-5 gap-6">
               <div className="grid gap-1.5">
                 <span className="text-sm text-muted-foreground">Articles</span>
-            <span className="text-lg font-bold text-foreground">
+                <span className="text-lg font-bold text-foreground">
                   {stats?.totalArticles || 0}
                 </span>
               </div>
               <div className="grid gap-1.5">
                 <span className="text-sm text-muted-foreground">Clients</span>
-            <span className="text-lg font-bold text-foreground">
+                <span className="text-lg font-bold text-foreground">
                   {stats?.uniqueClients || 0}
                 </span>
               </div>
               <div className="grid gap-1.5">
                 <span className="text-sm text-muted-foreground">Communes</span>
-            <span className="text-lg font-bold text-foreground">
+                <span className="text-lg font-bold text-foreground">
                   {stats?.uniqueCommunes || 0}
                 </span>
               </div>
               <div className="grid gap-1.5">
-                <span className="text-sm text-muted-foreground">Total</span>
+                <span className="text-sm text-muted-foreground">Total à encaisser</span>
                 <span className="text-lg font-bold text-green-400">
                   {formatAmount(livraison.total_montant_a_encaisser)}
                 </span>
               </div>
+              <div className="grid gap-1.5">
+                <span className="text-sm text-muted-foreground">Paiements reçus</span>
+                <span className="text-lg font-bold text-blue-400">
+                  {formatAmount(totalPaiements)}
+                </span>
+              </div>
+              {soldeRestant !== undefined && soldeRestant !== 0 && (
+                <div className="grid gap-1.5 col-span-5 mt-4 pt-4 border-t border-border">
+                  <span className="text-sm text-muted-foreground">Solde restant</span>
+                  <span className={`text-lg font-bold ${
+                    soldeRestant > 0 ? 'text-orange-400' : 'text-green-400'
+                  }`}>
+                    {formatAmount(soldeRestant)}
+                  </span>
+                </div>
+              )}
+            </div>
+            
+            {/* Vue mobile - Cartes */}
+            <div className="md:hidden space-y-3">
+              <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Articles</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {stats?.totalArticles || 0}
+                  </span>
+                </div>
+              </div>
+              <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Clients</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {stats?.uniqueClients || 0}
+                  </span>
+                </div>
+              </div>
+              <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Communes</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {stats?.uniqueCommunes || 0}
+                  </span>
+                </div>
+              </div>
+              <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total à encaisser</span>
+                  <span className="text-lg font-bold text-green-400">
+                    {formatAmount(livraison.total_montant_a_encaisser)}
+                  </span>
+                </div>
+              </div>
+              <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Paiements reçus</span>
+                  <span className="text-lg font-bold text-blue-400">
+                    {formatAmount(totalPaiements)}
+                  </span>
+                </div>
+              </div>
+              {soldeRestant !== undefined && soldeRestant !== 0 && (
+                <div className="bg-card/50 rounded-lg border border-border p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Solde restant</span>
+                    <span className={`text-lg font-bold ${
+                      soldeRestant > 0 ? 'text-orange-400' : 'text-green-400'
+                    }`}>
+                      {formatAmount(soldeRestant)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
+
+        {/* Liste des Paiements */}
+        {showPaiements && paiements && paiements.length > 0 && (
+          <div className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden mb-6">
+            <div className="px-4 py-3 border-b border-border bg-muted/50">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
+                  <CreditCard className="w-5 h-5 text-blue-500" />
+                  Paiements reçus ({paiements.length})
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowPaiements(false)}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            {/* Vue en cartes pour toutes les tailles d'écran */}
+            <div className="p-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                {paiements.map((paiement) => (
+                  <div key={paiement.name} className="bg-card/50 rounded-xl border border-border p-4 hover:border-blue-400 transition-all duration-200">
+                    {/* En-tête avec client, montant et actions */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium text-foreground truncate">{paiement.nom_client || paiement.client}</div>
+                        <div className="text-sm text-muted-foreground truncate">{paiement.client}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-green-500 text-lg">
+                          {formatAmount(paiement.montant)}
+                        </span>
+                        <PaiementActionsDialog
+                          paiement={paiement}
+                          onSuccess={() => {
+                            mutatePaiements();
+                            mutateLivraison();
+                          }}
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Détails du paiement */}
+                    <div className="grid grid-cols-1 gap-3 pt-3 border-t border-border">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Moyen de paiement</span>
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium w-fit ${
+                          paiement.moyen_paiement === 'Espèce' 
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        }`}>
+                          {paiement.moyen_paiement}
+                        </span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">Date</span>
+                        <span className="text-sm text-foreground">
+                          {formatDate(paiement.date)}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {/* Fichiers */}
+                    {(paiement.recu || paiement.photo_cheque) && (
+                      <div className="mt-3 pt-3 border-t border-border">
+                        <span className="text-xs text-muted-foreground block mb-2">Fichiers</span>
+                        <div className="flex gap-2 flex-wrap">
+                          {paiement.recu && (
+                            <a
+                              href={paiement.recu}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-xs hover:bg-blue-500/30 transition-colors"
+                            >
+                              Reçu
+                            </a>
+                          )}
+                          {paiement.photo_cheque && (
+                            <a
+                              href={paiement.photo_cheque}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded text-xs hover:bg-blue-500/30 transition-colors"
+                            >
+                              Photo chèque
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Bons de Livraison et Colis */}
         <div className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden">
@@ -574,126 +828,72 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                       <div className="animate-in slide-in-from-top-4 duration-500">
                         <div className="border-t border-border"></div>
                         
-                        {/* Vue desktop - Tableau */}
-                        <div className="hidden lg:block overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow className="bg-background">
-                                {[
-                                  "Colis",
-                                  "N° Séquence",
-                                  "Client",
-                                  "Statut",
-                                ].map((h) => (
-                                  <TableHead
-                                    key={h}
-                                    className="text-white font-semibold p-3 border-b-0"
-                                  >
-                                    {h}
-                                  </TableHead>
-                                ))}
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {colisDuBon.map((colis, colisIndex) => (
-                                <TableRow
+                        {/* Vue en cartes pour toutes les tailles d'écran */}
+                        <div className="p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {colisDuBon.map((colis) => {
+                              const statusColor = statusToColor(colis.status);
+                              const statusColorMap: Record<BadgeColor, string> = {
+                                gray: "#334155",
+                                blue: "#3b82f6",
+                                cyan: "#06b6d4",
+                                orange: "#f59e0b",
+                                yellow: "#eab308",
+                                green: "#22c55e",
+                                red: "#ef4444",
+                              };
+                              const borderColor = statusColorMap[statusColor];
+                              
+                              return (
+                                <div
                                   key={colis.name}
-                                  className={`transition-colors duration-200 cursor-pointer hover:bg-accent/50 ${
-                              colisIndex % 2 === 0 ? "bg-card/30" : "bg-card/60"
-                            }`}
+                                  className="bg-card/50 rounded-xl border cursor-pointer transition-all duration-200 p-4 hover:bg-accent/50 hover:-translate-y-0.5 hover:border-blue-400"
+                                  style={{
+                                    borderColor: borderColor,
+                                  }}
                                   onClick={() => onColisSelect?.(colis.name)}
                                 >
-                                  <TableCell className="p-3">
-                                    <span className="text-foreground font-medium">
-                                      {colis.name}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="p-3">
-                                    <span className="text-muted-foreground">
-                                      {colis.custom_numero_sequence || colis.numero_sequence || '-'}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell className="p-3">
-                                    <span className="text-muted-foreground">{colis.client || '-'}</span>
-                                  </TableCell>
-                                  <TableCell className="p-3">
-                                    <StatusBadge
-                                      text={colis.status}
-                                      tone={statusToColor(colis.status)}
-                                    />
-                                  </TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-
-                        {/* Vue mobile - Cartes */}
-                        <div className="lg:hidden space-y-2 p-4">
-                          {colisDuBon.map((colis) => {
-                            const statusColor = statusToColor(colis.status);
-                            const statusColorMap: Record<BadgeColor, string> = {
-                              gray: "#334155",
-                              blue: "#3b82f6",
-                              cyan: "#06b6d4",
-                              orange: "#f59e0b",
-                              yellow: "#eab308",
-                              green: "#22c55e",
-                              red: "#ef4444",
-                            };
-                            const borderColor = statusColorMap[statusColor];
-                            
-                            return (
-                            <div
-                              key={colis.name}
-                              className="bg-card/50 rounded-xl border cursor-pointer transition-all duration-200 p-4 hover:bg-accent/50 hover:-translate-y-0.5"
-                              style={{
-                                borderColor: borderColor,
-                              }}
-                              onClick={() => onColisSelect?.(colis.name)}
-                            >
-                              {/* En-tête de la carte */}
-                              <div className="mb-3">
-                                {/* Nom du colis */}
-                                <div className="mb-2">
-                                  <span className="text-sm font-bold text-foreground">
-                                    {colis.name}
-                                  </span>
-                                </div>
-                                
-                                {/* Numéro de séquence et badge de statut */}
-                                <div className="flex justify-between items-center mt-1.5">
-                                  <span className="text-xs text-muted-foreground">
-                                    N° {colis.custom_numero_sequence || colis.numero_sequence || '—'}
-                                  </span>
-                                  <StatusBadge
-                                    text={colis.status}
-                                    tone={statusToColor(colis.status)}
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Informations du colis */}
-                              <div className="grid gap-1.5 mb-2">
-                                <div className="flex items-center gap-1.5">
-                                    <User className="w-3 h-3 text-muted-foreground" />
-                                    <span className="text-xs text-muted-foreground">
-                                    {colis.client || '—'}
-                                  </span>
-                                </div>
-                                
-                                {colis.total_art && (
-                                  <div className="flex items-center gap-1.5">
-                                      <Package className="w-3 h-3 text-muted-foreground" />
-                                      <span className="text-xs text-muted-foreground">
-                                      {colis.total_art} articles
-                                    </span>
+                                  {/* En-tête de la carte */}
+                                  <div className="mb-3">
+                                    {/* Nom du colis et badge de statut */}
+                                    <div className="flex justify-between items-start mb-2">
+                                      <span className="text-sm font-bold text-foreground truncate">
+                                        {colis.name}
+                                      </span>
+                                      <StatusBadge
+                                        text={colis.status}
+                                        tone={statusToColor(colis.status)}
+                                      />
+                                    </div>
+                                    
+                                    {/* Numéro de séquence */}
+                                    <div className="text-xs text-muted-foreground">
+                                      N° {colis.custom_numero_sequence || colis.numero_sequence || '—'}
+                                    </div>
                                   </div>
-                                )}
-                              </div>
-                            </div>
-                            );
-                          })}
+
+                                  {/* Informations du colis */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                      <span className="text-xs text-muted-foreground truncate">
+                                        {colis.client || '—'}
+                                      </span>
+                                    </div>
+                                    
+                                    {colis.total_art && (
+                                      <div className="flex items-center gap-2">
+                                        <Package className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                                        <span className="text-xs text-muted-foreground">
+                                          {colis.total_art} articles
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     ) : isExpanded && colisDuBon.length === 0 ? (
