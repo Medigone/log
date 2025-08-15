@@ -12,6 +12,8 @@
   "column_break_wsgq",
   "livreur",
   "nom_livreur",
+  "column_break_batch",
+  "batch_id",
   "section_break_ecye",
   "bons_de_livraison",
   "section_break_jbkb",
@@ -73,6 +75,17 @@
    "in_standard_filter": 1,
    "label": "V\u00e9hicule",
    "options": "Vehicule"
+  },
+  {
+   "fieldname": "column_break_batch",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "ID Batch",
+   "read_only": 1,
+   "description": "Identifiant unique pour l'idempotence des r\u00e9partitions"
   },
   {
    "fieldname": "bons_de_livraison",

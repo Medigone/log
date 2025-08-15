@@ -153,9 +153,14 @@ doc_events = {
         "on_update": "log.livraison_hooks.update_livraison_status_on_colis_change"
     },
     "Delivery Note": {
-        "on_update": "log.livraison_hooks.update_livraisons_on_delivery_note_change"
+        "on_update": [
+            "log.livraison_hooks.update_livraisons_on_delivery_note_change",
+            "log.livraison_hooks.update_livraisons_on_date_change"
+        ],
+        "on_trash": "log.livraison_hooks.retirer_bon_de_livraison_supprime"
     },
     "Livraison": {
+        "after_insert": "log.livraison_hooks.after_insert_livraison",
         "validate": "log.livraison_hooks.validate_livraison",
         "on_update": [
             "log.livraison_hooks.update_livraison_on_date_change",
@@ -179,23 +184,12 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"log.tasks.all"
-# 	],
-# 	"daily": [
-# 		"log.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"log.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"log.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"log.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"daily": [
+		"log.utils.geolocation.geocoder_communes",
+		"log.utils.geolocation.calculer_distances_depot"
+	]
+}
 
 # Testing
 # -------

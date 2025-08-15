@@ -97,18 +97,27 @@ class Livraison(Document):
 				})
 	
 	def auto_load_delivery_notes_by_date(self):
-		"""Automatically load delivery notes that match the livraison date."""
+		"""Automatically load delivery notes that match the livraison date and are not already assigned."""
 		if not self.date_liv:
 			return
 		
-		# Get delivery notes with matching custom_date_de_livraison
-		delivery_notes = frappe.get_all(
-			"Delivery Note",
-			filters={
-				"custom_date_de_livraison": self.date_liv
-			},
-			fields=["name", "customer", "custom_date_de_livraison", "custom_commune", "custom_wilaya", "total_qty", "grand_total", "status", "custom_type"]
-		)
+		# Get delivery notes with matching custom_date_de_livraison that are NOT already assigned to other livraisons
+		delivery_notes = frappe.db.sql("""
+			SELECT 
+				dn.name, dn.customer, dn.custom_date_de_livraison, 
+				dn.custom_commune, dn.custom_wilaya, dn.total_qty, 
+				dn.grand_total, dn.status, dn.custom_type
+			FROM `tabDelivery Note` dn
+			WHERE dn.custom_date_de_livraison = %s
+			AND dn.docstatus = 0  # Seulement les bons non soumis
+			AND NOT EXISTS (
+				SELECT 1 FROM `tabLivraison Bon de Livraison` lbdl
+				JOIN `tabLivraison` l ON lbdl.parent = l.name
+				WHERE lbdl.bon_de_livraison = dn.name
+				AND l.name != %s  # Exclure la livraison actuelle
+				AND l.docstatus < 2  # Exclure les livraisons supprimées
+			)
+		""", (self.date_liv, self.name or "NEW"), as_dict=True)
 		
 		# Clear existing delivery notes
 		self.bons_de_livraison = []
@@ -126,6 +135,9 @@ class Livraison(Document):
 				"status": dn.status,
 				"type": dn.custom_type
 			})
+		
+		# Auto-sync colis after loading delivery notes
+		self.sync_colis_from_bons_de_livraison()
 	
 
 	@frappe.whitelist()

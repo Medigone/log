@@ -1,0 +1,52 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-01-12 10:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "commune",
+  "nom",
+  "nom_arabe"
+ ],
+ "fields": [
+  {
+   "fieldname": "commune",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Commune",
+   "options": "Commune",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "commune.nom",
+   "fieldname": "nom",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nom",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "commune.nom_ar",
+   "fieldname": "nom_arabe",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nom Arabe",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-08-12 13:59:16.535849",
+ "modified_by": "admin@medigo.one",
+ "module": "Log",
+ "name": "Livreur Commune",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

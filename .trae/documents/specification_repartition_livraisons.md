@@ -1,45 +1,57 @@
+parfait — voici **ton document intégral mis à jour**, prêt à être versionné dans ton app Frappe/ERPNext.
+Il remplace totalement l’ancien, supprime toute gestion de poids/volume, applique les **bonnes pratiques Frappe**, inclut **transactions, update atomique, idempotence (batch\_id)**, **jobs planifiés**, **sécurité**, **tests**, et le **Front‑end complet** avec bouton **Dry‑Run** (`simulate=True`).
+
+---
+
 # Spécification Technique : Système de Répartition Automatique des Livraisons
 
-## 1. Vue d'ensemble du projet
+## 1. Vue d’ensemble du projet
 
 ### 1.1 Contexte
-Actuellement, le système récupère tous les bons de livraison pour une date et un livreur sélectionnés. L'objectif est d'implémenter un système de répartition automatique des colis entre plusieurs livreurs en utilisant les meilleures pratiques du domaine logistique.
 
-### 1.2 Problématique identifiée
-- **Vehicle Routing Problem (VRP)** : Problème d'optimisation combinatoire pour déterminer les routes optimales
-- **Load Balancing** : Répartition équilibrée de la charge de travail entre les livreurs
-- **Contraintes géographiques** : Gestion des zones éloignées vs zones locales
+La répartition des bons de livraison est actuellement manuelle et centrée sur un seul livreur.
+Objectif : **automatiser** la distribution des colis entre plusieurs livreurs selon :
 
-### 1.3 Structure organisationnelle actuelle
-- **1 livreur spécialisé** : Gros véhicule pour les régions éloignées
-- **Plusieurs livreurs locaux** : Véhicules standards pour les zones proches
-- **Collecte matinale** : Tous les livreurs récupèrent leurs colis le matin
-- **Livraison journalière** : Distribution tout au long de la journée
+* Capacité maximale (en **nombre de colis** uniquement)
+* Zones géographiques (wilayas/communes)
+* Type de couverture (Locale / Régionale / Nationale / Spécialisée)
+* Spécialisation (ex. longue distance)
+* (Optionnel) Coût/km du véhicule
+
+### 1.2 Problématiques identifiées
+
+* **VRP (Vehicle Routing Problem)** : optimisation des tournées (phase ultérieure)
+* **Load Balancing** : équilibre du nombre de colis entre livreurs
+* **Contraintes géographiques** : distinction Local / Régional / Éloigné
+
+### 1.3 Structure organisationnelle
+
+* **1 livreur spécialisé** : longues distances (gros véhicule)
+* **Plusieurs livreurs locaux** : véhicules standards, zones proches
+* **Collecte matinale** : tous les livreurs chargent le matin
+* **Distribution journalière** : livraisons dans la journée
+
+---
 
 ## 2. Architecture technique
 
-### 2.1 Doctypes existants à adapter
+### 2.1 Doctypes à adapter (bonnes pratiques : Child Tables + index)
 
 #### Doctype `Livreur`
-**Champs existants :**
-- `status`, `id_utilisateur`, `nom`, `vehicule`
-- `permis`, `valable`, `active`
 
-**Nouveaux champs à ajouter :**
+**Champs existants :** `status`, `id_utilisateur`, `nom`, `vehicule`, `permis`, `valable`, `active`
+
+**Nouveaux champs (remplacement des Table MultiSelect par Child Tables) :**
+
 ```json
 {
-  "zone_geographique": {
-    "fieldtype": "Table MultiSelect",
-    "label": "Zones de couverture",
-    "options": "Livreur Zone"
-  },
   "wilayas_couverture": {
-    "fieldtype": "Table MultiSelect", 
+    "fieldtype": "Table",
     "label": "Wilayas couvertes",
     "options": "Livreur Wilaya"
   },
   "communes_specifiques": {
-    "fieldtype": "Table MultiSelect",
+    "fieldtype": "Table",
     "label": "Communes spécifiques",
     "options": "Livreur Commune"
   },
@@ -55,12 +67,13 @@ Actuellement, le système récupère tous les bons de livraison pour une date et
   "charge_actuelle": {
     "fieldtype": "Int",
     "label": "Charge actuelle",
+    "default": 0,
     "read_only": 1
   },
   "priorite_attribution": {
     "fieldtype": "Int",
-    "label": "Priorité d'attribution",
-    "default": "5"
+    "label": "Priorité d'attribution (1-10)",
+    "default": 5
   },
   "specialisation": {
     "fieldtype": "Select",
@@ -70,630 +83,603 @@ Actuellement, le système récupère tous les bons de livraison pour une date et
 }
 ```
 
-#### Doctype `Vehicule`
-**Champs existants :**
-- `status`, `nom`, `type`, `chauffeur`, `immatriculation`, `charge`
-- `km`, `date_dernier_entretien`, `carte_grise`, `assurance`
-- `controle_technique`, `vignette`, `active`, `type_carb`
+#### Child Doctypes
 
-**Nouveaux champs à ajouter :**
+* **`Livreur Wilaya`** : `parent` (Link → Livreur), `parenttype`, `parentfield`, `wilaya` (Link → Wilaya)
+* **`Livreur Commune`** : `parent` (Link → Livreur), `parenttype`, `parentfield`, `commune` (Link → Commune)
+* **`Vehicule Wilaya`** : `parent` (Link → Vehicule), `parenttype`, `parentfield`, `wilaya` (Link → Wilaya)
+
+#### Doctype `Vehicule`
+
+**Champs existants :** `status`, `nom`, `type`, `chauffeur`, `immatriculation`, `charge`, `km`, `date_dernier_entretien`, `carte_grise`, `assurance`, `controle_technique`, `vignette`, `active`, `type_carb`
+
+**Nouveaux champs :**
+
 ```json
 {
-  "rayon_action_km": {
-    "fieldtype": "Int",
-    "label": "Rayon d'action (km)"
-  },
-  "wilayas_autorisees": {
-    "fieldtype": "Table MultiSelect",
-    "label": "Wilayas autorisées",
-    "options": "Vehicule Wilaya"
-  },
-  "consommation_carburant": {
-    "fieldtype": "Float",
-    "label": "Consommation (L/100km)"
-  },
-  "cout_km": {
-    "fieldtype": "Currency",
-    "label": "Coût par kilomètre"
-  }
+  "rayon_action_km": { "fieldtype": "Int", "label": "Rayon d'action (km)" },
+  "wilayas_autorisees": { "fieldtype": "Table", "label": "Wilayas autorisées", "options": "Vehicule Wilaya" },
+  "cout_km": { "fieldtype": "Currency", "label": "Coût par kilomètre" }
 }
 ```
 
-#### Doctype `Commune` (à adapter)
-**Champs existants :**
-- `nom`, `nom_ar`, `wilaya`, `region`
+#### Doctype `Commune` (ajouts)
 
-**Nouveaux champs à ajouter :**
 ```json
 {
-  "latitude": {
-    "fieldtype": "Float",
-    "label": "Latitude",
-    "precision": "8"
-  },
-  "longitude": {
-    "fieldtype": "Float",
-    "label": "Longitude",
-    "precision": "8"
-  },
-  "distance_depot": {
-    "fieldtype": "Float",
-    "label": "Distance du dépôt (km)",
-    "read_only": 1
-  }
+  "latitude":   { "fieldtype": "Float", "label": "Latitude",  "precision": "8" },
+  "longitude":  { "fieldtype": "Float", "label": "Longitude", "precision": "8" },
+  "distance_depot": { "fieldtype": "Float", "label": "Distance du dépôt (km)", "read_only": 1 }
 }
 ```
 
 #### Nouveau Doctype `Depot Distribution`
+
 ```json
 {
-  "nom": {
-    "fieldtype": "Data",
-    "label": "Nom du dépôt",
-    "reqd": 1
-  },
-  "adresse": {
-    "fieldtype": "Small Text",
-    "label": "Adresse"
-  },
-  "latitude_depot": {
-    "fieldtype": "Float",
-    "label": "Latitude",
-    "precision": "8"
-  },
-  "longitude_depot": {
-    "fieldtype": "Float",
-    "label": "Longitude",
-    "precision": "8"
-  },
-  "is_default": {
-    "fieldtype": "Check",
-    "label": "Dépôt principal"
-  }
+  "nom":            { "fieldtype": "Data",  "label": "Nom du dépôt", "reqd": 1 },
+  "adresse":        { "fieldtype": "Small Text", "label": "Adresse" },
+  "latitude_depot": { "fieldtype": "Float", "label": "Latitude",  "precision": "8" },
+  "longitude_depot":{ "fieldtype": "Float", "label": "Longitude", "precision": "8" },
+  "is_default":     { "fieldtype": "Check", "label": "Dépôt principal" }
 }
 ```
 
-### 2.2 Système de géolocalisation
+**Validation (unicité du dépôt par défaut) :**
 
-#### Installation des dépendances
+```python
+# depot_distribution.py (DocType Class)
+def validate(self):
+    if self.is_default:
+        frappe.db.sql("UPDATE `tabDepot Distribution` SET is_default=0 WHERE name!=%s", self.name)
+```
+
+### 2.2 Index de performance (patch)
+
+```python
+# patches/2025_08_12_add_indexes_for_distribution.py
+import frappe
+
+def execute():
+    frappe.db.add_index("Commune", ["wilaya"])
+    frappe.db.add_index("Commune", ["distance_depot"])
+    frappe.db.add_index("Livraison Colis", ["date_livraison", "statut", "commune"])
+    frappe.db.add_index("Livreur", ["active"])
+    frappe.db.add_index("Livreur", ["specialisation"])
+    frappe.db.add_index("Livreur", ["type_couverture"])
+```
+
+### 2.3 Paramètres (Single Doc)
+
+Créer **Parametres Livraison** (Single) :
+
+* `seuil_local_km` (Int, default 20)
+* `seuil_regional_km` (Int, default 100)
+
+---
+
+## 3. Système de géolocalisation
+
+### 3.1 Dépendance
+
 ```bash
 pip install geopy
 ```
 
-#### Méthodes de géocodage
+### 3.2 Utilitaires
+
+`apps/log/log/utils/geolocation.py`
+
 ```python
-# apps/log/log/utils/geolocation.py
 import frappe
 from geopy.geocoders import Nominatim
-from geopy.distance import geodesic
 from geopy.extra.rate_limiter import RateLimiter
+from geopy.distance import geodesic
 
 @frappe.whitelist()
 def geocoder_communes():
-    """Géocode toutes les communes sans coordonnées"""
+    """Géocode toutes les communes sans coordonnées (respect RateLimiter)."""
     geolocator = Nominatim(user_agent="log_erpnext")
     geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
-    
-    communes = frappe.get_all("Commune", 
-        filters={"latitude": ["", "is", "not set"]},
+
+    communes = frappe.get_all("Commune",
+        filters=[["latitude","is","not set"]],
         fields=["name", "nom", "wilaya"]
     )
-    
-    for commune in communes:
+    for c in communes:
         try:
-            query = f"{commune.nom}, {commune.wilaya}, Algérie"
-            location = geocode(query)
-            
-            if location:
-                frappe.db.set_value("Commune", commune.name, {
-                    "latitude": location.latitude,
-                    "longitude": location.longitude
+            q = f"{c.nom}, {c.wilaya}, Algérie"
+            loc = geocode(q)
+            if loc:
+                frappe.db.set_value("Commune", c.name, {
+                    "latitude": loc.latitude,
+                    "longitude": loc.longitude
                 })
-                frappe.db.commit()
-                
         except Exception as e:
-            frappe.log_error(f"Erreur géocodage {commune.nom}: {str(e)}")
+            frappe.log_error(f"Erreur géocodage {c.nom}: {e}")
+    frappe.db.commit()
 
 @frappe.whitelist()
 def calculer_distances_depot():
-    """Calcule les distances entre le dépôt et toutes les communes"""
+    """Calcule la distance (km) du dépôt par défaut jusqu'à chaque commune géocodée."""
     depot = frappe.get_doc("Depot Distribution", {"is_default": 1})
     depot_coords = (depot.latitude_depot, depot.longitude_depot)
-    
+
     communes = frappe.get_all("Commune",
-        filters={"latitude": ["", "is not", "set"]},
+        filters=[["latitude","is","set"]],
         fields=["name", "latitude", "longitude"]
     )
-    
-    for commune in communes:
-        if commune.latitude and commune.longitude:
-            commune_coords = (commune.latitude, commune.longitude)
-            distance = geodesic(depot_coords, commune_coords).kilometers
-            
-            frappe.db.set_value("Commune", commune.name, 
-                "distance_depot", round(distance, 2)
-            )
-    
+    for c in communes:
+        d = geodesic(depot_coords, (c.latitude, c.longitude)).km
+        frappe.db.set_value("Commune", c.name, "distance_depot", round(d, 2))
     frappe.db.commit()
 ```
 
-## 3. Algorithmes de répartition
+### 3.3 Jobs planifiés
 
-### 3.1 Classification géographique
+`hooks.py`
+
 ```python
-# apps/log/log/utils/distribution.py
-def classifier_livraison_par_distance(commune_name):
-    """Classifie une livraison selon la distance"""
-    commune = frappe.get_doc("Commune", commune_name)
-    distance = commune.distance_depot or 0
-    
-    # Seuils configurables dans les paramètres système
-    seuil_local = frappe.db.get_single_value("Parametres Livraison", "seuil_local") or 20
-    seuil_regional = frappe.db.get_single_value("Parametres Livraison", "seuil_regional") or 100
-    
-    if distance <= seuil_local:
-        return "Locale"
-    elif distance <= seuil_regional:
-        return "Régionale" 
-    else:
-        return "Éloignée"
+scheduler_events = {
+    "daily": [
+        "log.log.utils.geolocation.geocoder_communes",
+        "log.log.utils.geolocation.calculer_distances_depot",
+    ]
+}
 ```
 
-### 3.2 Algorithme d'attribution optimale
+---
+
+## 4. Algorithmes de répartition
+
+### 4.1 Classification géographique (Local/Régional/Éloigné)
+
+`apps/log/log/utils/distribution.py`
+
 ```python
-def attribuer_livreur_optimal(classification, colis_count, commune_name=None):
-    """Attribue le livreur optimal selon la classification"""
+import frappe
+from frappe.utils import cint
+
+def classifier_livraison_par_distance(commune_name):
+    """Retourne: 'Locale' / 'Régionale' / 'Éloignée' selon distance_depot et seuils Single Doc."""
+    dist = frappe.get_value("Commune", commune_name, "distance_depot") or 0
+    seuil_local = cint(frappe.db.get_single_value("Parametres Livraison", "seuil_local_km") or 20)
+    seuil_regional = cint(frappe.db.get_single_value("Parametres Livraison", "seuil_regional_km") or 100)
+    if dist <= seuil_local: return "Locale"
+    if dist <= seuil_regional: return "Régionale"
+    return "Éloignée"
+```
+
+### 4.2 Attribution optimale (nombre de colis uniquement)
+
+**Principes :** transaction, **update atomique** de la charge, score multi‑critères (charge, zone, coût/km optionnel, priorité), respect de la capacité.
+
+```python
+from contextlib import contextmanager
+
+@contextmanager
+def db_txn():
+    try:
+        yield
+        frappe.db.commit()
+    except:
+        frappe.db.rollback()
+        raise
+
+def incrementer_charge(livreur_id, nb_colis):
+    """Incrément atomique de charge_actuelle pour éviter les races."""
+    frappe.db.sql("""
+        UPDATE `tabLivreur`
+           SET charge_actuelle = charge_actuelle + %(n)s
+         WHERE name=%(id)s
+           AND (charge_actuelle + %(n)s) <= capacite_max_colis
+    """, {"id": livreur_id, "n": nb_colis})
+    if frappe.db.rowcount == 0:
+        frappe.throw("Capacité maximale dépassée pour ce livreur")
+
+def livreurs_couvrant_commune(commune):
+    """Livreurs couvrant la wilaya de la commune (via Child Table)."""
+    wilaya = frappe.db.get_value("Commune", commune, "wilaya")
+    parents = frappe.get_all("Livreur Wilaya", filters={"wilaya": wilaya}, fields=["parent"])
+    return {p.parent for p in parents}
+
+def attribuer_livreur_optimal(classification, nb_colis, commune_name=None):
+    """Retourne le nom du livreur avec le meilleur score, ou None si aucun candidat."""
     filters = {"active": 1}
-    
-    # Filtrage par spécialisation
     if classification == "Éloignée":
         filters["specialisation"] = "Longue distance"
     elif classification == "Régionale":
         filters["type_couverture"] = ["in", ["Régionale", "Nationale"]]
     else:
         filters["type_couverture"] = "Locale"
-    
-    # Filtrage par zone géographique si commune spécifiée
-    if commune_name:
-        commune = frappe.get_doc("Commune", commune_name)
-        # Vérifier si des livreurs couvrent spécifiquement cette commune/wilaya
-        filters_zone = filters.copy()
-        filters_zone["wilayas_couverture"] = ["like", f"%{commune.wilaya}%"]
-        
-        livreurs_zone = frappe.get_all("Livreur", filters=filters_zone)
-        if livreurs_zone:
-            filters = filters_zone
-    
-    # Récupération des livreurs disponibles
-    livreurs = frappe.get_all("Livreur", 
-        filters=filters,
-        fields=["name", "charge_actuelle", "capacite_max_colis", "priorite_attribution"]
-    )
-    
-    if not livreurs:
+
+    candidats = frappe.get_all("Livreur", filters=filters,
+        fields=["name", "charge_actuelle", "capacite_max_colis", "priorite_attribution", "vehicule"])
+    if not candidats:
         return None
-    
-    # Calcul du score d'attribution (charge + priorité)
-    for livreur in livreurs:
-        taux_charge = (livreur.charge_actuelle or 0) / (livreur.capacite_max_colis or 1)
-        livreur.score = taux_charge + (livreur.priorite_attribution or 5) * 0.1
-    
-    # Sélection du livreur avec le meilleur score
-    livreur_optimal = min(livreurs, key=lambda x: x.score)
-    
-    return livreur_optimal.name
+
+    couvre = livreurs_couvrant_commune(commune_name) if commune_name else set()
+
+    veh_rows = frappe.get_all("Vehicule",
+        filters={"name": ["in", [c.vehicule for c in candidats if c.vehicule]]},
+        fields=["name", "cout_km"])
+    veh_map = {v.name: (v.cout_km or 0) for v in veh_rows}
+
+    couts = [veh_map.get(c.vehicule, 0) for c in candidats]
+    min_c, max_c = (min(couts) if couts else 0), (max(couts) if couts else 0)
+
+    def normalise(x, lo, hi):
+        return 0 if hi == lo else max(0, min(1, (x - lo) / (hi - lo)))
+
+    for c in candidats:
+        taux_charge = (c.charge_actuelle or 0) / float(c.capacite_max_colis or 1)
+        penalite_zone = 0 if (not commune_name or c.name in couvre) else 1
+        cout_km_norm = normalise(veh_map.get(c.vehicule, 0), min_c, max_c)
+        prio_norm = normalise((c.priorite_attribution or 5), 1, 10)
+        # pondérations: charge (0.55), zone (0.25), coût (0.15), priorité (0.05)
+        c._score = 0.55*taux_charge + 0.25*penalite_zone + 0.15*cout_km_norm + 0.05*(1 - prio_norm)
+
+    choisi = min(candidats, key=lambda x: x._score)
+    if (choisi.capacite_max_colis or 0) <= 0:
+        return None
+    if (choisi.charge_actuelle or 0) + nb_colis > (choisi.capacite_max_colis or 0):
+        return None
+    return choisi.name
 ```
 
-### 3.3 Algorithme principal de répartition
+### 4.3 Répartition automatique (API) — avec **Dry‑Run** et **idempotence**
+
 ```python
+import uuid
+
 @frappe.whitelist()
-def repartir_livraisons_automatique(date_livraison, mode="auto"):
-    """Répartit automatiquement les livraisons pour une date donnée"""
-    
-    # 1. Récupération des colis à livrer
-    colis_a_livrer = frappe.get_all("Livraison Colis",
-        filters={
-            "date_livraison": date_livraison,
-            "statut": "En attente"
-        },
-        fields=["name", "commune", "poids", "volume", "priorite"]
-    )
-    
-    # 2. Groupement par commune
-    colis_par_commune = {}
-    for colis in colis_a_livrer:
-        commune = colis.commune
-        if commune not in colis_par_commune:
-            colis_par_commune[commune] = []
-        colis_par_commune[commune].append(colis)
-    
-    # 3. Répartition par commune
-    repartition = {}
-    
-    for commune, colis_liste in colis_par_commune.items():
-        # Classification géographique
-        classification = classifier_livraison_par_distance(commune)
-        
-        # Calcul du nombre total de colis
-        nb_colis = len(colis_liste)
-        
-        # Attribution du livreur optimal
-        livreur_id = attribuer_livreur_optimal(classification, nb_colis, commune)
-        
-        if livreur_id:
-            if livreur_id not in repartition:
-                repartition[livreur_id] = {
-                    "livreur": livreur_id,
-                    "colis": [],
-                    "communes": [],
-                    "total_colis": 0
-                }
-            
-            repartition[livreur_id]["colis"].extend(colis_liste)
-            repartition[livreur_id]["communes"].append(commune)
-            repartition[livreur_id]["total_colis"] += nb_colis
-            
-            # Mise à jour de la charge du livreur
-            frappe.db.set_value("Livreur", livreur_id, 
-                "charge_actuelle", 
-                frappe.db.get_value("Livreur", livreur_id, "charge_actuelle") + nb_colis
-            )
-    
-    # 4. Création des documents Livraison
-    livraisons_creees = []
-    for livreur_id, data in repartition.items():
-        livraison = frappe.new_doc("Livraison")
-        livraison.date_liv = date_livraison
-        livraison.livreur = livreur_id
-        livraison.total_colis = data["total_colis"]
-        
-        # Ajout des colis
-        for colis in data["colis"]:
-            livraison.append("colis", {
-                "colis": colis.name,
-                "commune": colis.commune
+def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False):
+    """Répartit les colis 'En attente' d'une date par livreur.
+    simulate=True => ne modifie pas la DB (pas d'incrément charge, pas de création Livraison)."""
+    # Contrôle d'accès côté serveur (bonne pratique)
+    if not frappe.has_permission(doctype="Livraison", ptype="write"):
+        frappe.throw("Permission refusée.")
+
+    batch_id = str(uuid.uuid4())
+
+    with db_txn():
+        # 1) Récupération des colis
+        colis_a_livrer = frappe.get_all("Livraison Colis",
+            filters={"date_livraison": date_livraison, "statut": "En attente"},
+            fields=["name", "commune", "priorite"]
+        )
+
+        # 2) Groupement par commune
+        par_commune = {}
+        for c in colis_a_livrer:
+            par_commune.setdefault(c.commune, []).append(c)
+
+        # 3) Attribution par commune
+        repartition, livraisons_creees = {}, []
+        for commune, lst in par_commune.items():
+            classification = classifier_livraison_par_distance(commune)
+            nb_colis = len(lst)
+            livreur_id = attribuer_livreur_optimal(classification, nb_colis, commune)
+            if not livreur_id:
+                frappe.log_error(f"Aucun livreur éligible pour {commune} ({nb_colis} colis)")
+                continue
+
+            if not simulate:
+                incrementer_charge(livreur_id, nb_colis)
+
+            rep = repartition.setdefault(livreur_id, {
+                "livreur": livreur_id,
+                "colis": [],
+                "communes": [],
+                "total_colis": 0,
+                "taux_charge": 0
             })
-        
-        livraison.save()
-        livraisons_creees.append(livraison.name)
-    
-    return {
-        "success": True,
-        "livraisons_creees": livraisons_creees,
-        "repartition": repartition
-    }
+            rep["colis"].extend(lst)
+            rep["communes"].append(commune)
+            rep["total_colis"] += nb_colis
+
+        # 4) Taux de charge + création des Livraisons
+        for livreur_id, data in repartition.items():
+            cap = frappe.db.get_value("Livreur", livreur_id, "capacite_max_colis") or 0
+            charge = frappe.db.get_value("Livreur", livreur_id, "charge_actuelle") or 0
+            data["taux_charge"] = round(100 * (charge / cap), 2) if cap else 0
+
+            if not simulate:
+                livraison = frappe.new_doc("Livraison")
+                livraison.date_liv = date_livraison
+                livraison.livreur = livreur_id
+                livraison.total_colis = data["total_colis"]
+                livraison.batch_id = batch_id  # champ à ajouter sur Livraison (Data)
+                for c in data["colis"]:
+                    livraison.append("colis", {"colis": c.name, "commune": c.commune})
+                livraison.save()
+                livraisons_creees.append(livraison.name)
+
+        return {
+            "success": True,
+            "simulate": bool(simulate),
+            "batch_id": batch_id,
+            "livraisons_creees": livraisons_creees,
+            "repartition": repartition
+        }
 ```
 
-## 4. Interface utilisateur
+> **Note** : ajouter `batch_id` (Data) sur le Doctype **Livraison** pour tracer les relances et garantir l’idempotence (annulation/rebuild si besoin).
 
-### 4.1 Page de génération des livraisons
+---
 
-#### Structure de la page
+## 5. Interface utilisateur (Front‑end Frappe)
+
+### 5.1 Page Desk : **generation-livraisons**
+
+Créer la page (DocType **Page**) :
+
+* **Page Name** : `generation-livraisons`
+* **Module** : votre module (ex. `Log`)
+* **Standard** : ✅ (si app)
+
+Fichier JS : `apps/log/log/public/js/pages/generation_livraisons.js`
+
+### 5.2 Code JavaScript **complet** (avec bouton **Dry‑Run**)
+
 ```javascript
 // apps/log/log/public/js/pages/generation_livraisons.js
-frappe.pages['generation-livraisons'].on_page_load = function(wrapper) {
-    var page = frappe.ui.make_app_page({
-        parent: wrapper,
-        title: 'Génération des Livraisons',
-        single_column: true
-    });
-    
-    // Section des paramètres
-    let parametres_section = $(`
-        <div class="parametres-section">
-            <h4>Paramètres de génération</h4>
-            <div class="row">
-                <div class="col-md-4">
-                    <label>Date de livraison</label>
-                    <input type="date" class="form-control" id="date_livraison">
-                </div>
-                <div class="col-md-4">
-                    <label>Mode de répartition</label>
-                    <select class="form-control" id="mode_repartition">
-                        <option value="auto">Automatique</option>
-                        <option value="semi-auto">Semi-automatique</option>
-                        <option value="manuel">Manuel</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <button class="btn btn-primary" id="generer_repartition">
-                        Générer la répartition
-                    </button>
-                </div>
-            </div>
-        </div>
-    `).appendTo(page.body);
-    
-    // Section de visualisation
-    let visualisation_section = $(`
-        <div class="visualisation-section">
-            <h4>Répartition des livraisons</h4>
-            <div id="carte_repartition"></div>
-            <div id="tableau_repartition"></div>
-        </div>
-    `).appendTo(page.body);
-    
-    // Section des algorithmes
-    let algorithmes_section = $(`
-        <div class="algorithmes-section">
-            <h4>Algorithmes de répartition</h4>
-            <div class="row">
-                <div class="col-md-6">
-                    <h5>Classification géographique</h5>
-                    <div id="stats_classification"></div>
-                </div>
-                <div class="col-md-6">
-                    <h5>Load Balancing</h5>
-                    <div id="stats_load_balancing"></div>
-                </div>
-            </div>
-        </div>
-    `).appendTo(page.body);
-};
-```
+frappe.provide("log.pages");
 
-#### Fonctionnalités de l'interface
-```javascript
-// Génération de la répartition
-$('#generer_repartition').click(function() {
-    let date_livraison = $('#date_livraison').val();
-    let mode = $('#mode_repartition').val();
-    
-    frappe.call({
-        method: 'log.utils.distribution.repartir_livraisons_automatique',
-        args: {
-            date_livraison: date_livraison,
-            mode: mode
-        },
-        callback: function(r) {
-            if (r.message.success) {
-                afficher_repartition(r.message.repartition);
-                frappe.show_alert({
-                    message: `${r.message.livraisons_creees.length} livraisons créées`,
-                    indicator: 'green'
-                });
-            }
-        }
-    });
-});
+frappe.pages["generation-livraisons"].on_page_load = function (wrapper) {
+  const page = frappe.ui.make_app_page({
+    parent: wrapper,
+    title: "Génération des Livraisons",
+    single_column: true,
+  });
 
-// Affichage de la répartition
-function afficher_repartition(repartition) {
-    let tableau_html = `
-        <table class="table table-bordered">
-            <thead>
-                <tr>
-                    <th>Livreur</th>
-                    <th>Communes</th>
-                    <th>Nombre de colis</th>
-                    <th>Taux de charge</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-    `;
-    
-    for (let livreur_id in repartition) {
-        let data = repartition[livreur_id];
-        tableau_html += `
-            <tr>
-                <td>${data.livreur}</td>
-                <td>${data.communes.join(', ')}</td>
-                <td>${data.total_colis}</td>
-                <td><div class="progress">
-                    <div class="progress-bar" style="width: ${data.taux_charge}%"></div>
-                </div></td>
-                <td>
-                    <button class="btn btn-sm btn-secondary" onclick="modifier_repartition('${livreur_id}')">Modifier</button>
-                    <button class="btn btn-sm btn-info" onclick="voir_details('${livreur_id}')">Détails</button>
-                </td>
-            </tr>
-        `;
+  const $body = $(page.body);
+
+  // ---- Filtres (bonnes pratiques: make_control) ----
+  const $filters = $(`<div class="frappe-card" style="padding:16px;margin-bottom:16px;">
+      <div class="row">
+        <div class="col-md-3" id="ctl_date"></div>
+        <div class="col-md-3" id="ctl_mode"></div>
+        <div class="col-md-3" id="ctl_dryrun"></div>
+        <div class="col-md-3" id="ctl_buttons" style="display:flex;gap:8px;align-items:flex-end;"></div>
+      </div>
+  </div>`).appendTo($body);
+
+  const ctl_date = frappe.ui.form.make_control({
+    parent: $filters.find("#ctl_date"),
+    df: { fieldtype: "Date", label: "Date de livraison", fieldname: "date_livraison", reqd: 1, default: frappe.datetime.get_today() },
+    render_input: true,
+  });
+
+  const ctl_mode = frappe.ui.form.make_control({
+    parent: $filters.find("#ctl_mode"),
+    df: { fieldtype: "Select", label: "Mode de répartition", fieldname: "mode_repartition", options: ["auto", "semi-auto", "manuel"], default: "auto" },
+    render_input: true,
+  });
+
+  const ctl_dryrun = frappe.ui.form.make_control({
+    parent: $filters.find("#ctl_dryrun"),
+    df: { fieldtype: "Check", label: "Dry-Run (simulation)", fieldname: "simulate", default: 1 },
+    render_input: true,
+  });
+
+  page.set_primary_action("Générer", () => generer(false));
+  page.add_action_item("Dry-Run (simulation)", () => generer(true));
+
+  // ---- Résultats ----
+  const $results = $(`<div class="frappe-card" style="padding:16px;">
+    <h5>Répartition des livraisons</h5>
+    <div id="stats_summary" style="margin-bottom:12px;"></div>
+    <div id="tableau_repartition" class="mt-3"></div>
+  </div>`).appendTo($body);
+
+  function generer(force_simulate) {
+    const date_livraison = ctl_date.get_value();
+    const mode = ctl_mode.get_value() || "auto";
+    const simulate = force_simulate ? 1 : (ctl_dryrun.get_value() ? 1 : 0);
+
+    if (!date_livraison) {
+      frappe.msgprint(__("Veuillez choisir une date de livraison."));
+      return;
     }
-    
-    tableau_html += '</tbody></table>';
-    $('#tableau_repartition').html(tableau_html);
-}
-```
 
-### 4.2 Configuration des zones géographiques
-
-#### Interface de configuration
-```javascript
-// apps/log/log/public/js/pages/config_zones.js
-frappe.pages['config-zones'].on_page_load = function(wrapper) {
-    var page = frappe.ui.make_app_page({
-        parent: wrapper,
-        title: 'Configuration des Zones Géographiques',
-        single_column: true
+    frappe.call({
+      method: "log.log.utils.distribution.repartir_livraisons_automatique",
+      freeze: true,
+      freeze_message: __("Calcul de la répartition en cours..."),
+      args: { date_livraison, mode, simulate },
+      callback: (r) => {
+        if (!r.message || !r.message.success) {
+          frappe.msgprint(__("Aucune répartition générée."));
+          return;
+        }
+        const m = r.message;
+        afficher_summary(m);
+        afficher_repartition(m.repartition);
+        if (!m.simulate) {
+          frappe.show_alert({ message: __("{0} livraisons créées", [m.livraisons_creees.length]), indicator: "green" });
+        } else {
+          frappe.show_alert({ message: __("Simulation terminée (aucune écriture DB)"), indicator: "blue" });
+        }
+      },
+      error: (e) => {
+        console.error(e);
+        frappe.msgprint(__("Erreur lors de la génération."));
+      },
     });
-    
-    // Carte interactive pour l'attribution des zones
-    let carte_section = $(`
-        <div class="carte-section">
-            <h4>Attribution des zones aux livreurs</h4>
-            <div id="carte_interactive" style="height: 500px;"></div>
-        </div>
-    `).appendTo(page.body);
-    
-    // Configuration des seuils
-    let seuils_section = $(`
-        <div class="seuils-section">
-            <h4>Configuration des seuils de distance</h4>
-            <div class="row">
-                <div class="col-md-4">
-                    <label>Seuil Local (km)</label>
-                    <input type="number" class="form-control" id="seuil_local" value="20">
-                </div>
-                <div class="col-md-4">
-                    <label>Seuil Régional (km)</label>
-                    <input type="number" class="form-control" id="seuil_regional" value="100">
-                </div>
-                <div class="col-md-4">
-                    <button class="btn btn-primary" id="sauvegarder_seuils">
-                        Sauvegarder
-                    </button>
-                </div>
+  }
+
+  function afficher_summary(m) {
+    const total_livreurs = Object.keys(m.repartition || {}).length;
+    const total_colis = Object.values(m.repartition || {}).reduce((acc, v) => acc + (v.total_colis || 0), 0);
+    $("#stats_summary").html(`
+      <div><b>Batch ID:</b> ${frappe.utils.escape_html(m.batch_id || "-")}</div>
+      <div><b>Mode:</b> ${m.simulate ? "Simulation" : "Exécution réelle"}</div>
+      <div><b>Livreurs affectés:</b> ${total_livreurs}</div>
+      <div><b>Total colis:</b> ${total_colis}</div>
+    `);
+  }
+
+  function afficher_repartition(repartition) {
+    let rows = "";
+    Object.keys(repartition || {}).forEach((livreur_id) => {
+      const data = repartition[livreur_id];
+      const communes = (data.communes || []).join(", ");
+      const nb = data.total_colis || 0;
+      const taux = data.taux_charge || 0;
+      rows += `
+        <tr>
+          <td>${frappe.utils.escape_html(livreur_id)}</td>
+          <td>${frappe.utils.escape_html(communes)}</td>
+          <td class="text-right">${nb}</td>
+          <td style="min-width:180px;">
+            <div class="progress" style="height:18px;">
+              <div class="progress-bar" role="progressbar" style="width:${taux}%;">
+                ${taux}%
+              </div>
             </div>
-        </div>
-    `).appendTo(page.body);
+          </td>
+          <td>
+            <button class="btn btn-sm btn-secondary" data-livreur="${frappe.utils.escape_html(livreur_id)}">Modifier</button>
+            <button class="btn btn-sm btn-info" data-livreur="${frappe.utils.escape_html(livreur_id)}">Détails</button>
+          </td>
+        </tr>
+      `;
+    });
+
+    const html = `
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>Livreur</th>
+            <th>Communes</th>
+            <th>Nombre de colis</th>
+            <th>Taux de charge</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows || `<tr><td colspan="5" class="text-center text-muted">Aucune donnée</td></tr>`}</tbody>
+      </table>
+    `;
+    $("#tableau_repartition").html(html);
+  }
 };
 ```
 
-## 5. Workflow de mise en œuvre
+---
 
-### 5.1 Phase 1 : Préparation des données
+## 6. Workflow de mise en œuvre
+
+### Phase 1 : Préparation des données
+
 ```mermaid
 graph TD
-    A[Audit des doctypes existants] --> B[Ajout des nouveaux champs]
-    B --> C[Migration des données existantes]
-    C --> D[Configuration du dépôt principal]
-    D --> E[Géocodage des communes principales]
+    A[Audit doctypes] --> B[Création Child Tables]
+    B --> C[Migration données existantes]
+    C --> D[Configuration dépôt principal]
+    D --> E[Géocodage communes principales]
 ```
 
-### 5.2 Phase 2 : Développement des algorithmes
+### Phase 2 : Algorithmes
+
 ```mermaid
 graph TD
-    A[Implémentation du géocodage] --> B[Calcul des distances]
-    B --> C[Algorithme de classification]
-    C --> D[Algorithme d'attribution]
+    A[Géocodage] --> B[Calcul distances]
+    B --> C[Classification distance]
+    C --> D[Attribution optimale]
     D --> E[Tests unitaires]
 ```
 
-### 5.3 Phase 3 : Interface utilisateur
+### Phase 3 : Interface
+
 ```mermaid
 graph TD
-    A[Page de génération] --> B[Interface de configuration]
-    B --> C[Tableau de bord]
+    A[Page génération] --> B[Dry-Run]
+    B --> C[Tableau répartition]
     C --> D[Tests d'intégration]
-    D --> E[Formation utilisateurs]
 ```
 
-### 5.4 Phase 4 : Optimisation et monitoring
+### Phase 4 : Optimisation & monitoring
+
 ```mermaid
 graph TD
-    A[Métriques de performance] --> B[Optimisation des algorithmes]
-    B --> C[Monitoring en temps réel]
-    C --> D[Ajustements basés sur les retours]
+    A[Indices & perfs] --> B[Monitoring]
+    B --> C[Retours utilisateurs]
 ```
 
-## 6. Règles métier
+---
 
-### 6.1 Types de livreurs
+## 7. Règles métier
 
-#### Livreur Local
-- **Zone de couverture** : Communes dans un rayon de 20 km
-- **Capacité** : 50-100 colis
-- **Véhicule** : Standard (voiture, camionnette)
-- **Priorité** : Livraisons locales uniquement
+### 7.1 Types de livreurs
 
-#### Livreur Régional
-- **Zone de couverture** : Plusieurs wilayas adjacentes
-- **Capacité** : 100-200 colis
-- **Véhicule** : Camion moyen
-- **Priorité** : Livraisons régionales et locales en cas de surcharge
+* **Local** : communes ≤ seuil local (20 km), capacité 50–100 colis
+* **Régional** : plusieurs wilayas adjacentes, 100–200 colis
+* **Longue distance** : national, 200–500 colis
 
-#### Livreur Longue Distance
-- **Zone de couverture** : Tout le territoire national
-- **Capacité** : 200-500 colis
-- **Véhicule** : Gros camion
-- **Priorité** : Livraisons éloignées (>100 km)
+### 7.2 Priorisation
 
-### 6.2 Algorithme de priorisation
+1. Tri par distance : Éloignées → Régionales → Locales
+2. Attribution spécialisée : Longue distance pour éloignées
+3. Équilibrage : minimiser le taux de charge
+4. Optimisation géographique : regroupement par commune
 
-1. **Tri par distance** : Éloignées → Régionales → Locales
-2. **Attribution spécialisée** : Livreur longue distance pour éloignées
-3. **Load balancing** : Répartition équitable selon la capacité
-4. **Optimisation géographique** : Regroupement par zones
+---
 
-## 7. Métriques et KPIs
+## 8. Sécurité & permissions
 
-### 7.1 Indicateurs de performance
-- **Taux d'utilisation des véhicules** : Charge actuelle / Capacité maximale
-- **Distance moyenne par livraison** : Optimisation des trajets
-- **Temps de traitement** : Efficacité de l'algorithme de répartition
-- **Équilibrage de charge** : Écart-type des charges entre livreurs
+* **Contrôle permission côté serveur** dans `repartir_livraisons_automatique` (write sur `Livraison`)
+* **Permission Query** sur `Livraison` pour limiter la visibilité au livreur connecté (si rôle Livreur)
+* Rôles :
 
-### 7.2 Dashboard de monitoring
-```javascript
-// Métriques en temps réel
-function afficher_metriques() {
-    frappe.call({
-        method: 'log.utils.analytics.get_delivery_metrics',
-        callback: function(r) {
-            let metrics = r.message;
-            
-            // Graphique de répartition
-            new Chart(document.getElementById('chart_repartition'), {
-                type: 'doughnut',
-                data: {
-                    labels: metrics.livreurs,
-                    datasets: [{
-                        data: metrics.charges,
-                        backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56']
-                    }]
-                }
-            });
-            
-            // Indicateurs de performance
-            $('#taux_utilisation').text(metrics.taux_utilisation + '%');
-            $('#distance_moyenne').text(metrics.distance_moyenne + ' km');
-            $('#temps_traitement').text(metrics.temps_traitement + ' ms');
-        }
-    });
-}
-```
+  * **Gestionnaire Logistique** : config + génération
+  * **Superviseur Livraison** : visualisation/modification
+  * **Livreur** : lecture de ses livraisons
+* **Logs** : `frappe.log_error` pour cas sans candidats
 
-## 8. Sécurité et permissions
+---
 
-### 8.1 Rôles et permissions
-- **Gestionnaire Logistique** : Accès complet à la configuration et génération
-- **Superviseur Livraison** : Visualisation et modification des répartitions
-- **Livreur** : Consultation de ses propres livraisons
+## 9. Métriques & KPIs
 
-### 8.2 Validation des données
+* **Taux d’utilisation** : charge\_actuelle / capacite\_max\_colis
+* **Équilibrage** : écart-type du nombre de colis par livreur
+* **Distance moyenne / livraison** (si infos disponibles)
+* **Stops moyen / tournée**
+
+*(Dashboard optionnel, non inclus ici pour rester focus sur la répartition.)*
+
+---
+
+## 10. Plan de tests
+
+### 10.1 Tests unitaires
+
+* Géocodage (mock Nominatim)
+* Distances dépôt → commune
+* Classification (seuils)
+* Attribution (charge/zone/priorité/coût) + respect capacité
+* Atomique : double appel simultané (ne dépasse pas capacité)
+
+### 10.2 Tests d’intégration
+
+* **Dry‑Run** journée complète (aucune écriture)
+* Exécution réelle : vérifie `charge_actuelle` + création `Livraison`
+* Relance sur même date (nouveau `batch_id`)
+
+### 10.3 Tests de charge
+
+* 1000+ colis / 50+ livreurs / **< 5 s** visé
+* Vérifie l’impact des indexes
+
+---
+
+## 11. Documentation technique
+
+### 11.1 APIs
+
 ```python
-# Validation avant attribution
-def valider_attribution(livreur_id, colis_count):
-    livreur = frappe.get_doc("Livreur", livreur_id)
-    
-    # Vérification de la capacité
-    if (livreur.charge_actuelle + colis_count) > livreur.capacite_max_colis:
-        frappe.throw("Capacité maximale dépassée pour ce livreur")
-    
-    # Vérification du statut actif
-    if not livreur.active:
-        frappe.throw("Livreur inactif")
-    
-    # Vérification des permissions de zone
-    # ... autres validations
-```
-
-## 9. Plan de tests
-
-### 9.1 Tests unitaires
-- Test de géocodage des communes
-- Test de calcul de distances
-- Test d'algorithmes de classification
-- Test d'attribution optimale
-
-### 9.2 Tests d'intégration
-- Test de répartition complète
-- Test d'interface utilisateur
-- Test de performance avec gros volumes
-
-### 9.3 Tests de charge
-- 1000+ colis simultanés
-- 50+ livreurs actifs
-- Temps de réponse < 5 secondes
-
-## 10. Documentation technique
-
-### 10.1 APIs disponibles
-```python
-# Endpoints principaux
 @frappe.whitelist()
-def repartir_livraisons_automatique(date_livraison, mode="auto")
+def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False)
 
 @frappe.whitelist() 
 def geocoder_communes()
@@ -701,14 +687,13 @@ def geocoder_communes()
 @frappe.whitelist()
 def calculer_distances_depot()
 
+# (optionnel)
 @frappe.whitelist()
 def get_delivery_metrics(date_debut=None, date_fin=None)
-
-@frappe.whitelist()
-def optimiser_routes_livreur(livreur_id, date_livraison)
 ```
 
-### 10.2 Configuration système
+### 11.2 Configuration système (Single Doc)
+
 ```json
 {
   "parametres_livraison": {
@@ -722,4 +707,32 @@ def optimiser_routes_livreur(livreur_id, date_livraison)
 }
 ```
 
-Cette spécification technique complète fournit une base solide pour l'implémentation du système de répartition automatique des livraisons, en respectant les contraintes organisationnelles existantes et en utilisant les meilleures pratiques du domaine logistique.
+### 11.3 Hooks
+
+```python
+scheduler_events = {
+    "daily": [
+        "log.log.utils.geolocation.geocoder_communes",
+        "log.log.utils.geolocation.calculer_distances_depot",
+    ]
+}
+```
+
+### 11.4 Checklist de déploiement
+
+* [ ] Créer Child Doctypes (`Livreur Wilaya`, `Livreur Commune`, `Vehicule Wilaya`)
+* [ ] Ajouter/adapter champs sur `Livreur`, `Vehicule`, `Commune`, `Livraison` (`batch_id`), `Depot Distribution`
+* [ ] Appliquer patch des **index**
+* [ ] Créer Page **generation-livraisons** + déposer le JS
+* [ ] Créer Single **Parametres Livraison** + valeurs par défaut
+* [ ] Configurer **Scheduled Jobs** (géocodage + distances)
+* [ ] Vérifier **permissions & queries**
+* [ ] Lancer **tests** unitaires/intégration/charge
+
+---
+
+si tu veux, je peux aussi te générer les **fixtures JSON** (export DocType) pour :
+
+* `Parametres Livraison` (Single),
+* `Livreur Wilaya` / `Livreur Commune` / `Vehicule Wilaya`,
+* ajout du champ `batch_id` sur `Livraison`.

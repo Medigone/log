@@ -7,77 +7,127 @@ from frappe import _
 
 def update_livraisons_on_delivery_note_change(doc, method):
 	"""Update Livraisons when a Delivery Note's custom_date_de_livraison changes."""
-	# Get the old document to compare dates
+	# Vérifier si la date de livraison a changé
 	if not doc.get("__islocal") and doc.has_value_changed("custom_date_de_livraison"):
 		old_date = doc.get_db_value("custom_date_de_livraison")
 		new_date = doc.custom_date_de_livraison
 		
-		# Find Livraisons that contain this Delivery Note
-		livraisons_with_this_dn = frappe.get_all(
-			"Livraison Bon de Livraison",
-			filters={"bon_de_livraison": doc.name},
-			fields=["parent"]
-		)
+		# Si l'ancienne date existe, retirer le bon de livraison des livraisons de cette date
+		if old_date:
+			retirer_bon_de_livraison_des_livraisons(doc.name, old_date)
 		
-		for livraison_row in livraisons_with_this_dn:
-			livraison_doc = frappe.get_doc("Livraison", livraison_row.parent)
+		# Si la nouvelle date existe, ajouter le bon de livraison aux livraisons de cette date
+		if new_date:
+			ajouter_bon_de_livraison_aux_livraisons(doc.name, new_date)
+
+
+def retirer_bon_de_livraison_des_livraisons(bon_de_livraison_name, date_livraison):
+	"""Retire un bon de livraison de toutes les livraisons d'une date donnée."""
+	livraisons = frappe.get_all("Livraison",
+		filters={"date_liv": date_livraison, "docstatus": 0},
+		fields=["name", "batch_id"]
+	)
+	
+	for livraison in livraisons:
+		# Ne pas modifier les livraisons créées automatiquement
+		if livraison.batch_id:
+			continue
 			
-			# Remove this delivery note from current livraison
+		try:
+			livraison_doc = frappe.get_doc("Livraison", livraison.name)
+			
+			# Retirer le bon de livraison
 			livraison_doc.bons_de_livraison = [
 				row for row in livraison_doc.bons_de_livraison 
-				if row.bon_de_livraison != doc.name
+				if row.bon_de_livraison != bon_de_livraison_name
 			]
 			
-			# Re-sync colis and calculate totals
+			# Mettre à jour les colis et totaux
 			livraison_doc.sync_colis_from_bons_de_livraison()
 			livraison_doc.calculate_totals()
 			livraison_doc.save()
 			
-		# Find Livraisons with the new date and add this delivery note
-		if new_date:
-			livraisons_with_new_date = frappe.get_all(
-				"Livraison",
-				filters={"date_liv": new_date},
-				fields=["name"]
-			)
+		except Exception as e:
+			frappe.log_error(f"Erreur lors de la suppression du bon {bon_de_livraison_name} de la livraison {livraison.name}: {str(e)}")
+
+
+def ajouter_bon_de_livraison_aux_livraisons(bon_de_livraison_name, date_livraison):
+	"""Ajoute un bon de livraison aux livraisons d'une date donnée."""
+	# Récupérer les informations du bon de livraison
+	bon_info = frappe.get_doc("Delivery Note", bon_de_livraison_name)
+	
+	# Trouver les livraisons existantes pour cette date
+	livraisons = frappe.get_all("Livraison",
+		filters={"date_liv": date_livraison, "docstatus": 0},
+		fields=["name", "batch_id"]
+	)
+	
+	# Si aucune livraison n'existe, ne rien faire (l'utilisateur devra en créer une)
+	if not livraisons:
+		return
+	
+	# Ajouter le bon de livraison à toutes les livraisons de cette date
+	for livraison in livraisons:
+		# Ne pas modifier les livraisons créées automatiquement
+		if livraison.batch_id:
+			continue
 			
-			for livraison_row in livraisons_with_new_date:
-				livraison_doc = frappe.get_doc("Livraison", livraison_row.name)
+		try:
+			livraison_doc = frappe.get_doc("Livraison", livraison.name)
+			
+			# Vérifier si le bon de livraison n'est pas déjà présent
+			existing_dns = [row.bon_de_livraison for row in livraison_doc.bons_de_livraison]
+			if bon_de_livraison_name not in existing_dns:
+				# Ajouter le bon de livraison
+				livraison_doc.append("bons_de_livraison", {
+					"bon_de_livraison": bon_de_livraison_name,
+					"customer": bon_info.customer,
+					"custom_date_de_livraison": bon_info.custom_date_de_livraison,
+					"custom_commune": bon_info.custom_commune,
+					"custom_wilaya": bon_info.custom_wilaya,
+					"total_qty": bon_info.total_qty,
+					"grand_total": bon_info.grand_total,
+					"status": bon_info.status
+				})
 				
-				# Check if this delivery note is not already in the livraison
-				existing_dns = [row.bon_de_livraison for row in livraison_doc.bons_de_livraison]
-				if doc.name not in existing_dns:
-					# Add the delivery note
-					livraison_doc.append("bons_de_livraison", {
-						"bon_de_livraison": doc.name,
-						"customer": doc.customer,
-						"custom_date_de_livraison": doc.custom_date_de_livraison,
-						"custom_commune": doc.custom_commune,
-						"custom_wilaya": doc.custom_wilaya,
-						"total_qty": doc.total_qty,
-						"grand_total": doc.grand_total,
-						"status": doc.status
-					})
-					
-					# Re-sync colis and calculate totals
-					livraison_doc.sync_colis_from_bons_de_livraison()
-					livraison_doc.calculate_totals()
-					livraison_doc.save()
+				# Mettre à jour les colis et totaux
+				livraison_doc.sync_colis_from_bons_de_livraison()
+				livraison_doc.calculate_totals()
+				livraison_doc.save()
+				
+		except Exception as e:
+			frappe.log_error(f"Erreur lors de l'ajout du bon {bon_de_livraison_name} à la livraison {livraison.name}: {str(e)}")
+
+
+def retirer_bon_de_livraison_supprime(doc, method):
+	"""Retire un bon de livraison supprimé de toutes les livraisons."""
+	# Récupérer la date de livraison du bon supprimé
+	date_livraison = doc.custom_date_de_livraison
+	
+	if date_livraison:
+		# Retirer le bon de livraison de toutes les livraisons de cette date
+		retirer_bon_de_livraison_des_livraisons(doc.name, date_livraison)
 
 
 def update_livraison_on_date_change(doc, method):
 	"""Update Livraison's delivery notes when date_liv changes."""
 	if not doc.get("__islocal") and doc.has_value_changed("date_liv"):
-		# Clear existing delivery notes and reload based on new date
-		if doc.date_liv:
+		# Ne pas recharger automatiquement si la livraison a déjà des bons de livraison assignés
+		# Cela évite les conflits avec la création automatique
+		if doc.batch_id:
+			return
+		
+		# Seulement si la livraison est vide, charger les bons disponibles
+		if doc.date_liv and not doc.bons_de_livraison:
 			doc.auto_load_delivery_notes_by_date()
-		else:
+		elif not doc.date_liv:
 			# If no date, clear delivery notes
 			doc.bons_de_livraison = []
 			
-		# Re-sync colis and calculate totals
-		doc.sync_colis_from_bons_de_livraison()
-		doc.calculate_totals()
+		# Re-sync colis and calculate totals seulement si pas de batch_id (création manuelle)
+		if not doc.batch_id:
+			doc.sync_colis_from_bons_de_livraison()
+			doc.calculate_totals()
 
 
 def update_delivery_notes_on_livraison_change(doc, method):
@@ -175,10 +225,27 @@ def update_livraison_status_on_colis_change(doc, method):
 		)
 
 
+def after_insert_livraison(doc, method):
+	"""Auto-load delivery notes and colis after creating a new Livraison."""
+	# Ne pas recharger automatiquement si la livraison a un batch_id (création automatique)
+	if doc.batch_id:
+		return
+		
+	if doc.date_liv:
+		doc.auto_load_delivery_notes_by_date()
+		doc.sync_colis_from_bons_de_livraison()
+		doc.calculate_totals()
+		doc.save()
+
+
 def validate_livraison(doc, method):
 	"""Validate the livraison document."""
-	# Auto-load delivery notes by date if date_liv is set and no delivery notes exist
-	if doc.date_liv and not doc.bons_de_livraison:
+	# Ne pas recharger automatiquement si la livraison a un batch_id (création automatique)
+	if doc.batch_id:
+		return
+		
+	# Toujours recharger si la date a changé ou si pas de bons de livraison
+	if doc.date_liv and (not doc.bons_de_livraison or doc.has_value_changed("date_liv")):
 		doc.auto_load_delivery_notes_by_date()
 	doc.sync_colis_from_bons_de_livraison()
 	doc.calculate_totals()

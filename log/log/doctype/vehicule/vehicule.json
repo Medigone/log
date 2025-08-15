@@ -17,6 +17,10 @@
   "nom_chauffeur",
   "section_break_mleo",
   "active",
+  "section_break_cout",
+  "cout_km",
+  "column_break_zones",
+  "wilayas_autorisees",
   "suivi_et_entretien_tab",
   "km",
   "section_break_shkb",
@@ -192,6 +196,29 @@
    "fieldtype": "Select",
    "label": "Type de carburant",
    "options": "Diesel\nEssence\n\u00c9lectrique\nGPL"
+  },
+  {
+   "fieldname": "section_break_cout",
+   "fieldtype": "Section Break",
+   "label": "Co\u00fbt et Zones"
+  },
+  {
+   "default": "0.0",
+   "fieldname": "cout_km",
+   "fieldtype": "Float",
+   "label": "Co\u00fbt par kilom\u00e8tre (DA)",
+   "non_negative": 1,
+   "precision": "2"
+  },
+  {
+   "fieldname": "column_break_zones",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "wilayas_autorisees",
+   "fieldtype": "Table",
+   "label": "Wilayas autoris\u00e9es",
+   "options": "Vehicule Wilaya"
   }
  ],
  "index_web_pages_for_search": 1,

@@ -1,0 +1,107 @@
+{
+ "actions": [],
+ "creation": "2025-01-12 10:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_1",
+  "seuil_local_km",
+  "seuil_regional_km",
+  "section_break_4",
+  "api_geolocation",
+  "rate_limit_geocoding",
+  "column_break_7",
+  "auto_update_distances",
+  "algorithme_repartition"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Seuils de distance"
+  },
+  {
+   "default": "20",
+   "fieldname": "seuil_local_km",
+   "fieldtype": "Int",
+   "label": "Seuil local (km)",
+   "reqd": 1
+  },
+  {
+   "default": "100",
+   "fieldname": "seuil_regional_km",
+   "fieldtype": "Int",
+   "label": "Seuil régional (km)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break",
+   "label": "Configuration géolocalisation"
+  },
+  {
+   "default": "nominatim",
+   "fieldname": "api_geolocation",
+   "fieldtype": "Select",
+   "label": "API de géolocalisation",
+   "options": "nominatim\ngoogle_maps\nbing_maps"
+  },
+  {
+   "default": "1",
+   "fieldname": "rate_limit_geocoding",
+   "fieldtype": "Int",
+   "label": "Limite de requêtes (par seconde)"
+  },
+  {
+   "fieldname": "column_break_7",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "auto_update_distances",
+   "fieldtype": "Check",
+   "label": "Mise à jour automatique des distances"
+  },
+  {
+   "default": "load_balancing_geographique",
+   "fieldname": "algorithme_repartition",
+   "fieldtype": "Select",
+   "label": "Algorithme de répartition",
+   "options": "load_balancing_geographique\noptimisation_distance\npriorite_specialisation"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-01-12 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Parametres Livraison",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Gestionnaire Logistique",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

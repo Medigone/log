@@ -11,7 +11,13 @@
   "nom_ar",
   "column_break_mecf",
   "wilaya",
-  "region"
+  "region",
+  "section_break_geolocation",
+  "latitude",
+  "column_break_longitude",
+  "longitude",
+  "column_break_distance",
+  "distance_depot"
  ],
  "fields": [
   {
@@ -49,6 +55,39 @@
    "in_standard_filter": 1,
    "label": "Nom Arabe",
    "search_index": 1
+  },
+  {
+   "fieldname": "section_break_geolocation",
+   "fieldtype": "Section Break",
+   "label": "G\u00e9olocalisation"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "column_break_longitude",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude",
+   "precision": "6"
+  },
+  {
+   "fieldname": "column_break_distance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "distance_depot",
+   "fieldtype": "Float",
+   "label": "Distance du d\u00e9p\u00f4t (km)",
+   "non_negative": 1,
+   "precision": "2",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
