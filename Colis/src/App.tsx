@@ -6,12 +6,12 @@ import {
   useFrappeGetDoc,
 } from "frappe-react-sdk";
 import { Button } from "@/components/ui/button";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Truck } from "lucide-react";
 import Login from "./pages/auth/Login";
 import ColisDetails from "./pages/colis/ColisDetails";
 import ColisPublicView from "./pages/colis/ColisPublicView";
 
-import { LivraisonsList, LivraisonDetails } from "./pages/livraisons";
+import { LivraisonsList, LivraisonDetails, GenerationLivraisons } from "./pages/livraisons";
 import logoSvg from "./assets/IntraPro_fleetmaster.svg";
 
 /* =========================
@@ -124,6 +124,7 @@ function AppContent() {
   const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
   const [selectedLivraisonId, setSelectedLivraisonId] =
     useState<string | null>(null);
+  const [showGenerationLivraisons, setShowGenerationLivraisons] = useState<boolean>(false);
   const [activeView, setActiveView] =
     useState<"livraisons">("livraisons");
   const [currentLivraisonId, setCurrentLivraisonId] = useState<string | null>(null);
@@ -139,6 +140,7 @@ function AppContent() {
     setSelectedColisId(null);
     setSelectedLivraisonId(null);
     setCurrentLivraisonId(null);
+    setShowGenerationLivraisons(false);
   };
 
   useEffect(() => {
@@ -193,6 +195,8 @@ function AppContent() {
                 }
               }}
             />
+          ) : showGenerationLivraisons ? (
+            <GenerationLivraisons onBack={() => setShowGenerationLivraisons(false)} />
           ) : selectedLivraisonId ? (
             <LivraisonDetails
               livraisonId={selectedLivraisonId}
@@ -203,7 +207,20 @@ function AppContent() {
               }}
             />
           ) : (
-            <LivraisonsList onLivraisonSelect={setSelectedLivraisonId} />
+            <>
+              <div className="flex justify-between items-center mb-4">
+                <h1 className="text-2xl font-bold">Livraisons</h1>
+                <Button 
+                  variant="default" 
+                  onClick={() => setShowGenerationLivraisons(true)}
+                  className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white border-slate-600 shadow-lg transition-all duration-200 hover:shadow-xl"
+                >
+                  <Truck className="h-4 w-4" />
+                  Générer Livraisons
+                </Button>
+              </div>
+              <LivraisonsList onLivraisonSelect={setSelectedLivraisonId} />
+            </>
           )}
         </div>
       </div>

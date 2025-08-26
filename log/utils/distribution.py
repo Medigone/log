@@ -599,6 +599,54 @@ def reset_charges_livreurs():
 
 
 @frappe.whitelist()
+def corriger_charges_livreurs():
+	"""Corrige les charges des livreurs en les recalculant basées sur les livraisons existantes."""
+	if not frappe.has_permission(doctype="Livreur", ptype="write"):
+		frappe.throw("Permission refusée.")
+	
+	# 1. Réinitialiser toutes les charges
+	frappe.db.sql("UPDATE `tabLivreur` SET charge_actuelle = 0")
+	
+	# 2. Recalculer basé sur les livraisons existantes (toutes dates confondues)
+	livraisons = frappe.get_all("Livraison",
+		filters={"docstatus": 0},
+		fields=["name", "livreur"]
+	)
+	
+	charges_par_livreur = {}
+	
+	for livraison in livraisons:
+		try:
+			livraison_doc = frappe.get_doc("Livraison", livraison.name)
+			total_colis = len(livraison_doc.colis) if livraison_doc.colis else 0
+			
+			if total_colis > 0 and livraison.livreur:
+				if livraison.livreur not in charges_par_livreur:
+					charges_par_livreur[livraison.livreur] = 0
+				charges_par_livreur[livraison.livreur] += total_colis
+				
+		except Exception as e:
+			frappe.log_error(f"Erreur recalcul charge livreur {livraison.livreur}: {str(e)}")
+	
+	# 3. Mettre à jour les charges calculées
+	for livreur_id, charge_totale in charges_par_livreur.items():
+		try:
+			livreur = frappe.get_doc("Livreur", livreur_id)
+			livreur.charge_actuelle = charge_totale
+			livreur.save()
+		except Exception as e:
+			frappe.log_error(f"Erreur mise à jour charge livreur {livreur_id}: {str(e)}")
+	
+	frappe.db.commit()
+	
+	return {
+		"success": True, 
+		"message": f"Charges corrigées pour {len(charges_par_livreur)} livreur(s)",
+		"charges_par_livreur": charges_par_livreur
+	}
+
+
+@frappe.whitelist()
 def diagnostiquer_distribution_bons(date_livraison):
 	"""Diagnostique la distribution basée sur les bons de livraison."""
 	if not frappe.has_permission(doctype="Livraison", ptype="read"):

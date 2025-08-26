@@ -870,15 +870,18 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                 >
                                   {/* En-tête de la carte */}
                                   <div className="mb-3">
-                                    {/* Nom du colis et badge de statut */}
-                                    <div className="flex justify-between items-start mb-2">
-                                      <span className="text-sm font-bold text-foreground truncate">
+                                    {/* Nom du colis et statut */}
+                                    <div className="mb-2">
+                                      <div className="text-sm font-bold text-foreground truncate">
                                         {colis.name}
-                                      </span>
-                                      <StatusBadge
-                                        text={colis.status}
-                                        tone={statusToColor(colis.status)}
-                                      />
+                                      </div>
+                                      {/* Statut sous l'ID en badge */}
+                                       <div className="mt-1">
+                                         <StatusBadge
+                                           text={translateStatus(colis.status)}
+                                           tone={statusToColor(colis.status)}
+                                         />
+                                       </div>
                                     </div>
                                     
                                     {/* Numéro de séquence */}
