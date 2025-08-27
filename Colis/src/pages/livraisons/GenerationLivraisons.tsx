@@ -21,7 +21,10 @@ import {
   Dot,
   Package,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowLeft,
+  Calendar,
+  Clipboard
 } from 'lucide-react';
 import { useFrappePostCall, useFrappeGetDocList } from 'frappe-react-sdk';
 
@@ -51,12 +54,17 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
   const [dateLivraison, setDateLivraison] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [modeSimulation, setModeSimulation] = useState<boolean>(true);
+  // Mode simulation forcé par défaut - plus de checkbox
+  const modeSimulation = true;
   const [currentData, setCurrentData] = useState<LivraisonData | null>(null);
   const [showResults, setShowResults] = useState<boolean>(false);
   const [showManualInterface, setShowManualInterface] = useState<boolean>(false);
   const [manualAssignments, setManualAssignments] = useState<{[key: string]: string}>({});
   const [expandedItems, setExpandedItems] = useState<{[key: string]: boolean}>({});
+
+  const [showAlertModal, setShowAlertModal] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('info');
 
   // Fonction pour basculer l'expansion d'un élément
   const toggleExpansion = (key: string) => {
@@ -166,6 +174,22 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
     );
   };
 
+  // Composant MetaChip pour une présentation cohérente
+  const MetaChip = ({ icon: Icon, label, value, className = "" }: {
+    icon: React.ComponentType<any>;
+    label: string;
+    value: string | number;
+    className?: string;
+  }) => (
+    <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-card/60 border border-border rounded-xl leading-none ${className}`}>
+      <Icon className="w-4 h-4 text-foreground" />
+      <span className="inline-flex items-baseline gap-1 sm:gap-1.5 text-foreground text-xs sm:text-sm">
+        <span className="text-muted-foreground font-medium">{label}</span>
+        <span className="font-semibold">{value}</span>
+      </span>
+    </div>
+  );
+
   // Composant pour afficher les communes et bons de livraison
   const HierarchicalDisplay = ({ repartition, keyPrefix, communesMapping }: { repartition: any, keyPrefix: string, communesMapping: Record<string, string> }) => {
     // Extraire les communes uniques
@@ -249,7 +273,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
 
   const genererRepartition = async () => {
     if (!dateLivraison) {
-      alert('Veuillez sélectionner une date de livraison');
+      showAlert('Veuillez sélectionner une date de livraison', 'warning');
       return;
     }
 
@@ -273,7 +297,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       }
     } catch (error) {
       console.error('Erreur lors de la génération:', error);
-      alert('Erreur lors de la génération de la répartition');
+      showAlert('Erreur lors de la génération de la répartition', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -281,7 +305,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
 
   const confirmerRepartition = async () => {
     if (!currentData || !currentData.simulate) {
-      alert('Aucune simulation à confirmer');
+      showAlert('Aucune simulation à confirmer', 'warning');
       return;
     }
 
@@ -297,7 +321,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       if (result?.message) {
         setCurrentData(result.message);
         const nbLivraisons = result.message.livraisons_creees?.length || 0;
-        alert(`${nbLivraisons} livraisons créées avec succès`);
+        showAlert(`${nbLivraisons} livraisons créées avec succès`, 'success');
         
         // Réinitialiser après confirmation
         setTimeout(() => {
@@ -306,7 +330,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       }
     } catch (error) {
       console.error('Erreur lors de la confirmation:', error);
-      alert('Erreur lors de la création des livraisons');
+      showAlert('Erreur lors de la création des livraisons', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -314,7 +338,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
 
   const synchroniserLivraisons = async () => {
     if (!dateLivraison) {
-      alert('Veuillez sélectionner une date de livraison');
+      showAlert('Veuillez sélectionner une date de livraison', 'warning');
       return;
     }
 
@@ -325,7 +349,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       });
 
       if (result?.message?.success) {
-        alert('Synchronisation terminée avec succès !');
+        showAlert('Synchronisation terminée avec succès !', 'success');
         // Rafraîchir les données après synchronisation
         setTimeout(() => {
           genererRepartition();
@@ -333,21 +357,25 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       }
     } catch (error) {
       console.error('Erreur lors de la synchronisation:', error);
-      alert('Erreur lors de la synchronisation');
+      showAlert('Erreur lors de la synchronisation', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   const resetInterface = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir réinitialiser l\'interface ? Toutes les données non confirmées seront perdues.')) {
-      setCurrentData(null);
-      setShowResults(false);
-      setShowManualInterface(false);
-      setManualAssignments({});
-      setDateLivraison(new Date().toISOString().split('T')[0]);
-      setModeSimulation(true);
-    }
+    setCurrentData(null);
+    setShowResults(false);
+    setShowManualInterface(false);
+    setManualAssignments({});
+    setDateLivraison(new Date().toISOString().split('T')[0]);
+    // Mode simulation toujours activé
+  };
+
+  const showAlert = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+    setAlertMessage(message);
+    setAlertType(type);
+    setShowAlertModal(true);
   };
 
   const appliquerAssignationsManuelles = () => {
@@ -372,7 +400,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
     try {
       const result = await callCorrigerCharges({});
       if (result?.message) {
-        alert(`Charges corrigées: ${result.message.message}`);
+        showAlert(`Charges corrigées: ${result.message.message}`, 'success');
         // Régénérer la répartition pour voir les nouveaux pourcentages
         if (showResults) {
           genererRepartition();
@@ -380,7 +408,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       }
     } catch (error) {
       console.error('Erreur lors de la correction des charges:', error);
-      alert('Erreur lors de la correction des charges');
+      showAlert('Erreur lors de la correction des charges', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -451,20 +479,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
               />
             </div>
             
-            <div className="space-y-2">
-              <div className="flex items-center space-x-2">
-                <input
-                  id="mode_simulation"
-                  type="checkbox"
-                  checked={modeSimulation}
-                  onChange={(e) => setModeSimulation(e.target.checked)}
-                  className="rounded border-gray-300"
-                />
-                <label htmlFor="mode_simulation" className="text-sm font-medium">
-                  Mode simulation (aperçu sans création)
-                </label>
-              </div>
-            </div>
+
           </div>
 
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4">
@@ -478,7 +493,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
               ) : (
                 <Play className="h-4 w-4" />
               )}
-              {isLoading ? 'Génération en cours...' : 'Générer Répartition'}
+              {isLoading ? 'Génération en cours...' : 'Générer Aperçu'}
             </Button>
             
             {showResults && currentData?.simulate && (
@@ -489,7 +504,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
                 disabled={isLoading}
               >
                 <Check className="h-4 w-4" />
-                Confirmer
+                Créer les Livraisons
               </Button>
             )}
             
@@ -625,29 +640,21 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
             {/* Résumé */}
             <div className="bg-card/50 rounded-2xl border border-border shadow-2xl p-4 mb-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-card/60 border border-border rounded-xl leading-none">
-                  <List className="w-4 h-4 text-foreground" />
-                  <span className="inline-flex items-baseline gap-1 sm:gap-1.5 text-foreground text-xs sm:text-sm">
-                    <span className="text-muted-foreground font-medium">Bons</span>
-                    <span className="font-semibold">{currentData.total_bons_date || 0}</span>
-                  </span>
-                </div>
-                
-                <div className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-card/60 border border-border rounded-xl leading-none">
-                   <Package className="w-4 h-4 text-foreground" />
-                   <span className="inline-flex items-baseline gap-1 sm:gap-1.5 text-foreground text-xs sm:text-sm">
-                     <span className="text-muted-foreground font-medium">Colis</span>
-                     <span className="font-semibold">{Object.values(currentData.repartition || {}).reduce((total: number, rep: any) => total + (rep.total_colis || 0), 0)}</span>
-                   </span>
-                 </div>
-                 
-                 <div className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-card/60 border border-border rounded-xl leading-none">
-                   <Users className="w-4 h-4 text-foreground" />
-                   <span className="inline-flex items-baseline gap-1 sm:gap-1.5 text-foreground text-xs sm:text-sm">
-                     <span className="text-muted-foreground font-medium">Livreurs</span>
-                     <span className="font-semibold">{Object.keys(currentData.repartition || {}).length}</span>
-                   </span>
-                 </div>
+                <MetaChip 
+                  icon={List} 
+                  label="Bons" 
+                  value={currentData.total_bons_date || 0} 
+                />
+                <MetaChip 
+                  icon={Package} 
+                  label="Colis" 
+                  value={Object.values(currentData.repartition || {}).reduce((total: number, rep: any) => total + (rep.total_colis || 0), 0)} 
+                />
+                <MetaChip 
+                  icon={Users} 
+                  label="Livreurs" 
+                  value={Object.keys(currentData.repartition || {}).length} 
+                />
               </div>
             </div>
 
@@ -707,6 +714,55 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
           </Card>
         )}
       </div>
+
+
+
+      {/* Modal d'alerte */}
+      {showAlertModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl border border-border shadow-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                alertType === 'success' ? 'bg-green-100 dark:bg-green-900/20' :
+                alertType === 'error' ? 'bg-red-100 dark:bg-red-900/20' :
+                alertType === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/20' :
+                'bg-blue-100 dark:bg-blue-900/20'
+              }`}>
+                {alertType === 'success' && <Check className="w-5 h-5 text-green-600 dark:text-green-400" />}
+                {alertType === 'error' && <X className="w-5 h-5 text-red-600 dark:text-red-400" />}
+                {alertType === 'warning' && <AlertTriangle className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />}
+                {alertType === 'info' && <Info className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">
+                  {alertType === 'success' ? 'Succès' :
+                   alertType === 'error' ? 'Erreur' :
+                   alertType === 'warning' ? 'Attention' :
+                   'Information'}
+                </h3>
+              </div>
+            </div>
+            
+            <p className="text-foreground">
+              {alertMessage}
+            </p>
+            
+            <div className="flex justify-end pt-2">
+              <Button 
+                onClick={() => setShowAlertModal(false)}
+                className={`flex items-center gap-2 shadow-lg transition-all duration-200 hover:shadow-xl ${
+                  alertType === 'success' ? 'bg-green-600 hover:bg-green-700 text-white' :
+                  alertType === 'error' ? 'bg-red-600 hover:bg-red-700 text-white' :
+                  alertType === 'warning' ? 'bg-yellow-600 hover:bg-yellow-700 text-white' :
+                  'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                OK
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
