@@ -208,18 +208,13 @@ function AppContent() {
             />
           ) : (
             <>
-              <div className="flex justify-between items-center mb-4">
+              <div className="mb-4">
                 <h1 className="text-2xl font-bold">Livraisons</h1>
-                <Button 
-                  variant="default" 
-                  onClick={() => setShowGenerationLivraisons(true)}
-                  className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white border-slate-600 shadow-lg transition-all duration-200 hover:shadow-xl"
-                >
-                  <Truck className="h-4 w-4" />
-                  Générer Livraisons
-                </Button>
               </div>
-              <LivraisonsList onLivraisonSelect={setSelectedLivraisonId} />
+              <LivraisonsList 
+                onLivraisonSelect={setSelectedLivraisonId} 
+                onGenerateClick={() => setShowGenerationLivraisons(true)}
+              />
             </>
           )}
         </div>

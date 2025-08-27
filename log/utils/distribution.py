@@ -57,7 +57,7 @@ def livreurs_couvrant_commune(commune):
 	return {p.parent for p in parents}
 
 
-def attribuer_livreur_optimal(classification, nb_colis, commune_name=None):
+def attribuer_livreur_optimal(classification, nb_colis, commune_name=None, date_livraison=None):
 	"""Retourne le nom du livreur avec le meilleur score, ou None si aucun candidat."""
 	filters = {"active": 1}
 	
@@ -74,6 +74,16 @@ def attribuer_livreur_optimal(classification, nb_colis, commune_name=None):
 	if not candidats:
 		return None
 
+	# Si une date est fournie, calculer les charges spécifiques à cette date
+	if date_livraison:
+		charges_par_date = calculer_charges_par_date(date_livraison)
+		for c in candidats:
+			c.charge_actuelle_date = charges_par_date.get(c.name, 0)
+	else:
+		# Utiliser la charge globale si pas de date spécifiée
+		for c in candidats:
+			c.charge_actuelle_date = c.charge_actuelle or 0
+
 	couvre = livreurs_couvrant_commune(commune_name) if commune_name else set()
 
 	veh_rows = frappe.get_all("Vehicule",
@@ -88,7 +98,8 @@ def attribuer_livreur_optimal(classification, nb_colis, commune_name=None):
 		return 0 if hi == lo else max(0, min(1, (x - lo) / (hi - lo)))
 
 	for c in candidats:
-		taux_charge = (c.charge_actuelle or 0) / float(c.capacite_max_colis or 1)
+		# Utiliser la charge spécifique à la date
+		taux_charge = c.charge_actuelle_date / float(c.capacite_max_colis or 1)
 		penalite_zone = 0 if (not commune_name or c.name in couvre) else 1
 		cout_km_norm = normalise(veh_map.get(c.vehicule, 0), min_c, max_c)
 		prio_norm = normalise((c.priorite_attribution or 5), 1, 10)
@@ -99,7 +110,8 @@ def attribuer_livreur_optimal(classification, nb_colis, commune_name=None):
 	
 	if (choisi.capacite_max_colis or 0) <= 0:
 		return None
-	if (choisi.charge_actuelle or 0) + nb_colis > (choisi.capacite_max_colis or 0):
+	# Vérifier la capacité avec la charge spécifique à la date
+	if choisi.charge_actuelle_date + nb_colis > (choisi.capacite_max_colis or 0):
 		return None
 	
 	return choisi.name
@@ -363,18 +375,37 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 			
 			# Préparer les données par commune pour l'interface manuelle
 			communes_data = []
+			# Obtenir les livreurs avec leurs charges par date
+			livreurs_avec_charge_date = obtenir_livreurs_avec_charge_par_date(date_livraison)
+		
 			for commune_id, bons_liste in par_commune.items():
 				nb_colis_total = sum(bon.custom_nombre_colis or 0 for bon in bons_liste)
 				nom_commune = frappe.db.get_value("Commune", commune_id, "nom") or commune_id
 				classification = classifier_livraison_par_distance(commune_id)
 				
+				# Filtrer les livreurs qui peuvent couvrir cette commune
+				livreurs_couvrant = livreurs_couvrant_commune(commune_id)
+				livreurs_disponibles = []
+				
+				for livreur in livreurs_avec_charge_date:
+					if livreur["name"] in livreurs_couvrant:
+						livreurs_disponibles.append({
+							"name": livreur["name"],
+							"nom_complet": livreur["nom_complet"],
+							"vehicule": livreur.get("vehicule", "N/A"),
+							"charge_actuelle": livreur["charge_actuelle_date"],
+							"capacite_max": livreur["capacite_max"],
+							"taux_charge": livreur["taux_charge_date"]
+						})
+				
 				communes_data.append({
-					"commune_id": commune_id,
+					"commune": commune_id,
 					"nom_commune": nom_commune,
 					"classification": classification,
 					"nb_bons": len(bons_liste),
 					"nb_colis": nb_colis_total,
-					"bons_liste": bons_liste
+					"bons_livraison": bons_liste,
+					"livreurs_disponibles": livreurs_disponibles
 				})
 			
 			# Calculer le total des bons de livraison pour cette date
@@ -426,6 +457,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 				repartition[livreur_id]["total_colis"] += sum(bon.custom_nombre_colis or 0 for bon in bons_commune)
 		else:
 			# Mode automatique : attribution par commune selon l'algorithme
+			communes_non_attribuees = []
 			
 			for commune, bons_liste in par_commune.items():
 				# Calculer le nombre total de colis pour cette commune
@@ -441,10 +473,11 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 				else:
 					# Mode automatique : utiliser l'algorithme d'optimisation
 					classification = classifier_livraison_par_distance(commune)
-					livreur_id = attribuer_livreur_optimal(classification, nb_colis_total, commune)
+					livreur_id = attribuer_livreur_optimal(classification, nb_colis_total, commune, date_livraison)
 					
 					if not livreur_id:
 						frappe.log_error(f"Aucun livreur éligible pour {commune} ({len(bons_liste)} bons, {nb_colis_total} colis)")
+						communes_non_attribuees.append(commune)
 						continue
 
 				if not simulate:
@@ -463,13 +496,76 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 					rep["communes"].append(commune)
 				rep["total_bons"] += len(bons_liste)
 				rep["total_colis"] += nb_colis_total
+			
+			# Si des communes n'ont pas pu être attribuées automatiquement, déclencher le mode manuel
+			if communes_non_attribuees and simulate:
+				# Récupérer la liste des livreurs actifs
+				livreurs_actifs = frappe.get_all("Livreur", 
+					filters={"active": 1}, 
+					fields=["name", "nom", "capacite_max_colis", "charge_actuelle", "type_couverture", "specialisation"]
+				)
+				
+				# Préparer les données par commune pour l'interface manuelle
+				communes_data = []
+				# Obtenir les livreurs avec leurs charges par date
+				livreurs_avec_charge_date = obtenir_livreurs_avec_charge_par_date(date_livraison)
+			
+				for commune_id, bons_liste in par_commune.items():
+					nb_colis_total = sum(bon.custom_nombre_colis or 0 for bon in bons_liste)
+					nom_commune = frappe.db.get_value("Commune", commune_id, "nom") or commune_id
+					classification = classifier_livraison_par_distance(commune_id)
+					
+					# Filtrer les livreurs qui peuvent couvrir cette commune
+					livreurs_couvrant = livreurs_couvrant_commune(commune_id)
+					livreurs_disponibles = []
+					
+					for livreur in livreurs_avec_charge_date:
+						if livreur["name"] in livreurs_couvrant:
+							livreurs_disponibles.append({
+								"name": livreur["name"],
+								"nom_complet": livreur["nom_complet"],
+								"vehicule": livreur.get("vehicule", "N/A"),
+								"charge_actuelle": livreur["charge_actuelle_date"],
+								"capacite_max": livreur["capacite_max"],
+								"taux_charge": livreur["taux_charge_date"]
+							})
+					
+					communes_data.append({
+						"commune": commune_id,
+						"nom_commune": nom_commune,
+						"classification": classification,
+						"nb_bons": len(bons_liste),
+						"nb_colis": nb_colis_total,
+						"bons_livraison": bons_liste,
+						"livreurs_disponibles": livreurs_disponibles
+					})
+				
+				# Calculer le total des bons de livraison pour cette date
+				total_bons_date = frappe.db.sql("""
+					SELECT COUNT(*) as total
+					FROM `tabDelivery Note` dn
+					WHERE dn.custom_date_de_livraison = %s
+					AND dn.docstatus = 0
+				""", (date_livraison,), as_dict=True)[0].total
+				
+				return {
+					"success": True,
+					"mode": "manuel",
+					"requires_manual_selection": True,
+					"communes_data": communes_data,
+					"livreurs_actifs": livreurs_actifs,
+					"total_bons_date": total_bons_date,
+					"bons_non_repartis": total_bons_date,
+					"message": f"Attribution automatique impossible pour {len(communes_non_attribuees)} commune(s). Mode manuel activé."
+				}
 		
 		# 4) Taux de charge + création des Livraisons
 		for livreur_id, data in repartition.items():
 			cap = frappe.db.get_value("Livreur", livreur_id, "capacite_max_colis") or 0
-			charge = frappe.db.get_value("Livreur", livreur_id, "charge_actuelle") or 0
+			# Utiliser la charge spécifique à la date au lieu de la charge globale
+			charge_date = obtenir_charge_livreur_pour_date(livreur_id, date_livraison)
 			# Calculer le taux de charge après attribution
-			charge_apres = charge + data["total_colis"]
+			charge_apres = charge_date + data["total_colis"]
 			data["taux_charge"] = round(100 * (charge_apres / cap), 2) if cap else 0
 			
 			# Conserver les IDs des communes pour la création des livraisons
@@ -644,6 +740,89 @@ def corriger_charges_livreurs():
 		"message": f"Charges corrigées pour {len(charges_par_livreur)} livreur(s)",
 		"charges_par_livreur": charges_par_livreur
 	}
+
+
+@frappe.whitelist()
+def calculer_charges_par_date(date_livraison):
+	"""Calcule les charges des livreurs pour une date spécifique uniquement."""
+	if not frappe.has_permission(doctype="Livreur", ptype="read"):
+		frappe.throw("Permission refusée.")
+	
+	# Récupérer les livraisons pour cette date spécifique
+	livraisons = frappe.get_all("Livraison",
+		filters={"date_liv": date_livraison, "docstatus": 0},
+		fields=["name", "livreur"]
+	)
+	
+	charges_par_livreur = {}
+	
+	for livraison in livraisons:
+		try:
+			livraison_doc = frappe.get_doc("Livraison", livraison.name)
+			total_colis = len(livraison_doc.colis) if livraison_doc.colis else 0
+			
+			if total_colis > 0 and livraison.livreur:
+				if livraison.livreur not in charges_par_livreur:
+					charges_par_livreur[livraison.livreur] = 0
+				charges_par_livreur[livraison.livreur] += total_colis
+				
+		except Exception as e:
+			frappe.log_error(f"Erreur calcul charge livreur {livraison.livreur} pour date {date_livraison}: {str(e)}")
+	
+	return charges_par_livreur
+
+
+@frappe.whitelist()
+def obtenir_charge_livreur_pour_date(livreur_id, date_livraison):
+	"""Obtient la charge actuelle d'un livreur pour une date spécifique."""
+	if not frappe.has_permission(doctype="Livreur", ptype="read"):
+		frappe.throw("Permission refusée.")
+	
+	# Calculer la charge pour cette date spécifique
+	livraisons = frappe.get_all("Livraison",
+		filters={"date_liv": date_livraison, "livreur": livreur_id, "docstatus": 0},
+		fields=["name"]
+	)
+	
+	charge_totale = 0
+	for livraison in livraisons:
+		try:
+			livraison_doc = frappe.get_doc("Livraison", livraison.name)
+			total_colis = len(livraison_doc.colis) if livraison_doc.colis else 0
+			charge_totale += total_colis
+		except Exception as e:
+			frappe.log_error(f"Erreur calcul charge livreur {livreur_id} pour date {date_livraison}: {str(e)}")
+	
+	return charge_totale
+
+
+@frappe.whitelist()
+def obtenir_livreurs_avec_charge_par_date(date_livraison):
+	"""Obtient tous les livreurs actifs avec leur charge spécifique à une date donnée."""
+	if not frappe.has_permission(doctype="Livreur", ptype="read"):
+		frappe.throw("Permission refusée.")
+	
+	# Récupérer tous les livreurs actifs
+	livreurs = frappe.get_all("Livreur",
+		filters={"active": 1},
+		fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation", "vehicule"]
+	)
+	
+	# Calculer les charges pour cette date spécifique
+	charges_par_date = calculer_charges_par_date(date_livraison)
+	
+	# Enrichir les données des livreurs avec la charge par date
+	for livreur in livreurs:
+		livreur.charge_actuelle_date = charges_par_date.get(livreur.name, 0)
+		livreur.nom_complet = livreur.nom or livreur.name
+		livreur.capacite_max = livreur.capacite_max_colis or 0
+		# Calculer le taux de charge pour cette date
+		if livreur.capacite_max > 0:
+			livreur.taux_charge_date = round(100 * (livreur.charge_actuelle_date / livreur.capacite_max), 2)
+		else:
+			livreur.taux_charge_date = 0
+	
+	return livreurs
 
 
 @frappe.whitelist()

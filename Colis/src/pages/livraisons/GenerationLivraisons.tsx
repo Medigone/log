@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/calendar';
 import { Card } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +25,8 @@ import {
   ChevronUp,
   ArrowLeft,
   Calendar,
-  Clipboard
+  Clipboard,
+  Map
 } from 'lucide-react';
 import { useFrappePostCall, useFrappeGetDocList } from 'frappe-react-sdk';
 
@@ -181,11 +183,13 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
     value: string | number;
     className?: string;
   }) => (
-    <div className={`inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 sm:py-2.5 bg-card/60 border border-border rounded-xl leading-none ${className}`}>
-      <Icon className="w-4 h-4 text-foreground" />
-      <span className="inline-flex items-baseline gap-1 sm:gap-1.5 text-foreground text-xs sm:text-sm">
-        <span className="text-muted-foreground font-medium">{label}</span>
-        <span className="font-semibold">{value}</span>
+    <div className={`inline-flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-3.5 bg-gradient-to-r from-card/80 to-card/60 border border-border/50 rounded-xl shadow-sm hover:shadow-md transition-all duration-200 leading-none ${className}`}>
+      <div className="p-1.5 bg-primary/10 rounded-lg">
+        <Icon className="w-4 h-4 text-primary" />
+      </div>
+      <span className="inline-flex flex-col gap-0.5 text-foreground">
+        <span className="text-muted-foreground font-medium text-xs uppercase tracking-wide">{label}</span>
+        <span className="font-bold text-sm sm:text-base">{value}</span>
       </span>
     </div>
   );
@@ -198,38 +202,46 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
     
     return (
        <div className="space-y-4">
-         {/* Liste des bons de livraison */}
-         <div>
-           <h4 className="font-medium text-foreground mb-2">Bons de livraison:</h4>
-           <div className="space-y-1">
-             {repartition.bons_de_livraison?.map((bon: any, index: number) => (
-               <div key={`${keyPrefix}-bon-${index}`} className="p-2 bg-card/30 rounded border space-y-2">
-                 <div className="flex flex-col">
-                   {bon.customer && (
-                     <span className="font-semibold text-lg text-foreground">
-                       {customersMapping[bon.customer] || bon.customer}
-                     </span>
-                   )}
-                   <span className="text-sm font-mono text-muted-foreground">{bon.bon_de_livraison}</span>
-                 </div>
-                 <div className="flex flex-wrap items-center gap-2">
-                   <Badge 
-                      variant="outline" 
-                      className="bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 font-medium text-xs"
-                    >
-                      {bon.commune !== 'Non spécifiée' ? (communesMapping[bon.commune] || bon.commune) : 'Non spécifiée'}
-                    </Badge>
-                   <Badge 
-                     variant="outline" 
-                     className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 font-medium text-xs"
-                   >
-                     {bon.total_colis || bon.custom_nombre_colis || 0} colis
-                   </Badge>
-                 </div>
+         {/* Affichage par commune */}
+         {communes.map((commune, communeIndex) => {
+           const communeNom = commune !== 'Non spécifiée' ? (communesMapping[commune] || commune) : 'Non spécifiée';
+           const bonsDeCommune = repartition.bons_de_livraison?.filter((bon: any) => (bon.commune || 'Non spécifiée') === commune) || [];
+           
+           return (
+             <div key={`${keyPrefix}-commune-${communeIndex}`} className="space-y-2">
+               <div className="flex items-center gap-2">
+                 <Badge 
+                    variant="outline" 
+                    className="bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 font-medium text-sm px-3 py-1.5 rounded-lg"
+                  >
+                    {communeNom}
+                  </Badge>
                </div>
-             )) || []}
-           </div>
-         </div>
+               <div className="ml-4 space-y-1">
+                 {bonsDeCommune.map((bon: any, index: number) => (
+                   <div key={`${keyPrefix}-bon-${index}`} className="p-2 bg-card/20 rounded border-l-2 border-primary/30 space-y-1">
+                     <div className="flex flex-col">
+                       <span className="text-sm font-mono text-muted-foreground">{bon.bon_de_livraison}</span>
+                       {bon.customer && (
+                         <span className="font-medium text-foreground">
+                           {customersMapping[bon.customer] || bon.customer}
+                         </span>
+                       )}
+                     </div>
+                     <div className="flex flex-wrap items-center gap-2">
+                       <Badge 
+                         variant="outline" 
+                         className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 font-medium text-xs px-2.5 py-1 rounded-lg"
+                       >
+                         {bon.total_colis || bon.custom_nombre_colis || 0} colis
+                       </Badge>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           );
+         })}
        </div>
      );
   };
@@ -279,6 +291,17 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
 
     setIsLoading(true);
     try {
+      // Corriger automatiquement les charges avant la génération
+      try {
+        const correctionResult = await callCorrigerCharges({});
+        if (correctionResult?.message) {
+          console.log('Charges corrigées automatiquement:', correctionResult.message.message);
+        }
+      } catch (correctionError) {
+        console.warn('Erreur lors de la correction automatique des charges:', correctionError);
+        // On continue même si la correction échoue
+      }
+
       const result = await callRepartition({
         date_livraison: dateLivraison,
         mode: 'auto',
@@ -290,14 +313,18 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
         setCurrentData(result.message);
         setShowResults(true);
         
-        if (result.message.simulate && result.message.communes_data?.length > 0) {
+        if ((result.message.simulate && result.message.communes_data?.length > 0) || result.message.requires_manual_selection) {
           // Mode manuel nécessaire
           setShowManualInterface(true);
         }
       }
     } catch (error) {
       console.error('Erreur lors de la génération:', error);
-      showAlert('Erreur lors de la génération de la répartition', 'error');
+      const errorMessage = error instanceof Error ? error.message : 
+        (typeof error === 'object' && error !== null && 'message' in error) ? 
+        String(error.message) : 
+        'Erreur inconnue lors de la génération';
+      showAlert(`Erreur lors de la génération: ${errorMessage}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -330,7 +357,11 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       }
     } catch (error) {
       console.error('Erreur lors de la confirmation:', error);
-      showAlert('Erreur lors de la création des livraisons', 'error');
+      const errorMessage = error instanceof Error ? error.message : 
+        (typeof error === 'object' && error !== null && 'message' in error) ? 
+        String(error.message) : 
+        'Erreur inconnue lors de la confirmation';
+      showAlert(`Erreur lors de la confirmation: ${errorMessage}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -357,7 +388,11 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       }
     } catch (error) {
       console.error('Erreur lors de la synchronisation:', error);
-      showAlert('Erreur lors de la synchronisation', 'error');
+      const errorMessage = error instanceof Error ? error.message : 
+        (typeof error === 'object' && error !== null && 'message' in error) ? 
+        String(error.message) : 
+        'Erreur inconnue lors de la synchronisation';
+      showAlert(`Erreur lors de la synchronisation: ${errorMessage}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -378,14 +413,66 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
     setShowAlertModal(true);
   };
 
-  const appliquerAssignationsManuelles = () => {
-    setShowManualInterface(false);
-    genererRepartition();
+  const appliquerAssignationsManuelles = async () => {
+    // Validation des assignations
+    const communesRequises = currentData?.communes_data || [];
+    const assignationsManquantes = communesRequises.filter(
+      commune => !manualAssignments[commune.commune]
+    );
+    
+    if (assignationsManquantes.length > 0) {
+      showAlert(
+        `Veuillez assigner un livreur pour toutes les communes. ${assignationsManquantes.length} commune(s) non assignée(s).`,
+        'warning'
+      );
+      return;
+    }
+    
+    // Validation des capacités
+     const erreurs = [];
+     for (const commune of communesRequises) {
+       const livreurId = manualAssignments[commune.commune];
+       const livreur = commune.livreurs_disponibles?.find((l: any) => l.name === livreurId);
+      
+      if (livreur && (livreur.charge_actuelle + commune.nb_colis) > livreur.capacite_max) {
+        erreurs.push(`${commune.commune}: Capacité insuffisante pour ${livreur.nom_complet}`);
+      }
+    }
+    
+    if (erreurs.length > 0) {
+      showAlert(
+        `Erreurs de capacité détectées:\n${erreurs.join('\n')}`,
+        'error'
+      );
+      return;
+    }
+    
+    setIsLoading(true);
+    try {
+      const result = await callRepartition({
+        date_livraison: dateLivraison,
+        mode: 'manuel',
+        simulate: modeSimulation,
+        manual_assignments: manualAssignments
+      });
+      
+      if (result?.message) {
+        setCurrentData(result.message);
+        setShowManualInterface(false);
+        showAlert('Assignations manuelles appliquées avec succès', 'success');
+      }
+    } catch (error) {
+      console.error('Erreur lors de l\'application des assignations:', error);
+      showAlert('Erreur lors de l\'application des assignations manuelles', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const annulerAssignationsManuelles = () => {
     setManualAssignments({});
     setShowManualInterface(false);
+    showAlert('Assignations manuelles annulées', 'info');
   };
 
   const handleManualAssignment = (commune: string, livreurId: string) => {
@@ -393,26 +480,25 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       ...prev,
       [commune]: livreurId
     }));
-  };
-
-  const corrigerChargesLivreurs = async () => {
-    setIsLoading(true);
-    try {
-      const result = await callCorrigerCharges({});
-      if (result?.message) {
-        showAlert(`Charges corrigées: ${result.message.message}`, 'success');
-        // Régénérer la répartition pour voir les nouveaux pourcentages
-        if (showResults) {
-          genererRepartition();
+    
+    // Validation en temps réel
+     if (livreurId && currentData?.communes_data) {
+       const communeData = currentData.communes_data.find((c: any) => c.commune === commune);
+       const livreur = communeData?.livreurs_disponibles?.find((l: any) => l.name === livreurId);
+      
+      if (livreur && communeData) {
+        const nouvelleCharge = livreur.charge_actuelle + communeData.nb_colis;
+        if (nouvelleCharge > livreur.capacite_max) {
+          showAlert(
+            `Attention: ${livreur.nom_complet} dépassera sa capacité (${nouvelleCharge}/${livreur.capacite_max})`,
+            'warning'
+          );
         }
       }
-    } catch (error) {
-      console.error('Erreur lors de la correction des charges:', error);
-      showAlert('Erreur lors de la correction des charges', 'error');
-    } finally {
-      setIsLoading(false);
     }
   };
+
+
 
   const formatAmount = (amount: number | undefined) => {
     if (!amount) return '0,00 DZD';
@@ -455,161 +541,249 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-2 sm:px-4 pt-6 pb-8">
+      <div className="max-w-6xl mx-auto px-2 sm:px-4 pt-8 pb-8">
 
         {/* Paramètres de répartition */}
-        <Card className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden p-3 sm:p-6">
-        <div className="space-y-4">
-            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-foreground">
-              <Play className="h-5 w-5 text-primary" />
-              Paramètres de Répartition
-            </h2>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label htmlFor="date_livraison" className="text-sm font-medium">
-                Date de livraison
-              </label>
-              <Input
-                id="date_livraison"
-                type="date"
-                value={dateLivraison}
-                onChange={(e) => setDateLivraison(e.target.value)}
-                className="w-full"
-              />
+        <Card className="bg-card rounded-2xl border border-border shadow-lg p-4 sm:p-6">
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-lg sm:text-xl font-semibold text-foreground">
+                  Paramètres de Répartition
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Configurez les paramètres pour la génération des livraisons
+                </p>
+              </div>
             </div>
-            
+          
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-3">
+                <label htmlFor="date_livraison" className="text-sm font-medium text-foreground block">
+                  Date de livraison
+                </label>
+                <DatePicker
+                  value={dateLivraison}
+                  onChange={(date) => setDateLivraison(date)}
+                  className="w-full px-4 py-3 rounded-xl border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                  placeholder="Sélectionner une date de livraison"
+                />
+              </div>
+            </div>
 
-          </div>
-
-          <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4">
-            <Button 
-              onClick={genererRepartition} 
-              disabled={isLoading}
-              className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-all duration-200 hover:shadow-xl"
-            >
-              {isLoading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              {isLoading ? 'Génération en cours...' : 'Générer Aperçu'}
-            </Button>
-            
-            {showResults && currentData?.simulate && (
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-2">
               <Button 
-                onClick={confirmerRepartition}
+                onClick={genererRepartition} 
+                disabled={isLoading}
                 variant="default"
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white shadow-lg transition-all duration-200 hover:shadow-xl"
+                size="default"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all hover:shadow-lg"
+              >
+                {isLoading ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {isLoading ? 'Génération en cours...' : 'Générer Aperçu'}
+              </Button>
+              
+              {showResults && currentData?.simulate && (
+                <Button 
+                  onClick={confirmerRepartition}
+                  variant="default"
+                  size="default"
+                  className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all hover:shadow-lg bg-green-600 hover:bg-green-700 text-white"
+                  disabled={isLoading}
+                >
+                  <Check className="h-4 w-4" />
+                  Créer les Livraisons
+                </Button>
+              )}
+              
+              <Button 
+                onClick={resetInterface}
+                variant="secondary"
+                size="default"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all hover:shadow-md"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Reset
+              </Button>
+              
+              <Button 
+                onClick={synchroniserLivraisons}
+                variant="outline"
+                size="default"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all hover:shadow-md border-border hover:border-primary/50"
                 disabled={isLoading}
               >
-                <Check className="h-4 w-4" />
-                Créer les Livraisons
+                <RotateCcw className="h-4 w-4" />
+                Synchroniser
               </Button>
-            )}
-            
-            <Button 
-              onClick={resetInterface}
-              variant="secondary"
-              className="flex items-center gap-2 bg-card hover:bg-accent text-foreground border-border shadow-md transition-all duration-200 hover:shadow-lg"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Reset
-            </Button>
-            
-            <Button 
-              onClick={synchroniserLivraisons}
-              variant="outline"
-              className="flex items-center gap-2 bg-card hover:bg-accent text-foreground border-border shadow-md transition-all duration-200 hover:shadow-lg"
-              disabled={isLoading}
-            >
-              <RotateCcw className="h-4 w-4" />
-              Synchroniser
-            </Button>
-            
-            <Button 
-              onClick={corrigerChargesLivreurs}
-              disabled={isLoading}
-              variant="outline"
-              className="flex items-center gap-2 bg-red-500/10 border-red-500/20 text-red-600 hover:bg-red-500/20 shadow-md transition-all duration-200 hover:shadow-lg"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Corriger Charges
-            </Button>
+            </div>
           </div>
-        </div>
         </Card>
 
         {/* Interface manuelle */}
         {showManualInterface && currentData?.communes_data && (
-          <Card className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden p-3 sm:p-6">
-          <div className="space-y-4">
-            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-foreground">
-              <Users className="h-5 w-5 text-primary" />
-              Attribution Manuelle par Commune
-            </h2>
-            
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Certaines communes nécessitent une attribution manuelle. Veuillez sélectionner un livreur pour chaque commune.
-              </AlertDescription>
-            </Alert>
-
-            <div className="space-y-4">
-              {currentData.communes_data.map((commune: any, index: number) => {
-                const communeNom = communesMapping[commune.commune] || commune.commune;
-                return (
-                <div key={index} className="border rounded-lg p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
-                    <h3 className="font-semibold">{communeNom}</h3>
-                    <Badge variant="outline" className="text-xs w-fit">
-                      {commune.bons_livraison?.length || 0} bon(s)
-                    </Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium mb-2 block">
-                        Sélectionner un livreur
-                      </label>
-                      <select
-                        className="w-full p-2 border rounded-md"
-                        value={manualAssignments[commune.commune] || ''}
-                        onChange={(e) => handleManualAssignment(commune.commune, e.target.value)}
-                      >
-                        <option value="">-- Choisir un livreur --</option>
-                        {commune.livreurs_disponibles?.map((livreur: any) => (
-                          <option 
-                            key={livreur.name} 
-                            value={livreur.name}
-                            disabled={livreur.charge_actuelle >= livreur.capacite_max}
-                          >
-                            {livreur.nom_complet} - {livreur.vehicule} 
-                            ({livreur.charge_actuelle}/{livreur.capacite_max})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    
-                    <div className="text-sm text-muted-foreground">
-                      <p className="font-medium mb-2">Bons de livraison:</p>
-                      <ExpandableBonsList 
-                        bons={commune.bons_livraison || []} 
-                        maxDisplay={3} 
-                        keyPrefix={`manual-bons-${commune.commune}`} 
-                      />
-                    </div>
-                  </div>
+          <Card className="bg-card rounded-2xl border border-border shadow-lg overflow-hidden p-4 sm:p-6 mt-8">
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Users className="h-5 w-5 text-primary" />
                 </div>
-                );
+                <div>
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">
+                    Attribution Manuelle par Commune
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Sélectionnez un livreur pour chaque commune nécessitant une attribution manuelle
+                  </p>
+                </div>
+              </div>
+              
+              <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-amber-800 dark:text-amber-200">
+                  Certaines communes nécessitent une attribution manuelle. Veuillez sélectionner un livreur pour chaque commune.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-6">
+                {currentData.communes_data.map((commune: any, index: number) => {
+                  const communeNom = communesMapping[commune.commune] || commune.commune;
+                  return (
+                    <Card key={index} className="border border-border/50 bg-card/30 p-4 sm:p-5">
+                      <div className="space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                              <Map className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-foreground text-base">{communeNom}</h3>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <span>{commune.nb_colis} colis à assigner</span>
+                                {commune.bons_livraison && commune.bons_livraison.length > 0 && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-mono text-xs">{commune.bons_livraison[0].bon_de_livraison}</span>
+                                    {commune.bons_livraison[0].customer && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="font-medium">
+                                          {customersMapping[commune.bons_livraison[0].customer] || commune.bons_livraison[0].customer}
+                                        </span>
+                                      </>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                              {commune.bons_livraison?.length || 0} bon(s)
+                            </Badge>
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                              {commune.nb_colis} colis
+                            </Badge>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          <div className="space-y-3">
+                            <label className="text-sm font-medium text-foreground block">
+                              Sélectionner un livreur
+                            </label>
+                            <div className="relative">
+                              <select
+                                className={`w-full px-4 py-3 bg-background border rounded-xl text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary appearance-none ${
+                                  manualAssignments[commune.commune] 
+                                    ? 'border-green-300 bg-green-50/50 dark:border-green-700 dark:bg-green-900/10' 
+                                    : 'border-border hover:border-border/80'
+                                }`}
+                                value={manualAssignments[commune.commune] || ''}
+                                onChange={(e) => handleManualAssignment(commune.commune, e.target.value)}
+                              >
+                                <option value="" className="text-muted-foreground">
+                                  -- Choisir un livreur --
+                                </option>
+                                {commune.livreurs_disponibles?.map((livreur: any) => {
+                                  const nouvelleCharge = livreur.charge_actuelle + commune.nb_colis;
+                                  const depasseCapacite = nouvelleCharge > livreur.capacite_max;
+                                  const tauxCharge = (livreur.charge_actuelle / livreur.capacite_max) * 100;
+                                  
+                                  return (
+                                    <option 
+                                      key={livreur.name} 
+                                      value={livreur.name}
+                                      disabled={livreur.charge_actuelle >= livreur.capacite_max}
+                                      className={`py-2 ${
+                                        depasseCapacite ? 'text-red-600' : 
+                                        tauxCharge > 80 ? 'text-amber-600' : 
+                                        'text-green-600'
+                                      }`}
+                                    >
+                                      {livreur.nom_complet} - {livreur.vehicule} ({livreur.charge_actuelle}/{livreur.capacite_max})
+                                      {depasseCapacite && ' ⚠️ Dépassement'}
+                                      {!depasseCapacite && tauxCharge > 80 && ' ⚡ Presque plein'}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                            </div>
+                            
+                            {/* Indicateur de statut pour la commune */}
+                            {manualAssignments[commune.commune] && (
+                              <div className="mt-2 text-xs">
+                                {(() => {
+                                  const livreurSelectionne = commune.livreurs_disponibles?.find(
+                                    (l: any) => l.name === manualAssignments[commune.commune]
+                                  );
+                                  if (!livreurSelectionne) return null;
+                                  
+                                  const nouvelleCharge = livreurSelectionne.charge_actuelle + commune.nb_colis;
+                                  const depasseCapacite = nouvelleCharge > livreurSelectionne.capacite_max;
+                                  
+                                  if (depasseCapacite) {
+                                    return (
+                                      <div className="flex items-center gap-1 text-red-600">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        <span>Capacité dépassée ({nouvelleCharge}/{livreurSelectionne.capacite_max})</span>
+                                      </div>
+                                    );
+                                  } else {
+                                    return (
+                                      <div className="flex items-center gap-1 text-green-600">
+                                        <Check className="h-3 w-3" />
+                                        <span>Assignation valide ({nouvelleCharge}/{livreurSelectionne.capacite_max})</span>
+                                      </div>
+                                    );
+                                  }
+                                })()} 
+                              </div>
+                            )}
+                          </div>
+                          
+                          
+                        </div>
+                      </div>
+                    </Card>
+                  );
               })}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+            <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-border/50">
               <Button 
                 onClick={appliquerAssignationsManuelles}
-                className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg transition-all duration-200 hover:shadow-xl"
+                variant="default"
+                size="default"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all hover:shadow-lg bg-green-600 hover:bg-green-700 text-white"
               >
                 <Save className="h-4 w-4" />
                 Appliquer Assignations
@@ -618,7 +792,8 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
               <Button 
                 onClick={annulerAssignationsManuelles}
                 variant="secondary"
-                className="flex items-center gap-2 bg-card hover:bg-accent text-foreground border-border shadow-md transition-all duration-200 hover:shadow-lg"
+                size="default"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all hover:shadow-md"
               >
                 <X className="h-4 w-4" />
                 Annuler
@@ -630,16 +805,25 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
 
         {/* Résultats */}
         {showResults && currentData && (
-          <Card className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden p-3 sm:p-6">
-          <div className="space-y-4">
-            <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2 text-foreground">
-              <List className="h-5 w-5 text-primary" />
-              {currentData.simulate ? 'Aperçu de la Répartition' : 'Résultats de la Répartition'}
-            </h2>
+          <Card className="bg-card rounded-2xl border border-border shadow-lg overflow-hidden p-4 sm:p-6 mt-8">
+            <div className="space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <List className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg sm:text-xl font-semibold text-foreground">
+                    {currentData.simulate ? 'Aperçu de la Répartition' : 'Résultats de la Répartition'}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {currentData.simulate ? 'Prévisualisation des livraisons à créer' : 'Livraisons créées avec succès'}
+                  </p>
+                </div>
+              </div>
 
-            {/* Résumé */}
-            <div className="bg-card/50 rounded-2xl border border-border shadow-2xl p-4 mb-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {/* Résumé */}
+              <div className="bg-gradient-to-r from-card/60 to-card/40 rounded-2xl border border-border/50 shadow-sm p-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <MetaChip 
                   icon={List} 
                   label="Bons" 
@@ -647,8 +831,21 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
                 />
                 <MetaChip 
                   icon={Package} 
-                  label="Colis" 
+                  label="Articles" 
                   value={Object.values(currentData.repartition || {}).reduce((total: number, rep: any) => total + (rep.total_colis || 0), 0)} 
+                />
+                <MetaChip 
+                  icon={Map} 
+                  label="Communes" 
+                  value={(() => {
+                    const allCommunes = new Set();
+                    Object.values(currentData.repartition || {}).forEach((rep: any) => {
+                      rep.bons_de_livraison?.forEach((bon: any) => {
+                        allCommunes.add(bon.commune || 'Non spécifiée');
+                      });
+                    });
+                    return allCommunes.size;
+                  })()} 
                 />
                 <MetaChip 
                   icon={Users} 
@@ -660,12 +857,24 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
 
             {/* Répartition détaillée */}
             {currentData.repartition && Object.keys(currentData.repartition).length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-base sm:text-lg font-semibold text-foreground">Répartition par Livreur</h3>
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <User className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-semibold text-foreground">
+                      Répartition par Livreur
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Détail des assignations par livreur
+                    </p>
+                  </div>
+                </div>
                 
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {Object.entries(currentData.repartition).map(([livreurNom, repartition]: [string, any]) => (
-                    <Card key={livreurNom} className="p-4">
+                    <Card key={livreurNom} className="border border-border/50 bg-card/30 p-5 hover:shadow-md transition-all duration-200">
                       <div className="mb-3">
                         <div className="flex items-center gap-2 mb-3">
                           <User className="h-5 w-5 text-primary" />
@@ -673,12 +882,12 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
                         </div>
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                           <div className="flex flex-wrap items-center gap-2">
-                             <Badge variant="outline" className="text-xs">{repartition.total_colis} colis</Badge>
-                             <Badge variant="outline" className="text-xs">{repartition.communes?.length || 0} commune(s)</Badge>
-                             <Badge variant="outline" className="text-xs">{repartition.total_bons} bon(s)</Badge>
+                             <Badge variant="outline" className="text-xs font-medium px-2.5 py-1 rounded-lg bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">{repartition.total_colis} colis</Badge>
+                             <Badge variant="outline" className="text-xs font-medium px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">{repartition.communes?.length || 0} commune(s)</Badge>
+                             <Badge variant="outline" className="text-xs font-medium px-2.5 py-1 rounded-lg bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">{repartition.total_bons} bon(s)</Badge>
                              <Badge 
                                variant="outline" 
-                               className={`${getChargeColor(repartition.taux_charge)} font-medium text-xs`}
+                               className={`${getChargeColor(repartition.taux_charge)} font-medium text-xs px-2.5 py-1 rounded-lg`}
                              >
                                {repartition.taux_charge}% charge
                              </Badge>

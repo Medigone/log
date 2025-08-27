@@ -6,7 +6,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Search as SearchIcon,
   AlertTriangle as AlertTriangleIcon,
-  Dot as DotIcon
+  Dot as DotIcon,
+  Truck
 } from 'lucide-react';
 import { useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
 
@@ -25,12 +26,17 @@ interface LivraisonColis {
 interface LivraisonBonDeLivraison {
   name: string;
   bon_de_livraison: string;
+  customer?: string;
+  custom_date_de_livraison?: string;
   custom_commune?: string;
+  custom_wilaya?: string;
   custom_nom_livreur?: string;
   custom_vehicule?: string;
   custom_nombre_colis?: number;
   grand_total?: number;
   total_qty?: number;
+  status?: string;
+  type?: string;
 }
 
 interface Livraison {
@@ -51,6 +57,7 @@ interface Livraison {
 
 interface LivraisonsListProps {
   onLivraisonSelect?: (livraisonId: string) => void;
+  onGenerateClick?: () => void;
 }
 
 
@@ -182,25 +189,36 @@ function MetaChip({
 /* =========================
    Component
    ========================= */
-const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
+const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [livreurFilter, setLivreurFilter] = useState('');
+  const [vehiculeFilter, setVehiculeFilter] = useState('');
   const [pageLimitStart, setPageLimitStart] = useState(0);
   const [livraisonsWithDetails, setLivraisonsWithDetails] = useState<Livraison[]>([]);
   const [statusFilterOpen, setStatusFilterOpen] = useState(false);
+  const [livreurFilterOpen, setLivreurFilterOpen] = useState(false);
+  const [vehiculeFilterOpen, setVehiculeFilterOpen] = useState(false);
 
-  // Filtres pour les livraisons
+  // Filtres pour les livraisons (sans le filtre bon de livraison côté serveur)
   const filters = useMemo(() => {
-    const f: [string, string, string][] = [];
+    const f: any[] = [];
     if (statusFilter && statusFilter !== 'all') {
       f.push(['status', '=', statusFilter]);
     }
-    // Supprimer la recherche côté serveur pour éviter les rechargements
-    // if (debouncedSearchTerm) {
-    //   f.push(['name', 'like', `%${debouncedSearchTerm}%`]);
-    // }
+    if (dateFilter) {
+      f.push(['date_liv', '=', dateFilter]);
+    }
+    if (livreurFilter && livreurFilter !== 'all') {
+      f.push(['livreur', '=', livreurFilter]);
+    }
+    if (vehiculeFilter && vehiculeFilter !== 'all') {
+      f.push(['vehicule', '=', vehiculeFilter]);
+    }
+    // Le filtre bon de livraison sera appliqué côté client
     return f;
-  }, [statusFilter]);
+  }, [statusFilter, dateFilter, livreurFilter, vehiculeFilter]);
 
   // Récupération des livraisons
   const { data: livraisonsData, mutate: mutateLivraisons, error, isLoading } = useFrappeGetDocList<Livraison>('Livraison', {
@@ -226,28 +244,64 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
     }
   });
 
-  // Récupération des colis pour toutes les livraisons
-  const { data: colisData, mutate: mutateAllColis } = useFrappeGetDocList<{
-    name: string;
-    custom_numero_sequence?: string;
-    status: string;
-    client?: string;
-    date_creation?: string;
-    bl?: string;
-    articles?: string;
-  }>('Colis', {
-    fields: [
-      'name',
-      'custom_numero_sequence',
-      'status',
-      'client',
-      'date_creation',
-      'bl',
-      'articles'
-    ],
-    filters: livraisonsData ? [['bl', 'in', livraisonsData.map(l => l.name)]] : [],
-    limit: 1000
-  });
+  // Effet pour recharger les données quand les filtres côté serveur changent
+  useEffect(() => {
+    mutateLivraisons();
+  }, [pageLimitStart, statusFilter, dateFilter, livreurFilter, vehiculeFilter, mutateLivraisons]);
+
+  // Récupération des colis pour toutes les livraisons (temporairement désactivée)
+  const colisData: any[] = [];
+  const mutateAllColis = () => {};
+  
+  // const { data: colisData, mutate: mutateAllColis } = useFrappeGetDocList<{
+  //   name: string;
+  //   custom_numero_sequence?: string;
+  //   status: string;
+  //   client?: string;
+  //   date_creation?: string;
+  //   bl?: string;
+  //   articles?: string;
+  // }>('Colis', {
+  //   fields: [
+  //     'name',
+  //     'custom_numero_sequence',
+  //     'status',
+  //     'client',
+  //     'date_creation',
+  //     'bl',
+  //     'articles'
+  //   ],
+  //   filters: livraisonsData && livraisonsData.length > 0 ? [['bl', 'in', livraisonsData.map(l => l.name)]] : [['bl', '=', 'dummy_value_to_prevent_error']],
+  //   limit: 1000
+  // });
+
+  // Récupération des bons de livraison pour toutes les livraisons (temporairement désactivée)
+  const bonsLivraisonData: any[] = [];
+  const mutateBonsLivraison = () => {};
+  
+  // const { data: bonsLivraisonData, mutate: mutateBonsLivraison } = useFrappeGetDocList<{
+  //   name: string;
+  //   parent: string;
+  //   bon_de_livraison: string;
+  //   customer?: string;
+  //   custom_date_de_livraison?: string;
+  //   total_qty?: number;
+  //   grand_total?: number;
+  //   status?: string;
+  // }>('Livraison Bon de Livraison', {
+  //   fields: [
+  //     'name',
+  //     'parent',
+  //     'bon_de_livraison',
+  //     'customer',
+  //     'custom_date_de_livraison',
+  //     'total_qty',
+  //     'grand_total',
+  //     'status'
+  //   ],
+  //   filters: livraisonsData && livraisonsData.length > 0 ? [['parent', 'in', livraisonsData.map(l => l.name)]] : [['parent', '=', 'dummy_value_to_prevent_error']],
+  //   limit: 1000
+  // });
 
   // Récupération des véhicules pour mapper les IDs aux noms
   const { data: vehiculesData } = useFrappeGetDocList<{
@@ -289,21 +343,26 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
     mutateLivraisons();
   });
 
-  useFrappeDocTypeEventListener('Colis', () => {
-    mutateAllColis();
-  });
+  // Temporairement désactivé
+  // useFrappeDocTypeEventListener('Colis', () => {
+  //   mutateAllColis();
+  // });
+
+  // useFrappeDocTypeEventListener('Livraison Bon de Livraison', () => {
+  //   mutateBonsLivraison();
+  // });
 
   // Combiner les livraisons avec leurs données enfants
   useEffect(() => {
-    if (livraisonsData && colisData) {
+    if (livraisonsData) {
       const enriched = livraisonsData.map(livraison => {
-        console.log("Status from API:", livraison.status);
-        const livraisonColis = colisData.filter(colis => colis.bl === livraison.name);
+        const livraisonColis = colisData ? colisData.filter(colis => colis.bl === livraison.name) : [];
+        const livraisonBons = bonsLivraisonData ? bonsLivraisonData.filter(bon => bon.parent === livraison.name) : [];
         
         return {
           ...livraison,
           colis: livraisonColis,
-          bons_de_livraison: []
+          bons_de_livraison: livraisonBons
         };
       });
       
@@ -315,15 +374,53 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
           numero_sequence: colis.custom_numero_sequence,
           client: colis.client,
           status: colis.status
+        })),
+        bons_de_livraison: livraison.bons_de_livraison.map(bon => ({
+          name: bon.name,
+          bon_de_livraison: bon.bon_de_livraison,
+          customer: bon.customer,
+          custom_date_de_livraison: bon.custom_date_de_livraison,
+          total_qty: bon.total_qty,
+          grand_total: bon.grand_total,
+          status: bon.status
         }))
       })));
     }
-  }, [livraisonsData, colisData]);
+  }, [livraisonsData, colisData, bonsLivraisonData]);
 
-  const filteredLivraisons = livraisonsWithDetails.filter(livraison => 
-    livraison.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredLivraisons = livraisonsWithDetails.filter(livraison => {
+    // Filtre par terme de recherche (recherche dans le nom de la livraison)
+    const matchesSearch = !searchTerm || livraison.name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesSearch;
+  });
 
+  // Fonction pour regrouper les livraisons par date
+  const groupLivraisonsByDate = (livraisons: any[]) => {
+    const groups: { [key: string]: any[] } = {};
+    
+    livraisons.forEach(livraison => {
+      const dateKey = livraison.date_liv || 'Sans date';
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(livraison);
+    });
+    
+    // Trier les dates (plus récentes en haut)
+    const sortedDates = Object.keys(groups).sort((a, b) => {
+      if (a === 'Sans date') return 1;
+      if (b === 'Sans date') return -1;
+      return new Date(b).getTime() - new Date(a).getTime();
+    });
+    
+    return sortedDates.map(date => ({
+      date,
+      livraisons: groups[date]
+    }));
+  };
+
+  const groupedLivraisons = groupLivraisonsByDate(filteredLivraisons);
   const finalFilteredLivraisons = filteredLivraisons;
 
   if (isLoading)
@@ -367,6 +464,14 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
                 label="Total"
                 value={finalFilteredLivraisons.length}
               />
+              <Button 
+                variant="default" 
+                onClick={onGenerateClick || (() => window.location.href = '/app/generation-livraisons')}
+                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white border-slate-600 shadow-lg transition-all duration-200 hover:shadow-xl"
+              >
+                <Truck className="h-4 w-4" />
+                Générer Livraisons
+              </Button>
             </div>
           </div>
         </div>
@@ -381,7 +486,19 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
         </div>
 
         {/* Filtres */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2">
+              Date de livraison
+            </label>
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="h-8"
+            />
+          </div>
+          
           <div>
             <label className="block text-sm text-muted-foreground mb-2">
               Recherche
@@ -399,128 +516,283 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
           </div>
           
           <div>
-              <label className="block text-sm text-muted-foreground mb-2">
-                Statut
-              </label>
-              <div className="relative" data-select-container>
-                <button
-                  onClick={() => setStatusFilterOpen(!statusFilterOpen)}
-                  className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
-                >
-                  <span>
-                    {statusFilter === "all" ? "Tous les statuts" : 
-                     statusFilter === "Nouveau" ? "Nouveau" :
-                     statusFilter === "Préparé" ? "Préparé" :
-                     statusFilter === "Partiellement Préparé" ? "Partiellement Préparé" :
-                     statusFilter === "Enlevé" ? "Enlevé" :
-                     statusFilter === "Partiellement Enlevé" ? "Partiellement Enlevé" :
-                     statusFilter === "Partiellement Livré" ? "Partiellement Livré" :
-                     statusFilter === "Livré" ? "Livré" :
-                     statusFilter === "Annulé" ? "Annulé" : "Tous les statuts"}
-                  </span>
-                  <span className="text-xs">▼</span>
-                </button>
-                
-                {statusFilterOpen && (
-                  <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
-                    {[
-                      { value: "all", label: "Tous les statuts" },
-                      { value: "Nouveau", label: "Nouveau" },
-                      { value: "Préparé", label: "Préparé" },
-                      { value: "Partiellement Préparé", label: "Partiellement Préparé" },
-                      { value: "Enlevé", label: "Enlevé" },
-                      { value: "Partiellement Enlevé", label: "Partiellement Enlevé" },
-                      { value: "Partiellement Livré", label: "Partiellement Livré" },
-                      { value: "Livré", label: "Livré" },
-                      { value: "Annulé", label: "Annulé" },
-                    ].map((option) => (
-                      <div
-                        key={option.value}
-                        onClick={() => {
-                          setStatusFilter(option.value);
-                          setStatusFilterOpen(false);
-                        }}
-                        className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
-                          statusFilter === option.value ? 'bg-accent' : 'bg-card'
-                        }`}
-                      >
-                        {option.label}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-        </div>
-
-        {/* Titre de la section */}
-        <div className="px-4 py-3">
-          <h2 className="text-lg font-medium text-foreground">Liste des livraisons</h2>
-        </div>
-
-        {/* Liste des livraisons en cartes */}
-        <div className="space-y-4">
-          {finalFilteredLivraisons.length > 0 ? (
-            finalFilteredLivraisons.map((livraison) => (
-              <div 
-                key={livraison.name}
-                className="bg-card/50 rounded-xl border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
+            <label className="block text-sm text-muted-foreground mb-2">
+              Statut
+            </label>
+            <div className="relative" data-select-container>
+              <button
+                onClick={() => setStatusFilterOpen(!statusFilterOpen)}
+                className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
               >
-                {/* En-tête de la livraison - Cliquable */}
-                <div 
-                  className="p-4 cursor-pointer hover:bg-accent/30 transition-colors duration-200"
-                  onClick={() => onLivraisonSelect?.(livraison.name)}
-                >
-                  <div className="mb-4">
-                    {/* Titre de la livraison avec badge statut */}
-                    <div className="mb-3 flex items-center justify-between">
-                      <h3 className="text-base font-bold text-foreground">
-                        {livraison.name}
-                      </h3>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {livraison.total_colis || 0} colis
-                        </span>
-                        <StatusBadge
-                          text={livraison.status}
-                          tone={statusToColor(livraison.status)}
-                        />
-                      </div>
+                <span>
+                  {statusFilter === "all" ? "Tous les statuts" : 
+                   statusFilter === "Nouveau" ? "Nouveau" :
+                   statusFilter === "Préparé" ? "Préparé" :
+                   statusFilter === "Partiellement Préparé" ? "Partiellement Préparé" :
+                   statusFilter === "Enlevé" ? "Enlevé" :
+                   statusFilter === "Partiellement Enlevé" ? "Partiellement Enlevé" :
+                   statusFilter === "Partiellement Livré" ? "Partiellement Livré" :
+                   statusFilter === "Livré" ? "Livré" :
+                   statusFilter === "Annulé" ? "Annulé" : "Tous les statuts"}
+                </span>
+                <span className="text-xs">▼</span>
+              </button>
+              
+              {statusFilterOpen && (
+                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                  {[
+                    { value: "all", label: "Tous les statuts" },
+                    { value: "Nouveau", label: "Nouveau" },
+                    { value: "Préparé", label: "Préparé" },
+                    { value: "Partiellement Préparé", label: "Partiellement Préparé" },
+                    { value: "Enlevé", label: "Enlevé" },
+                    { value: "Partiellement Enlevé", label: "Partiellement Enlevé" },
+                    { value: "Partiellement Livré", label: "Partiellement Livré" },
+                    { value: "Livré", label: "Livré" },
+                    { value: "Annulé", label: "Annulé" },
+                  ].map((option) => (
+                    <div
+                      key={option.value}
+                      onClick={() => {
+                        setStatusFilter(option.value);
+                        setStatusFilterOpen(false);
+                      }}
+                      className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
+                        statusFilter === option.value ? 'bg-accent' : 'bg-card'
+                      }`}
+                    >
+                      {option.label}
                     </div>
-                    
-                    {/* Informations date */}
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                      <div className="mt-1">
-                        <span className="text-xs text-muted-foreground">
-                          Date de livraison : {formatDate(livraison.date_liv)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
-                  {/* Détails de la livraison - Toujours visible */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 pb-2 border-t border-border mb-2">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Livreur</span>
-                      <span className="text-sm text-foreground">
-                        {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : '—'}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Véhicule</span>
-                      <span className="text-sm text-foreground">
-                        {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : '—'}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Nombre de colis</span>
-                      <span className="text-sm text-foreground">{livraison.total_colis || 0}</span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">Montant total</span>
-                      <span className="text-sm text-foreground">{formatAmount(livraison.total_montant_a_encaisser)}</span>
-                    </div>
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2">
+              Livreur
+            </label>
+            <div className="relative" data-select-container>
+              <button
+                onClick={() => setLivreurFilterOpen(!livreurFilterOpen)}
+                className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
+              >
+                <span>
+                  {livreurFilter === "all" || !livreurFilter ? "Tous les livreurs" : 
+                   livreursMapping[livreurFilter] || livreurFilter}
+                </span>
+                <span className="text-xs">▼</span>
+              </button>
+              
+              {livreurFilterOpen && (
+                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                  <div
+                    onClick={() => {
+                      setLivreurFilter("all");
+                      setLivreurFilterOpen(false);
+                    }}
+                    className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
+                      livreurFilter === "all" || !livreurFilter ? 'bg-accent' : 'bg-card'
+                    }`}
+                  >
+                    Tous les livreurs
                   </div>
+                  {livreursData?.map((livreur) => (
+                    <div
+                      key={livreur.name}
+                      onClick={() => {
+                        setLivreurFilter(livreur.name);
+                        setLivreurFilterOpen(false);
+                      }}
+                      className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
+                        livreurFilter === livreur.name ? 'bg-accent' : 'bg-card'
+                      }`}
+                    >
+                      {livreur.nom}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2">
+              Véhicule
+            </label>
+            <div className="relative" data-select-container>
+              <button
+                onClick={() => setVehiculeFilterOpen(!vehiculeFilterOpen)}
+                className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
+              >
+                <span>
+                  {vehiculeFilter === "all" || !vehiculeFilter ? "Tous les véhicules" : 
+                   vehiculesMapping[vehiculeFilter] || vehiculeFilter}
+                </span>
+                <span className="text-xs">▼</span>
+              </button>
+              
+              {vehiculeFilterOpen && (
+                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                  <div
+                    onClick={() => {
+                      setVehiculeFilter("all");
+                      setVehiculeFilterOpen(false);
+                    }}
+                    className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
+                      vehiculeFilter === "all" || !vehiculeFilter ? 'bg-accent' : 'bg-card'
+                    }`}
+                  >
+                    Tous les véhicules
+                  </div>
+                  {vehiculesData?.map((vehicule) => (
+                    <div
+                      key={vehicule.name}
+                      onClick={() => {
+                        setVehiculeFilter(vehicule.name);
+                        setVehiculeFilterOpen(false);
+                      }}
+                      className={`px-3 py-2 cursor-pointer text-foreground border-b border-border transition-colors hover:bg-accent ${
+                        vehiculeFilter === vehicule.name ? 'bg-accent' : 'bg-card'
+                      }`}
+                    >
+                      {vehicule.nom}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2">
+              &nbsp;
+            </label>
+            <button
+              onClick={() => {
+                setSearchTerm("");
+                setStatusFilter("all");
+                setDateFilter("");
+                setLivreurFilter("all");
+                setVehiculeFilter("all");
+              }}
+              className="w-full px-3 py-2 text-sm bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors h-8 flex items-center justify-center"
+            >
+              Réinitialiser les filtres
+            </button>
+          </div>
+
+        </div>
+
+
+
+        {/* Liste des livraisons regroupées par date */}
+        <div className="space-y-6">
+          {groupedLivraisons.length > 0 ? (
+            groupedLivraisons.map((group) => (
+              <div key={group.date} className="space-y-4">
+                {/* En-tête de date */}
+                <div className="flex items-center gap-3 px-2">
+                  <h3 className="text-lg font-semibold text-foreground">
+                    {group.date === 'Sans date' ? 'Sans date de livraison' : formatDate(group.date)}
+                  </h3>
+                  <div className="flex-1 h-px bg-border"></div>
+                  <span className="text-sm text-muted-foreground">
+                    {group.livraisons.length} livraison{group.livraisons.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                
+                {/* Livraisons du groupe */}
+                <div className="space-y-4">
+                  {group.livraisons.map((livraison) => (
+                    <div 
+                      key={livraison.name}
+                      className="bg-card/50 rounded-xl border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
+                    >
+                      {/* En-tête de la livraison - Cliquable */}
+                      <div 
+                        className="p-4 cursor-pointer hover:bg-accent/30 transition-colors duration-200"
+                        onClick={() => onLivraisonSelect?.(livraison.name)}
+                      >
+                        <div className="mb-4">
+                          {/* Titre de la livraison avec badge statut */}
+                          <div className="mb-3 flex items-center justify-between">
+                            <h4 className="text-base font-bold text-foreground">
+                              {livraison.name}
+                            </h4>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {livraison.total_colis || 0} colis
+                              </span>
+                              <StatusBadge
+                                text={livraison.status}
+                                tone={statusToColor(livraison.status)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Détails de la livraison - Toujours visible */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 pb-2 border-t border-border mb-2">
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">Livreur</span>
+                            <span className="text-sm text-foreground">
+                              {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : '—'}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">Véhicule</span>
+                            <span className="text-sm text-foreground">
+                              {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : '—'}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">Nombre de colis</span>
+                            <span className="text-sm text-foreground">{livraison.total_colis || 0}</span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs text-muted-foreground">Montant total</span>
+                            <span className="text-sm text-foreground">{formatAmount(livraison.total_montant_a_encaisser)}</span>
+                          </div>
+                        </div>
+
+                        {/* Bons de livraison associés */}
+                        {livraison.bons_de_livraison && livraison.bons_de_livraison.length > 0 && (
+                          <div className="pt-2 border-t border-border">
+                            <span className="text-xs text-muted-foreground mb-2 block">Bons de livraison :</span>
+                            <div className="flex flex-wrap gap-2">
+                              {livraison.bons_de_livraison.map((bon: any, index: number) => (
+                                 <span 
+                                   key={index}
+                                   className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md"
+                                 >
+                                   {bon.bon_de_livraison}
+                                 </span>
+                               ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Clients associés */}
+                        {livraison.bons_de_livraison && livraison.bons_de_livraison.length > 0 && (
+                          <div className="pt-2 border-t border-border">
+                            <span className="text-xs text-muted-foreground mb-2 block">Clients :</span>
+                            <div className="flex flex-wrap gap-2">
+                              {[...new Set(livraison.bons_de_livraison.map((bon: any) => bon.customer).filter(Boolean))].map((client: unknown, index: number) => (
+                                  <span 
+                                    key={index}
+                                    className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md"
+                                  >
+                                    {String(client)}
+                                  </span>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))
@@ -531,6 +803,8 @@ const LivraisonsList = ({ onLivraisonSelect }: LivraisonsListProps) => {
              </div>
            )}
         </div>
+
+
 
         {/* Pagination */}
         {finalFilteredLivraisons.length === 20 && (

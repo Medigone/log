@@ -121,8 +121,6 @@ def _update_sequences(delivery_note_name):
         
         # Vérifier si des colis sont encore liés à cette DN
         total = len(docs_result)
-        frappe.log_error(f"Nombre de colis trouvés pour DN {delivery_note_name}: {total}", 
-                       "Debug mise à jour séquences")
         
         # Mettre à jour la séquence pour chaque Colis
         for idx, d in enumerate(docs_result, start=1):
@@ -147,9 +145,6 @@ def _update_sequences(delivery_note_name):
             # Vérifier que la mise à jour a bien été effectuée
             check_query = "SELECT custom_nombre_colis FROM `tabDelivery Note` WHERE name = %s"
             result = frappe.db.sql(check_query, (delivery_note_name,), as_dict=True)
-            if result and len(result) > 0:
-                frappe.log_error(f"Valeur de custom_nombre_colis après mise à jour: {result[0].custom_nombre_colis}", 
-                               "Debug mise à jour nombre colis")
         except Exception as e:
             frappe.log_error(f"Erreur lors de la mise à jour du nombre de colis pour DN {delivery_note_name}: {str(e)}", 
                            "Erreur mise à jour nombre colis")
@@ -195,8 +190,7 @@ def _update_sequences_after_delete(delivery_note_name):
         colis_result = frappe.db.sql(colis_query, (delivery_note_name,), as_dict=True)
         total = len(colis_result)
         
-        frappe.log_error(f"Nombre de colis restants après suppression pour DN {delivery_note_name}: {total}", 
-                       "Debug mise à jour après suppression")
+        # Nombre de colis restants: {total}
         
         # Mettre à jour les séquences des colis restants
         for idx, colis in enumerate(colis_result, start=1):
@@ -224,8 +218,7 @@ def _update_sequences_after_delete(delivery_note_name):
             """
             frappe.db.sql(update_query, (total, delivery_note_name))
             
-            frappe.log_error(f"Mise à jour du nombre de colis à {total} pour DN {delivery_note_name}", 
-                           "Debug mise à jour après suppression")
+            # Mise à jour du nombre de colis effectuée
             
         except Exception as e:
             frappe.log_error(f"Erreur lors de la mise à jour du nombre de colis pour DN {delivery_note_name}: {str(e)}", 
@@ -245,11 +238,7 @@ def _update_sequences_after_delete(delivery_note_name):
             result = frappe.db.sql(check_query, (delivery_note_name,), as_dict=True)
             if result and len(result) > 0:
                 final_value = result[0].custom_nombre_colis
-                frappe.log_error(f"Tentative {attempt + 1} - Valeur de custom_nombre_colis: {final_value}", 
-                               "Debug vérification finale")
                 if final_value == total:
-                    frappe.log_error(f"Mise à jour réussie après {attempt + 1} tentative(s)", 
-                                   "Debug vérification finale")
                     break
             time.sleep(1)
         
