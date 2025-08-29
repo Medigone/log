@@ -2,7 +2,7 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "field:nom",
- "creation": "2025-01-12 10:00:00.000000",
+ "creation": "2025-01-12 10:00:00",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -19,7 +19,8 @@
   {
    "fieldname": "nom",
    "fieldtype": "Data",
-   "label": "Nom du dépôt",
+   "in_list_view": 1,
+   "label": "Nom du d\u00e9p\u00f4t",
    "reqd": 1,
    "unique": 1
   },
@@ -31,17 +32,17 @@
   {
    "fieldname": "section_break_3",
    "fieldtype": "Section Break",
-   "label": "Coordonnées GPS"
+   "label": "Coordonn\u00e9es GPS"
   },
   {
    "fieldname": "latitude_depot",
-   "fieldtype": "Float",
+   "fieldtype": "Data",
    "label": "Latitude",
    "precision": "8"
   },
   {
    "fieldname": "longitude_depot",
-   "fieldtype": "Float",
+   "fieldtype": "Data",
    "label": "Longitude",
    "precision": "8"
   },
@@ -53,12 +54,12 @@
    "default": "0",
    "fieldname": "is_default",
    "fieldtype": "Check",
-   "label": "Dépôt principal"
+   "label": "D\u00e9p\u00f4t principal"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-12 10:00:00.000000",
+ "modified": "2025-08-29 01:52:59.925243",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Depot Distribution",
@@ -90,6 +91,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

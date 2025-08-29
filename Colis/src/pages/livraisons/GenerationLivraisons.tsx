@@ -434,7 +434,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
        const livreurId = manualAssignments[commune.commune];
        const livreur = commune.livreurs_disponibles?.find((l: any) => l.name === livreurId);
       
-      if (livreur && (livreur.charge_actuelle + commune.nb_colis) > livreur.capacite_max) {
+      if (livreur && (livreur.charge_actuelle_date + commune.nb_colis) > livreur.capacite_max) {
         erreurs.push(`${commune.commune}: Capacité insuffisante pour ${livreur.nom_complet}`);
       }
     }
@@ -487,7 +487,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
        const livreur = communeData?.livreurs_disponibles?.find((l: any) => l.name === livreurId);
       
       if (livreur && communeData) {
-        const nouvelleCharge = livreur.charge_actuelle + communeData.nb_colis;
+        const nouvelleCharge = livreur.charge_actuelle_date + communeData.nb_colis;
         if (nouvelleCharge > livreur.capacite_max) {
           showAlert(
             `Attention: ${livreur.nom_complet} dépassera sa capacité (${nouvelleCharge}/${livreur.capacite_max})`,
@@ -713,22 +713,22 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
                                   -- Choisir un livreur --
                                 </option>
                                 {commune.livreurs_disponibles?.map((livreur: any) => {
-                                  const nouvelleCharge = livreur.charge_actuelle + commune.nb_colis;
+                                  const nouvelleCharge = livreur.charge_actuelle_date + commune.nb_colis;
                                   const depasseCapacite = nouvelleCharge > livreur.capacite_max;
-                                  const tauxCharge = (livreur.charge_actuelle / livreur.capacite_max) * 100;
+                                  const tauxCharge = (livreur.charge_actuelle_date / livreur.capacite_max) * 100;
                                   
                                   return (
                                     <option 
                                       key={livreur.name} 
                                       value={livreur.name}
-                                      disabled={livreur.charge_actuelle >= livreur.capacite_max}
+                                      disabled={livreur.charge_actuelle_date >= livreur.capacite_max}
                                       className={`py-2 ${
                                         depasseCapacite ? 'text-red-600' : 
                                         tauxCharge > 80 ? 'text-amber-600' : 
                                         'text-green-600'
                                       }`}
                                     >
-                                      {livreur.nom_complet} - {livreur.vehicule} ({livreur.charge_actuelle}/{livreur.capacite_max})
+                                      {livreur.nom_complet} - {livreur.vehicule} ({livreur.charge_actuelle_date}/{livreur.capacite_max})
                                       {depasseCapacite && ' ⚠️ Dépassement'}
                                       {!depasseCapacite && tauxCharge > 80 && ' ⚡ Presque plein'}
                                     </option>
@@ -747,7 +747,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = ({ onBack }) =
                                   );
                                   if (!livreurSelectionne) return null;
                                   
-                                  const nouvelleCharge = livreurSelectionne.charge_actuelle + commune.nb_colis;
+                                  const nouvelleCharge = livreurSelectionne.charge_actuelle_date + commune.nb_colis;
                                   const depasseCapacite = nouvelleCharge > livreurSelectionne.capacite_max;
                                   
                                   if (depasseCapacite) {

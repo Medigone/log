@@ -1,6 +1,6 @@
 {
  "actions": [],
- "creation": "2025-01-12 10:00:00.000000",
+ "creation": "2025-01-12 10:00:00",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -13,7 +13,9 @@
   "rate_limit_geocoding",
   "column_break_7",
   "auto_update_distances",
-  "algorithme_repartition"
+  "algorithme_repartition",
+  "section_break_jkjx",
+  "cle_api_google"
  ],
  "fields": [
   {
@@ -25,6 +27,7 @@
    "default": "20",
    "fieldname": "seuil_local_km",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Seuil local (km)",
    "reqd": 1
   },
@@ -32,26 +35,27 @@
    "default": "100",
    "fieldname": "seuil_regional_km",
    "fieldtype": "Int",
-   "label": "Seuil régional (km)",
+   "in_list_view": 1,
+   "label": "Seuil r\u00e9gional (km)",
    "reqd": 1
   },
   {
    "fieldname": "section_break_4",
    "fieldtype": "Section Break",
-   "label": "Configuration géolocalisation"
+   "label": "Configuration g\u00e9olocalisation"
   },
   {
    "default": "nominatim",
    "fieldname": "api_geolocation",
    "fieldtype": "Select",
-   "label": "API de géolocalisation",
+   "label": "API de g\u00e9olocalisation",
    "options": "nominatim\ngoogle_maps\nbing_maps"
   },
   {
    "default": "1",
    "fieldname": "rate_limit_geocoding",
    "fieldtype": "Int",
-   "label": "Limite de requêtes (par seconde)"
+   "label": "Limite de requ\u00eates (par seconde)"
   },
   {
    "fieldname": "column_break_7",
@@ -61,20 +65,29 @@
    "default": "1",
    "fieldname": "auto_update_distances",
    "fieldtype": "Check",
-   "label": "Mise à jour automatique des distances"
+   "label": "Mise \u00e0 jour automatique des distances"
   },
   {
    "default": "load_balancing_geographique",
    "fieldname": "algorithme_repartition",
    "fieldtype": "Select",
-   "label": "Algorithme de répartition",
+   "label": "Algorithme de r\u00e9partition",
    "options": "load_balancing_geographique\noptimisation_distance\npriorite_specialisation"
+  },
+  {
+   "fieldname": "section_break_jkjx",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "cle_api_google",
+   "fieldtype": "Data",
+   "label": "Cl\u00e9 API Google"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-01-12 10:00:00.000000",
+ "modified": "2025-08-29 01:37:23.661148",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Parametres Livraison",
@@ -100,6 +113,7 @@
    "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
