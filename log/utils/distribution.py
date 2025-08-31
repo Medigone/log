@@ -152,35 +152,49 @@ def normalise_v2(x: float, lo: float, hi: float) -> float:
 
 
 def candidats_eligibles_v2(commune: str, classification: str, buffer: DistributionMemoryBuffer) -> List[Dict]:
-	"""Retourne les candidats éligibles pour une commune avec fallback intelligent."""
-	# 1. Filtrer par statut actif et classification
+	"""Retourne les candidats éligibles pour une commune avec hiérarchie de couverture."""
+	# 1. Filtrer par statut actif uniquement
 	filters = {"active": 1}
-	
-	if classification == "Éloignée":
-		filters["specialisation"] = "Longue distance"
-	elif classification == "Régionale":
-		filters["type_couverture"] = ["in", ["Régionale", "Nationale"]]
-	else:
-		filters["type_couverture"] = "Locale"
-
 	candidats = frappe.get_all("Livreur", filters=filters,
-		fields=["name", "capacite_max_colis", "priorite_attribution", "vehicule"])
+		fields=["name", "capacite_max_colis", "priorite_attribution", "vehicule", "type_couverture", "specialisation"])
 	
 	if not candidats:
 		return []
 
-	# 2. Restreindre aux livreurs couvrant la commune
+	# 2. Filtrer par hiérarchie de couverture selon la classification
+	candidats_filtres = []
+	
+	for candidat in candidats:
+		type_couverture = candidat.get("type_couverture", "Locale")
+		specialisation = candidat.get("specialisation", "Standard")
+		
+		# Vérifier l'éligibilité selon la hiérarchie
+		eligible = False
+		
+		if classification == "Éloignée":
+			# Éloignée : seulement Nationale + spécialisation Longue distance
+			eligible = (type_couverture == "Nationale" and specialisation == "Longue distance")
+		elif classification == "Régionale":
+			# Régionale : Nationale OU Régionale
+			eligible = (type_couverture in ["Nationale", "Régionale"])
+		else:  # Locale
+			# Locale : Nationale OU Régionale OU Locale
+			eligible = (type_couverture in ["Nationale", "Régionale", "Locale"])
+		
+		if eligible:
+			candidats_filtres.append(candidat)
+	
+	if not candidats_filtres:
+		return []
+
+	# 3. Restreindre aux livreurs couvrant géographiquement la commune
 	couvre = livreurs_couvrant_commune(commune)
 	
 	if couvre:
-		# Livreurs avec couverture explicite
-		candidats = [c for c in candidats if c.name in couvre]
-	else:
-		# Fallback: tous les candidats compatibles par classification
-		# (déjà filtrés par classification ci-dessus)
-		pass
+		# Livreurs avec couverture géographique explicite
+		candidats_filtres = [c for c in candidats_filtres if c.name in couvre]
 	
-	return candidats
+	return candidats_filtres
 
 
 def scorer_candidats_v2(candidats: List[Dict], buffer: DistributionMemoryBuffer) -> List[Dict]:
@@ -206,22 +220,23 @@ def scorer_candidats_v2(candidats: List[Dict], buffer: DistributionMemoryBuffer)
 		capacite_max = c.get("capacite_max_colis", 0) or 1
 		charge_actuelle = buffer.charges_jour.get(c["name"], 0)
 		
-		# Facteur 1: Équilibrage (charge relative du jour) - 0.60
+		# Facteur 1: Équilibrage (charge relative du jour) - 0.70 (augmenté)
 		# Plus la charge est élevée, plus le score est élevé (mauvais)
 		taux_charge = charge_actuelle / float(capacite_max)
 		
-		# Facteur 2: Coût/km du véhicule (normalisé) - 0.25
+		# Facteur 2: Coût/km du véhicule (normalisé) - 0.20 (diminué)
 		# Plus le coût est élevé, plus le score est élevé (mauvais)
 		cout_km = veh_map.get(c.get("vehicule"), 0)
 		cout_norm = normalise_v2(cout_km, min_cout, max_cout)
 		
-		# Facteur 3: Priorité d'attribution (1..10 ; petit = prioritaire) - 0.15
+		# Facteur 3: Priorité d'attribution (1..10 ; petit = prioritaire) - 0.10 (diminué)
 		# Plus la priorité est élevée, plus le score est élevé (mauvais)
 		priorite = c.get("priorite_attribution", 5)
 		prio_norm = normalise_v2(priorite, min_prio, max_prio)
 		
 		# Score final selon formule v2 - PLUS LE SCORE EST ÉLEVÉ, PLUS C'EST MAUVAIS
-		c["_score"] = 0.60 * taux_charge + 0.25 * cout_norm + 0.15 * prio_norm
+		# Privilégier l'équilibrage des charges
+		c["_score"] = 0.70 * taux_charge + 0.20 * cout_norm + 0.10 * prio_norm
 		
 		# Données pour tie-breakers
 		c["_capacite_restante"] = buffer.capacite_restante(c["name"])
@@ -731,12 +746,16 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 						# Scorer les candidats
 						candidats_scores = scorer_candidats_v2(livreurs_eligibles, buffer)
 						
-						# Essayer l'attribution simple (un seul livreur)
+						# CORRECTION: Chercher le livreur avec la plus grande capacité restante
+						# au lieu du premier disponible pour équilibrer les charges
 						livreur_optimal = None
+						meilleure_capacite = -1
+						
 						for candidat in candidats_scores:
-							if buffer.capacite_restante(candidat["name"]) >= nb_colis_total:
+							capacite_restante = buffer.capacite_restante(candidat["name"])
+							if capacite_restante >= nb_colis_total and capacite_restante > meilleure_capacite:
 								livreur_optimal = candidat["name"]
-								break
+								meilleure_capacite = capacite_restante
 						
 						if livreur_optimal:
 							# Attribution simple réussie
@@ -974,6 +993,19 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 			data["livreur_id"] = livreur_id
 			repartition_avec_noms[nom_livreur] = data
 
+		# Récupérer les livreurs disponibles pour l'édition
+		livreurs_avec_charge_date = obtenir_livreurs_avec_charge_par_date(date_livraison)
+		livreurs_disponibles = []
+		for livreur in livreurs_avec_charge_date:
+			livreurs_disponibles.append({
+				"name": livreur["name"],
+				"nom_complet": livreur["nom_complet"],
+				"vehicule": livreur.get("vehicule", "N/A"),
+				"charge_actuelle": livreur["charge_actuelle_date"],
+				"capacite_max": livreur["capacite_max"],
+				"taux_charge": livreur["taux_charge_date"]
+			})
+
 		return {
 			"success": True,
 			"simulate": bool(simulate),
@@ -981,7 +1013,8 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 			"livraisons_creees": livraisons_creees,
 			"repartition": repartition_avec_noms,
 			"total_bons_date": total_bons_date,
-			"bons_non_repartis": bons_non_repartis
+			"bons_non_repartis": bons_non_repartis,
+			"livreurs_disponibles": livreurs_disponibles
 		}
 
 
@@ -2000,4 +2033,351 @@ def diagnostiquer_equilibrage_livreurs(date_livraison):
 		
 	except Exception as e:
 		frappe.log_error(f"Erreur diagnostic équilibrage: {str(e)}")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def debug_attribution_livreurs(date_livraison):
+	"""Fonction de debug pour tracer le processus d'attribution des livreurs."""
+	if not frappe.has_permission(doctype="Livraison", ptype="read"):
+		frappe.throw("Permission refusée.")
+	
+	try:
+		# 1. Récupérer les bons de livraison éligibles
+		bons_eligibles = frappe.db.sql("""
+			SELECT 
+				dn.name as bon_de_livraison,
+				dn.custom_commune as commune,
+				dn.customer,
+				dn.custom_nombre_colis,
+				dn.total_qty,
+				dn.grand_total
+			FROM `tabDelivery Note` dn
+			WHERE dn.custom_date_de_livraison = %s
+			AND dn.docstatus = 0
+			AND EXISTS (
+				SELECT 1 FROM `tabColis` c 
+				WHERE c.bl = dn.name 
+				AND c.status IN ('Nouveau', 'Préparé', 'En attente')
+			)
+		""", (date_livraison,), as_dict=True)
+		
+		# 2. Récupérer les livreurs actifs
+		livreurs = frappe.get_all("Livreur", 
+			filters={"active": 1}, 
+			fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation"]
+		)
+		
+		# 3. Calculer les charges actuelles
+		charges_par_date = calculer_charges_par_date(date_livraison)
+		
+		# 4. Simuler l'attribution avec debug
+		buffer = DistributionMemoryBuffer(date_livraison)
+		
+		debug_info = {
+			"date_livraison": date_livraison,
+			"bons_eligibles": bons_eligibles,
+			"livreurs": livreurs,
+			"charges_initiales": charges_par_date.copy(),
+			"attributions": [],
+			"buffer_evolution": []
+		}
+		
+		# Grouper par commune
+		par_commune = {}
+		for bon in bons_eligibles:
+			par_commune.setdefault(bon.commune, []).append(bon)
+		
+		# Simuler l'attribution commune par commune
+		for commune, bons_liste in par_commune.items():
+			nb_colis_total = sum(bon.custom_nombre_colis or 0 for bon in bons_liste)
+			
+			# Classification
+			classification = classifier_livraison_par_distance(commune)
+			
+			# Candidats éligibles
+			livreurs_eligibles = candidats_eligibles_v2(commune, classification, buffer)
+			
+			if livreurs_eligibles:
+				# Scorer les candidats
+				candidats_scores = scorer_candidats_v2(livreurs_eligibles, buffer)
+				
+				# CORRECTION: Choisir le livreur avec le MEILLEUR score (plus bas)
+				# et la capacité suffisante
+				livreur_optimal = None
+				
+				for candidat in candidats_scores:
+					capacite_restante = buffer.capacite_restante(candidat["name"])
+					if capacite_restante >= nb_colis_total:
+						livreur_optimal = candidat["name"]
+						break  # Prendre le premier avec capacité suffisante (déjà trié par score)
+				
+				if livreur_optimal:
+					# Attribution réussie
+					buffer.reserver_charge(livreur_optimal, nb_colis_total)
+					
+					debug_info["attributions"].append({
+						"commune": commune,
+						"nb_colis": nb_colis_total,
+						"livreur_choisi": livreur_optimal,
+						"capacite_restante_avant": buffer.capacite_restante(livreur_optimal) + nb_colis_total,
+						"capacite_restante_apres": buffer.capacite_restante(livreur_optimal),
+						"candidats_evalues": [
+							{
+								"livreur": c["name"],
+								"score": c.get("_score", 0),
+								"capacite_restante": buffer.capacite_restante(c["name"]),
+								"charge_actuelle": buffer.charges_jour.get(c["name"], 0)
+							} for c in candidats_scores
+						]
+					})
+					
+					# Snapshot du buffer après cette attribution
+					debug_info["buffer_evolution"].append({
+						"commune": commune,
+						"charges_jour": buffer.charges_jour.copy(),
+						"capacites_restantes": {lid: buffer.capacite_restante(lid) for lid in buffer.capacites.keys()}
+					})
+				else:
+					debug_info["attributions"].append({
+						"commune": commune,
+						"nb_colis": nb_colis_total,
+						"livreur_choisi": None,
+						"raison": "Aucun livreur avec capacité suffisante",
+						"candidats_evalues": [
+							{
+								"livreur": c["name"],
+								"score": c.get("_score", 0),
+								"capacite_restante": buffer.capacite_restante(c["name"]),
+								"charge_actuelle": buffer.charges_jour.get(c["name"], 0)
+							} for c in candidats_scores
+						]
+					})
+			else:
+				debug_info["attributions"].append({
+					"commune": commune,
+					"nb_colis": nb_colis_total,
+					"livreur_choisi": None,
+					"raison": "Aucun livreur éligible pour cette commune"
+				})
+		
+		return {
+			"success": True,
+			"debug_info": debug_info
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur debug attribution: {str(e)}")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def debug_couverture_communes(communes=None):
+	"""Debug la couverture des communes par les livreurs."""
+	if not frappe.has_permission(doctype="Livreur", ptype="read"):
+		frappe.throw("Permission refusée.")
+	
+	try:
+		if not communes:
+			# Récupérer toutes les communes
+			communes = frappe.get_all("Commune", fields=["name", "nom", "wilaya"])
+		elif isinstance(communes, str):
+			communes = [{"name": communes}]
+		elif isinstance(communes, list):
+			# Si c'est une liste de strings, les convertir en format dict
+			if communes and isinstance(communes[0], str):
+				communes = [{"name": c} for c in communes]
+		
+		resultats = []
+		
+		for commune in communes:
+			# Gérer le cas où commune est un string
+			if isinstance(commune, str):
+				commune_id = commune
+				nom_commune = commune
+				wilaya = frappe.db.get_value("Commune", commune, "wilaya")
+			else:
+				commune_id = commune["name"]
+				nom_commune = commune.get("nom", commune_id)
+				wilaya = commune.get("wilaya")
+			
+			# Vérifier la couverture directe (Livreur Commune)
+			livreurs_commune = frappe.get_all("Livreur Commune", 
+				filters={"commune": commune_id}, 
+				fields=["parent"]
+			)
+			
+			# Vérifier la couverture par wilaya (Livreur Wilaya)
+			livreurs_wilaya = []
+			if wilaya:
+				livreurs_wilaya = frappe.get_all("Livreur Wilaya", 
+					filters={"wilaya": wilaya}, 
+					fields=["parent"]
+				)
+			
+			# Récupérer les détails des livreurs
+			livreurs_directs = []
+			if livreurs_commune:
+				for lc in livreurs_commune:
+					livreur = frappe.get_doc("Livreur", lc.parent)
+					livreurs_directs.append({
+						"name": livreur.name,
+						"nom": livreur.nom,
+						"type_couverture": livreur.type_couverture,
+						"specialisation": livreur.specialisation,
+						"active": livreur.active
+					})
+			
+			livreurs_wilaya_details = []
+			if livreurs_wilaya:
+				for lw in livreurs_wilaya:
+					livreur = frappe.get_doc("Livreur", lw.parent)
+					livreurs_wilaya_details.append({
+						"name": livreur.name,
+						"nom": livreur.nom,
+						"type_couverture": livreur.type_couverture,
+						"specialisation": livreur.specialisation,
+						"active": livreur.active
+					})
+			
+			# Tester la fonction livreurs_couvrant_commune
+			livreurs_couvrant = livreurs_couvrant_commune(commune_id)
+			
+			resultats.append({
+				"commune": commune_id,
+				"nom_commune": nom_commune,
+				"wilaya": wilaya,
+				"livreurs_directs": livreurs_directs,
+				"livreurs_wilaya": livreurs_wilaya_details,
+				"livreurs_couvrant_fonction": list(livreurs_couvrant),
+				"nb_livreurs_directs": len(livreurs_directs),
+				"nb_livreurs_wilaya": len(livreurs_wilaya_details),
+				"nb_livreurs_couvrant": len(livreurs_couvrant)
+			})
+		
+		return {
+			"success": True,
+			"resultats": resultats
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur debug couverture: {str(e)}")
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def sauvegarder_modifications_livraisons(date_livraison, modifications):
+	"""
+	Sauvegarde les modifications des assignations de livraisons.
+	
+	Args:
+		date_livraison (str): Date de livraison
+		modifications (dict): Dictionnaire des modifications avec structure:
+			{
+				"livreur_id": {
+					"bons_ajoutes": ["bon1", "bon2"],
+					"bons_supprimes": ["bon3", "bon4"]
+				}
+			}
+	
+	Returns:
+		dict: Résultat de l'opération
+	"""
+	try:
+		if not date_livraison or not modifications:
+			return {"success": False, "error": "Paramètres manquants"}
+		
+		resultats = {
+			"livraisons_mises_a_jour": 0,
+			"livraisons_creees": 0,
+			"livraisons_supprimees": 0,
+			"erreurs": []
+		}
+		
+		# Traiter chaque livreur
+		for livreur_id, changements in modifications.items():
+			bons_ajoutes = changements.get("bons_ajoutes", [])
+			bons_supprimes = changements.get("bons_supprimes", [])
+			
+			# Supprimer les bons de livraison des livraisons existantes
+			for bon_id in bons_supprimes:
+				try:
+					# Trouver la livraison contenant ce bon
+					livraisons = frappe.get_all("Livraison", 
+						filters={
+							"date_livraison": date_livraison,
+							"livreur": livreur_id
+						},
+						fields=["name"]
+					)
+					
+					for livraison in livraisons:
+						livraison_doc = frappe.get_doc("Livraison", livraison.name)
+						
+						# Supprimer le bon de la liste
+						livraison_doc.bons_de_livraison = [
+							bon for bon in livraison_doc.bons_de_livraison 
+							if bon.bon_de_livraison != bon_id
+						]
+						
+						# Si la livraison n'a plus de bons, la supprimer
+						if not livraison_doc.bons_de_livraison:
+							frappe.delete_doc("Livraison", livraison_doc.name)
+							resultats["livraisons_supprimees"] += 1
+						else:
+							livraison_doc.save()
+							resultats["livraisons_mises_a_jour"] += 1
+							break
+				except Exception as e:
+					resultats["erreurs"].append(f"Erreur suppression bon {bon_id}: {str(e)}")
+			
+			# Ajouter les nouveaux bons
+			for bon_id in bons_ajoutes:
+				try:
+					# Vérifier si le bon existe
+					bon_doc = frappe.get_doc("Delivery Note", bon_id)
+					
+					# Chercher une livraison existante pour ce livreur à cette date
+					livraisons_existantes = frappe.get_all("Livraison",
+						filters={
+							"date_livraison": date_livraison,
+							"livreur": livreur_id
+						},
+						fields=["name"],
+						limit=1
+					)
+					
+					if livraisons_existantes:
+						# Ajouter à la livraison existante
+						livraison_doc = frappe.get_doc("Livraison", livraisons_existantes[0].name)
+						livraison_doc.append("bons_de_livraison", {
+							"bon_de_livraison": bon_id
+						})
+						livraison_doc.save()
+						resultats["livraisons_mises_a_jour"] += 1
+					else:
+						# Créer une nouvelle livraison
+						nouvelle_livraison = frappe.get_doc({
+							"doctype": "Livraison",
+							"date_livraison": date_livraison,
+							"livreur": livreur_id,
+							"bons_de_livraison": [{
+								"bon_de_livraison": bon_id
+							}]
+						})
+						nouvelle_livraison.insert()
+						resultats["livraisons_creees"] += 1
+						
+				except Exception as e:
+					resultats["erreurs"].append(f"Erreur ajout bon {bon_id}: {str(e)}")
+		
+		frappe.db.commit()
+		
+		return {
+			"success": True,
+			"resultats": resultats
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur sauvegarde modifications: {str(e)}")
 		return {"success": False, "error": str(e)}

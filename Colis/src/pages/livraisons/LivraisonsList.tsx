@@ -464,14 +464,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
                 label="Total"
                 value={finalFilteredLivraisons.length}
               />
-              <Button 
-                variant="default" 
-                onClick={onGenerateClick || (() => window.location.href = '/app/generation-livraisons')}
-                className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white border-slate-600 shadow-lg transition-all duration-200 hover:shadow-xl"
-              >
-                <Truck className="h-4 w-4" />
-                Générer Livraisons
-              </Button>
+
             </div>
           </div>
         </div>

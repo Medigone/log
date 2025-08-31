@@ -5,6 +5,7 @@ import {
   useFrappeAuth,
   useFrappeGetDoc,
 } from "frappe-react-sdk";
+import { HashRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, Truck } from "lucide-react";
 import Login from "./pages/auth/Login";
@@ -44,17 +45,11 @@ const tokens = {
 /* =========================
    NavigationBar
    ========================= */
-function NavigationBar({
-  selectedColisId,
-  selectedLivraisonId,
-  onLogoClick,
-}: {
-  selectedColisId: string | null;
-  selectedLivraisonId: string | null;
-  onLogoClick: () => void;
-}) {
+function NavigationBar() {
   const { logout, currentUser } = useFrappeAuth();
   const { data: userData } = useFrappeGetDoc("User", currentUser || undefined);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   if (!currentUser) return null;
 
@@ -77,13 +72,40 @@ function NavigationBar({
       {/* Header line */}
       <div className="max-w-6xl mx-auto px-4 py-2.5">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-6">
             <img
               src={logoSvg}
               alt="IntraPro FleetMaster"
               style={{ height: 28, width: "auto", cursor: "pointer" }}
-              onClick={onLogoClick}
+              onClick={() => navigate('/')}
             />
+            
+            {/* Navigation tabs on the same line */}
+            <div className="flex items-center gap-2 text-sm">
+              <button
+                onClick={() => navigate('/')}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  location.hash === '#/' || location.hash === '' || location.pathname === '/'
+                    ? 'text-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Accueil
+              </button>
+              
+              <span className="text-muted-foreground">•</span>
+              
+              <button
+                onClick={() => navigate('/generation')}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  location.hash === '#/generation'
+                    ? 'text-foreground font-medium'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Génération Livraisons
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -107,54 +129,32 @@ function NavigationBar({
           </div>
         </div>
       </div>
-
-      {/* Tabs or back button */}
-      <div className="max-w-6xl mx-auto px-4 pb-2.5">
-        {/* Navigation supprimée - le logo gère le retour à la page principale */}
-      </div>
     </div>
   );
 }
 
 /* =========================
-   AppContent
+   AppContent with Router
    ========================= */
 function AppContent() {
   const { currentUser, isLoading } = useFrappeAuth();
-  const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
-  const [selectedLivraisonId, setSelectedLivraisonId] =
-    useState<string | null>(null);
-  const [showGenerationLivraisons, setShowGenerationLivraisons] = useState<boolean>(false);
-  const [activeView, setActiveView] =
-    useState<"livraisons">("livraisons");
-  const [currentLivraisonId, setCurrentLivraisonId] = useState<string | null>(null);
-
   const [isPublicAccess, setIsPublicAccess] = useState<boolean>(false);
+  const location = useLocation();
 
   // Apply dark theme
   useEffect(() => {
     document.body.classList.add('dark');
   }, []);
 
-  const returnToMainPage = () => {
-    setSelectedColisId(null);
-    setSelectedLivraisonId(null);
-    setCurrentLivraisonId(null);
-    setShowGenerationLivraisons(false);
-  };
-
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const urlParams = new URLSearchParams(location.search);
     const colisParam = urlParams.get("colis");
     const publicParam = urlParams.get("public");
 
-    if (colisParam) {
-      setSelectedColisId(colisParam);
-      if (publicParam === "1" || !currentUser) {
-        setIsPublicAccess(true);
-      }
+    if (colisParam && (publicParam === "1" || !currentUser)) {
+      setIsPublicAccess(true);
     }
-  }, [currentUser]);
+  }, [currentUser, location.search]);
 
   // Loader dark
   if (isLoading) {
@@ -168,67 +168,109 @@ function AppContent() {
     );
   }
 
-  // Public view direct
-  if (isPublicAccess && selectedColisId) {
-    return <ColisPublicView colisId={selectedColisId} />;
+  // Public view for colis
+  if (isPublicAccess) {
+    const urlParams = new URLSearchParams(location.search);
+    const colisParam = urlParams.get("colis");
+    if (colisParam) {
+      return <ColisPublicView colisId={colisParam} />;
+    }
   }
 
-  // Authenticated app
+  // Authenticated app with router
   if (currentUser) {
     return (
       <div className="min-h-screen bg-background">
-        <NavigationBar
-          selectedColisId={selectedColisId}
-          selectedLivraisonId={selectedLivraisonId}
-          onLogoClick={returnToMainPage}
-        />
-
+        <NavigationBar />
         <div className="max-w-6xl mx-auto px-4 pt-4 pb-6">
-          {selectedColisId ? (
-            <ColisDetails 
-              colisId={selectedColisId} 
-              livraisonId={currentLivraisonId || undefined}
-              onBackToLivraison={() => {
-                setSelectedColisId(null);
-                if (currentLivraisonId) {
-                  setSelectedLivraisonId(currentLivraisonId);
-                }
-              }}
-            />
-          ) : showGenerationLivraisons ? (
-            <GenerationLivraisons onBack={() => setShowGenerationLivraisons(false)} />
-          ) : selectedLivraisonId ? (
-            <LivraisonDetails
-              livraisonId={selectedLivraisonId}
-              onBack={() => setSelectedLivraisonId(null)}
-              onColisSelect={(colisId) => {
-                setSelectedColisId(colisId);
-                setCurrentLivraisonId(selectedLivraisonId);
-              }}
-            />
-          ) : (
-            <>
-              <div className="mb-4">
-                <h1 className="text-2xl font-bold">Livraisons</h1>
-              </div>
-              <LivraisonsList 
-                onLivraisonSelect={setSelectedLivraisonId} 
-                onGenerateClick={() => setShowGenerationLivraisons(true)}
-              />
-            </>
-          )}
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/generation" element={<GenerationLivraisons />} />
+            <Route path="/livraison/:id" element={<LivraisonDetailsRoute />} />
+            <Route path="/colis/:id" element={<ColisDetailsRoute />} />
+            {/* Fallback route */}
+            <Route path="*" element={<HomePage />} />
+          </Routes>
         </div>
       </div>
     );
   }
 
   // If a colis is requested but user not logged-in => public view
-  if (selectedColisId && !currentUser) {
-    return <ColisPublicView colisId={selectedColisId} />;
+  const urlParams = new URLSearchParams(location.search);
+  const colisParam = urlParams.get("colis");
+  if (colisParam && !currentUser) {
+    return <ColisPublicView colisId={colisParam} />;
   }
 
   // Login
   return <Login />;
+}
+
+/* =========================
+   Route Components
+   ========================= */
+function HomePage() {
+  const navigate = useNavigate();
+  
+  return (
+    <>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold">Livraisons</h1>
+      </div>
+      <LivraisonsList 
+        onLivraisonSelect={(id) => navigate(`/livraison/${id}`)} 
+        onGenerateClick={() => navigate('/generation')}
+      />
+    </>
+  );
+}
+
+function LivraisonDetailsRoute() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  
+  if (!id) {
+    navigate('/');
+    return null;
+  }
+  
+  return (
+    <LivraisonDetails
+      livraisonId={id}
+      onBack={() => navigate('/')}
+      onColisSelect={(colisId) => navigate(`/colis/${colisId}?from=livraison&livraisonId=${id}`)}
+    />
+  );
+}
+
+function ColisDetailsRoute() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  if (!id) {
+    navigate('/');
+    return null;
+  }
+  
+  const urlParams = new URLSearchParams(location.search);
+  const fromLivraison = urlParams.get('from') === 'livraison';
+  const livraisonId = urlParams.get('livraisonId');
+  
+  return (
+    <ColisDetails 
+      colisId={id} 
+      livraisonId={livraisonId || undefined}
+      onBackToLivraison={() => {
+        if (fromLivraison && livraisonId) {
+          navigate(`/livraison/${livraisonId}`);
+        } else {
+          navigate('/');
+        }
+      }}
+    />
+  );
 }
 
 /* =========================
@@ -256,7 +298,9 @@ function App() {
         socketPort={import.meta.env.VITE_SOCKET_PORT}
         siteName={getSiteName()}
       >
-        <AppContent />
+        <Router>
+          <AppContent />
+        </Router>
       </FrappeProvider>
     </div>
   );
