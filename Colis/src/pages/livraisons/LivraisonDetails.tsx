@@ -411,17 +411,6 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap justify-between">
             <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
-              {onBack && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onBack}
-                  className="border-border text-foreground bg-card/50 hover:bg-accent"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Retour
-                </Button>
-              )}
               <span>Livraison</span>
               <Dot className="w-4 h-4" />
               <span>Détails</span>

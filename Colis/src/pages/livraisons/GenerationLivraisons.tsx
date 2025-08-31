@@ -1245,27 +1245,6 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
 
   return (
     <div className="bg-background min-h-screen">
-      {/* Header */}
-      <div className="border-b border-border">
-        <div className="max-w-6xl mx-auto px-2 sm:px-4 py-3">
-          <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-between justify-start">
-            <div className="inline-flex items-center gap-2 text-muted-foreground text-xs sm:text-sm">
-
-              <Dot className="w-4 h-4" />
-              <span>Génération de livraisons</span>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3">
-              {(currentData || showResults) && (
-                <div className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 border border-green-200 rounded-lg text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-400">
-                  <Clipboard className="h-3 w-3" />
-                  <span className="text-xs font-medium">Sauvegardé</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Content */}
       <div className="max-w-6xl mx-auto px-2 sm:px-4 pt-6 sm:pt-8 pb-6 sm:pb-8">
 

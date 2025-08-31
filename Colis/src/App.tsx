@@ -43,13 +43,14 @@ const tokens = {
 };
 
 /* =========================
-   NavigationBar
+   Sidebar Navigation
    ========================= */
-function NavigationBar() {
+function SidebarNavigation() {
   const { logout, currentUser } = useFrappeAuth();
   const { data: userData } = useFrappeGetDoc("User", currentUser || undefined);
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   if (!currentUser) return null;
 
@@ -67,69 +68,121 @@ function NavigationBar() {
     }
   };
 
-  return (
-    <div className="border-b border-border">
-      {/* Header line */}
-      <div className="max-w-6xl mx-auto px-4 py-2.5">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-6">
-            <img
-              src={logoSvg}
-              alt="IntraPro FleetMaster"
-              style={{ height: 28, width: "auto", cursor: "pointer" }}
-              onClick={() => navigate('/')}
-            />
-            
-            {/* Navigation tabs on the same line */}
-            <div className="flex items-center gap-2 text-sm">
-              <button
-                onClick={() => navigate('/')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  location.hash === '#/' || location.hash === '' || location.pathname === '/'
-                    ? 'text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Accueil
-              </button>
-              
-              <span className="text-muted-foreground">•</span>
-              
-              <button
-                onClick={() => navigate('/generation')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  location.hash === '#/generation'
-                    ? 'text-foreground font-medium'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                Génération Livraisons
-              </button>
-            </div>
-          </div>
+  const isActive = (path: string) => {
+    if (path === '/') {
+      return location.pathname === '/' && location.hash === '';
+    }
+    if (path === '/livraisons') {
+      return location.hash === '#/livraisons' || location.pathname === '/livraisons';
+    }
+    return location.hash === `#${path}` || location.pathname === path;
+  };
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span className="text-sm text-muted-foreground">
-                Bonjour,{" "}
-                <span className="text-foreground font-semibold">
-                  {displayName}
-                </span>
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleLogout}
-              className="cursor-pointer"
-            >
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
+  const handleNavClick = (path: string) => {
+    navigate(path);
+    setIsMobileMenuOpen(false);
+  };
+
+  return (
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-background border border-border rounded-lg shadow-lg"
+      >
+        <svg className="w-5 h-5 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {isMobileMenuOpen ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          )}
+        </svg>
+      </button>
+
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div className={`w-52 h-screen bg-background border-r border-border flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+      }`}>
+      {/* Header */}
+      <div className="p-6 border-b border-border">
+        <div className="flex items-center gap-3">
+          <img
+            src={logoSvg}
+            alt="IntraPro FleetMaster"
+            style={{ height: 32, width: "auto" }}
+          />
+          
         </div>
       </div>
-    </div>
+
+      {/* Navigation Items */}
+      <nav className="flex-1 px-4 py-6 space-y-1">
+        <button
+          onClick={() => handleNavClick('/')}
+          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+            isActive('/')
+              ? 'text-foreground font-medium'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Accueil
+        </button>
+
+        <button
+          onClick={() => handleNavClick('/livraisons')}
+          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+            isActive('/livraisons')
+              ? 'text-foreground font-medium'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Livraisons
+        </button>
+
+        <button
+          onClick={() => handleNavClick('/generation')}
+          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+            isActive('/generation')
+              ? 'text-foreground font-medium'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Génération Livraisons
+        </button>
+      </nav>
+
+      {/* User Profile & Logout */}
+      <div className="p-4 border-t border-border">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
+            <User className="w-5 h-5 text-muted-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+            <p className="text-xs text-muted-foreground truncate">{(userData as any)?.email || currentUser}</p>
+          </div>
+        </div>
+        
+        <Button
+          onClick={handleLogout}
+          variant="outline"
+          size="sm"
+          className="w-full"
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Déconnexion
+        </Button>
+      </div>
+      </div>
+    </>
   );
 }
 
@@ -180,17 +233,20 @@ function AppContent() {
   // Authenticated app with router
   if (currentUser) {
     return (
-      <div className="min-h-screen bg-background">
-        <NavigationBar />
-        <div className="max-w-6xl mx-auto px-4 pt-4 pb-6">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/generation" element={<GenerationLivraisons />} />
-            <Route path="/livraison/:id" element={<LivraisonDetailsRoute />} />
-            <Route path="/colis/:id" element={<ColisDetailsRoute />} />
-            {/* Fallback route */}
-            <Route path="*" element={<HomePage />} />
-          </Routes>
+      <div className="min-h-screen bg-background flex">
+        <SidebarNavigation />
+        <div className="flex-1 md:ml-52">
+          <div className="max-w-6xl mx-auto px-4 pt-16 md:pt-4 pb-6">
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/livraisons" element={<LivraisonsPage />} />
+              <Route path="/generation" element={<GenerationLivraisons />} />
+              <Route path="/livraison/:id" element={<LivraisonDetailsRoute />} />
+              <Route path="/colis/:id" element={<ColisDetailsRoute />} />
+              {/* Fallback route */}
+              <Route path="*" element={<HomePage />} />
+            </Routes>
+          </div>
         </div>
       </div>
     );
@@ -211,18 +267,22 @@ function AppContent() {
    Route Components
    ========================= */
 function HomePage() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
+      <h1 className="text-2xl font-semibold text-foreground mb-4">Bienvenue sur IntraPro</h1>
+      <p className="text-muted-foreground">Page d'accueil - En cours de développement</p>
+    </div>
+  );
+}
+
+function LivraisonsPage() {
   const navigate = useNavigate();
   
   return (
-    <>
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold">Livraisons</h1>
-      </div>
-      <LivraisonsList 
-        onLivraisonSelect={(id) => navigate(`/livraison/${id}`)} 
-        onGenerateClick={() => navigate('/generation')}
-      />
-    </>
+    <LivraisonsList 
+      onLivraisonSelect={(id) => navigate(`/livraison/${id}`)} 
+      onGenerateClick={() => navigate('/generation')}
+    />
   );
 }
 
@@ -231,14 +291,14 @@ function LivraisonDetailsRoute() {
   const navigate = useNavigate();
   
   if (!id) {
-    navigate('/');
+    navigate('/livraisons');
     return null;
   }
   
   return (
     <LivraisonDetails
       livraisonId={id}
-      onBack={() => navigate('/')}
+      onBack={() => navigate('/livraisons')}
       onColisSelect={(colisId) => navigate(`/colis/${colisId}?from=livraison&livraisonId=${id}`)}
     />
   );
@@ -266,7 +326,7 @@ function ColisDetailsRoute() {
         if (fromLivraison && livraisonId) {
           navigate(`/livraison/${livraisonId}`);
         } else {
-          navigate('/');
+          navigate('/livraisons');
         }
       }}
     />

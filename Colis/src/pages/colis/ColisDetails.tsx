@@ -582,16 +582,6 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap justify-between">
             <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
-              {livraisonId && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onBackToLivraison}
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Retour à la livraison
-                </Button>
-              )}
               <span>Colis</span>
               <Circle className="w-1 h-1 fill-current" />
               <span>Détails</span>

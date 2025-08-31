@@ -473,9 +473,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
       {/* Content */}
       <div className="max-w-6xl mx-auto px-4 pt-6 pb-8">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
-          <h1 className="text-2xl font-semibold text-foreground">
-            Livraisons
-          </h1>
+          
         </div>
 
         {/* Filtres */}
