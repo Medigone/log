@@ -1273,7 +1273,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                 <DatePicker
                   value={dateLivraison}
                   onChange={(date) => setDateLivraison(date)}
-                  className="w-fit"
+                  className="w-full sm:w-auto"
                   placeholder="Sélectionner une date de livraison"
                 />
               </div>

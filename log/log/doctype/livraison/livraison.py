@@ -4,9 +4,41 @@
 import frappe
 from frappe.model.document import Document
 from frappe import _
+from datetime import datetime
 
 
 class Livraison(Document):
+
+	def autoname(self):
+		"""Generate name in format LIV-.YY.-.MM.-.#####"""
+		now = datetime.now()
+		year = now.strftime("%y")
+		month = now.strftime("%m")
+		
+		# Get the next sequence number for this year and month
+		prefix = f"LIV-{year}-{month}-"
+		
+		# Find the highest existing sequence number for this prefix
+		existing = frappe.db.sql("""
+			SELECT name FROM `tabLivraison`
+			WHERE name LIKE %s
+			ORDER BY name DESC
+			LIMIT 1
+		""", (prefix + "%",))
+		
+		if existing and existing[0][0]:
+			# Extract the sequence number from the last name
+			last_name = existing[0][0]
+			try:
+				last_seq = int(last_name.split("-")[-1])
+				next_seq = last_seq + 1
+			except (ValueError, IndexError):
+				next_seq = 1
+		else:
+			next_seq = 1
+		
+		# Format sequence number with 5 digits
+		self.name = f"{prefix}{next_seq:05d}"
 
 	def validate(self):
 		"""Validate the document and calculate totals."""

@@ -146,28 +146,17 @@ function articleStatusToColor(status: string): BadgeColor {
 /* Badge avec Tailwind CSS */
 function StatusBadge({ text, tone }: { text?: string; tone: BadgeColor }) {
   const toneClasses = {
-    gray: "bg-muted/20 border-border text-foreground",
-    blue: "bg-blue-500/10 border-blue-500 text-blue-200",
-    cyan: "bg-cyan-500/10 border-cyan-500 text-cyan-200",
-    orange: "bg-orange-500/10 border-orange-500 text-orange-200",
-    yellow: "bg-yellow-500/10 border-yellow-500 text-yellow-200",
-    green: "bg-green-500/10 border-green-500 text-green-200",
-    red: "bg-red-500/10 border-red-500 text-red-200",
-  };
-  
-  const dotClasses = {
-    gray: "bg-muted",
-    blue: "bg-blue-500",
-    cyan: "bg-cyan-500",
-    orange: "bg-orange-500",
-    yellow: "bg-yellow-500",
-    green: "bg-green-500",
-    red: "bg-red-500",
+    gray: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800",
+    blue: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
+    cyan: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-400 dark:border-cyan-800",
+    orange: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800",
+    yellow: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800",
+    green: "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800",
+    red: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
   };
   
   return text ? (
-    <span className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-xs font-bold tracking-wide ${toneClasses[tone]}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dotClasses[tone]}`} />
+    <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${toneClasses[tone]}`}>
       {text}
     </span>
   ) : null;
@@ -188,17 +177,17 @@ function MetaChip({
   return (
     <div
       title={title}
-      className="inline-flex items-center gap-2 px-3 py-2.5 bg-muted border border-border rounded-xl leading-none"
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600"
     >
       <span
         aria-hidden
-        className="grid place-items-center w-4.5 h-4.5 text-foreground"
+        className="flex items-center justify-center w-4 h-4 text-current"
       >
         {icon}
       </span>
-      <span className="inline-flex items-baseline gap-1.5 text-foreground text-sm">
+      <span className="inline-flex items-center gap-1.5 text-current text-sm">
         {label && (
-          <span className="text-muted-foreground font-medium">
+          <span className="font-medium opacity-80">
             {label}
           </span>
         )}
@@ -210,7 +199,7 @@ function MetaChip({
 
 function QtyPill({ qty }: { qty: number | string }) {
   return (
-    <span className="inline-flex items-center px-2.5 py-1.5 rounded-lg bg-muted border border-border text-foreground text-xs leading-none font-semibold">
+    <span className="inline-flex items-center px-2.5 py-1.5 rounded-md bg-muted border border-border text-foreground text-xs leading-none font-semibold">
       Qté {qty}
     </span>
   );
@@ -582,17 +571,29 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap justify-between">
             <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
+              {livraisonId && (
+                <>
+                  <button
+                    onClick={onBackToLivraison}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30"
+                    title="Retour aux détails de la livraison"
+                  >
+                    <FileText className="w-3 h-3" />
+                    <span className="text-xs font-medium">Livraison {livraisonId}</span>
+                  </button>
+                  <Circle className="w-1 h-1 fill-current" />
+                </>
+              )}
               <span>Colis</span>
               <Circle className="w-1 h-1 fill-current" />
               <span>Détails</span>
             </div>
             <div className="flex items-center gap-3">
               {colisDocId && (
-                <MetaChip
-                  icon={<Clipboard className="w-4 h-4" />}
-                  label="ID"
-                  value={colisDocId}
-                />
+                <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30">
+                  <Clipboard className="w-3 h-3" />
+                  <span className="text-xs font-medium">ID {colisDocId}</span>
+                </button>
               )}
               <div className="flex items-center gap-2">
                 <StatusBadge
@@ -601,14 +602,13 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                 />
                 <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <button
                       onClick={openStatusDialog}
-                      className="h-8 px-2"
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100 transition-colors dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800 dark:hover:bg-gray-900/30"
                     >
-                      <Settings className="w-4 h-4" />
-                    </Button>
+                      <Settings className="w-3 h-3" />
+                      <span className="text-xs font-medium">Changer</span>
+                    </button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-md">
                     <DialogHeader>
@@ -667,7 +667,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         </div>
 
         {/* Meta chips */}
-        <div className="bg-card rounded-2xl border border-border shadow-lg p-4 mb-5">
+        <div className="bg-card rounded-md border border-border shadow-lg p-4 mb-5">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <MetaChip
               icon={<Rows3 className="w-4 h-4" />}
@@ -693,7 +693,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         </div>
 
         {/* Articles */}
-        <div className="bg-card rounded-2xl border border-border shadow-lg overflow-hidden">
+        <div className="bg-card rounded-md border border-border shadow-lg overflow-hidden">
           <div className="px-4 py-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <h2 className="text-lg font-semibold text-foreground">
@@ -861,7 +861,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                 return (
                   <div
                     key={key}
-                    className="bg-card border border-border rounded-lg p-4"
+                    className="bg-card border border-border rounded-md p-4"
                   >
                     <h3 className="text-lg font-bold text-foreground">
                       {a.article}
@@ -875,7 +875,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 mt-3">
-                      <div className="text-center bg-muted border border-border rounded-lg p-2">
+                      <div className="text-center bg-muted border border-border rounded-md p-2">
                         <div className="text-xs text-muted-foreground">
                           Total
                         </div>
@@ -883,7 +883,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                           {a.quantite_totale}
                         </div>
                       </div>
-                      <div className="text-center bg-green-900/20 border border-border rounded-lg p-2">
+                      <div className="text-center bg-green-900/20 border border-border rounded-md p-2">
                         <div className="text-xs text-muted-foreground">
                           Livré
                         </div>
@@ -894,7 +894,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                           {a.quantite_livree > 0 && <Check className="w-3 h-3 text-green-500" />}
                         </div>
                       </div>
-                      <div className="text-center bg-red-900/20 border border-border rounded-lg p-2">
+                      <div className="text-center bg-red-900/20 border border-border rounded-md p-2">
                         <div className="text-xs text-muted-foreground">
                           Restant
                         </div>
@@ -911,7 +911,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                     </div>
 
                     {editingArticle === key ? (
-                      <div className="mt-3 flex items-center gap-2 bg-blue-900/20 border border-border rounded-lg p-2">
+                      <div className="mt-3 flex items-center gap-2 bg-blue-900/20 border border-border rounded-md p-2">
                         <span className="text-sm text-muted-foreground">
                           Modifier qté livrée:
                         </span>
@@ -953,7 +953,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                     )}
 
                     {a.date_derniere_livraison && (
-                      <div className="mt-2 bg-muted border border-border rounded-lg p-2 text-center">
+                      <div className="mt-2 bg-muted border border-border rounded-md p-2 text-center">
                         <span className="text-xs text-muted-foreground">
                           Mise à jour:{" "}
                         </span>
@@ -979,7 +979,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         </div>
 
         {/* Résumé + Actions */}
-        <div className="mt-6 bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+        <div className="mt-6 bg-card border border-border rounded-md shadow-sm overflow-hidden">
           <div className="px-4 py-2">
             <h2 className="text-lg font-semibold text-foreground">
               Résumé
@@ -1025,7 +1025,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         </div>
 
         {/* Informations de livraison */}
-        <div className="mt-6 bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+        <div className="mt-6 bg-card border border-border rounded-md shadow-sm overflow-hidden">
           <div className="px-4 py-2">
             <h2 className="text-lg font-semibold text-foreground">
               Informations de livraison
@@ -1046,7 +1046,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                       ref={videoRef}
                       autoPlay
                       playsInline
-                      className="w-full h-48 bg-black rounded-lg object-cover"
+                      className="w-full h-48 bg-black rounded-md object-cover"
                     />
                     <canvas ref={canvasRef} style={{ display: "none" }} />
                     <div className="flex gap-2 mt-2 justify-center">
@@ -1073,7 +1073,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                     <img
                       src={capturedPhoto}
                       alt="Photo de livraison"
-                      className="w-full h-48 object-cover rounded-lg border"
+                      className="w-full h-48 object-cover rounded-md border"
                     />
                     <div className="flex gap-2 mt-2 justify-center">
                       <Button
@@ -1097,7 +1097,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                   </div>
                 ) : (
                   <div className="w-full">
-                    <div className="w-full h-48 rounded-lg flex items-center justify-center border-2 border-dashed bg-muted border-border">
+                    <div className="w-full h-48 rounded-md flex items-center justify-center border-2 border-dashed bg-muted border-border">
                       <div className="text-center">
                         <Camera className="w-7 h-7 text-muted-foreground mx-auto mb-2" />
                         <div className="text-sm text-muted-foreground">Aucune photo</div>
@@ -1129,7 +1129,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                   <textarea
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    className="w-full p-4 rounded-lg resize-none focus:outline-none bg-muted text-foreground border border-border text-sm leading-relaxed"
+                    className="w-full p-4 rounded-md resize-none focus:outline-none bg-muted text-foreground border border-border text-sm leading-relaxed"
                     rows={4}
                     placeholder="Ajoutez un commentaire…"
                   />
@@ -1160,7 +1160,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                 </div>
               ) : (
                 <div>
-                  <div className="p-4 rounded-lg min-h-[100px] flex items-start bg-muted border border-border">
+                  <div className="p-4 rounded-md min-h-[100px] flex items-start bg-muted border border-border">
                     {commentText ? (
                       <div className="text-base text-foreground leading-relaxed">
                         {commentText}

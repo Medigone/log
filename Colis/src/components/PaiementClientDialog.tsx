@@ -238,13 +238,13 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="outline" size="sm" className="h-10 px-3 text-xs border-blue-500 hover:bg-blue-50 w-full">
+          <Button size="sm" className="h-10 px-3 text-xs bg-green-600 hover:bg-green-700 text-white border-green-600 w-full">
             <CreditCard className="w-3 h-3 mr-1" />
             Saisir paiement
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="bg-card rounded-2xl border border-border shadow-2xl max-w-md">
+      <DialogContent className="bg-card rounded-md border border-border shadow-2xl max-w-md mx-auto w-[calc(100%-2rem)] sm:w-full sm:max-w-md">
         <DialogHeader className="px-4 py-3 border-b border-border">
           <DialogTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
             <CreditCard className="w-5 h-5" />
@@ -265,9 +265,18 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
             </Alert>
           )}
           
+          {selectedBon && (
+            <div className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-md">
+              <div className="flex items-center justify-between">
+                <span className="text-blue-700 dark:text-blue-300 font-medium text-base">Montant total du bon :</span>
+                <span className="text-blue-900 dark:text-blue-100 font-bold text-lg">{formatAmount(selectedBon.grand_total)}</span>
+              </div>
+            </div>
+          )}
+          
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              Bon de livraison *
+            <label className="text-sm font-medium text-foreground block mb-2">
+              Bon de livraison
             </label>
             <Select value={bonDeLivraison} onValueChange={handleBonDeLivraisonChange} disabled={isSubmitting}>
               <SelectTrigger className="h-9 px-3 text-xs">
@@ -281,35 +290,29 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
                 ))}
               </SelectContent>
             </Select>
-            {selectedBon && (
-              <div className="mt-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-blue-700 dark:text-blue-300 font-medium">Montant total du bon :</span>
-                  <span className="text-blue-900 dark:text-blue-100 font-semibold">{formatAmount(selectedBon.grand_total)}</span>
-                </div>
-              </div>
-            )}
+
           </div>
           
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              Client *
+            <label className="text-sm font-medium text-foreground block mb-2">
+              Client
             </label>
             <Input
               placeholder="ID du client"
               value={client}
               onChange={(e) => setClient(e.target.value)}
-              disabled={isSubmitting || !!clientId}
+              disabled={isSubmitting || !!clientId || !!selectedBon}
               className="h-9 px-3 text-xs"
+              readOnly={!!selectedBon}
             />
-            {clientName && (
-              <p className="text-xs text-muted-foreground">{clientName}</p>
+            {(clientName || selectedBon?.customer_name) && (
+              <p className="text-xs text-muted-foreground">{clientName || selectedBon?.customer_name}</p>
             )}
           </div>
           
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              Moyen de paiement *
+            <label className="text-sm font-medium text-foreground block mb-2">
+              Moyen de paiement
             </label>
             <Select value={moyenPaiement} onValueChange={setMoyenPaiement} disabled={isSubmitting}>
               <SelectTrigger className="h-9 px-3 text-xs">
@@ -323,8 +326,8 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
           </div>
           
           <div className="space-y-2">
-            <label className="text-sm font-medium text-foreground">
-              Montant (DA) *
+            <label className="text-sm font-medium text-foreground block mb-2">
+              Montant (DA)
             </label>
             <Input
               type="number"
@@ -340,7 +343,7 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
           
           {moyenPaiement === "Espèce" && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-foreground">
+              <label className="text-sm font-medium text-foreground block mb-2">
                 Reçu de paiement *
               </label>
               <div className="flex items-center gap-2">
@@ -362,7 +365,7 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
           {moyenPaiement === "Chèque" && (
             <>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
+                <label className="text-sm font-medium text-foreground block mb-2">
                   Photo du chèque *
                 </label>
                 <div className="flex items-center gap-2">
@@ -381,7 +384,7 @@ const PaiementClientDialog: React.FC<PaiementClientDialogProps> = ({
               </div>
               
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">
+                <label className="text-sm font-medium text-foreground block mb-2">
                   Date d'encaissement *
                 </label>
                 <Input

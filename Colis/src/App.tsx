@@ -7,10 +7,11 @@ import {
 } from "frappe-react-sdk";
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Truck } from "lucide-react";
+import { LogOut, User, Truck, Home, RefreshCw } from "lucide-react";
 import Login from "./pages/auth/Login";
 import ColisDetails from "./pages/colis/ColisDetails";
 import ColisPublicView from "./pages/colis/ColisPublicView";
+import { Dashboard } from "./pages/dashboard";
 
 import { LivraisonsList, LivraisonDetails, GenerationLivraisons } from "./pages/livraisons";
 import logoSvg from "./assets/IntraPro_fleetmaster.svg";
@@ -127,35 +128,38 @@ function SidebarNavigation() {
       <nav className="flex-1 px-4 py-6 space-y-1">
         <button
           onClick={() => handleNavClick('/')}
-          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+          className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
             isActive('/')
               ? 'text-foreground font-medium'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
+          <Home className="w-4 h-4" />
           Accueil
         </button>
 
         <button
           onClick={() => handleNavClick('/livraisons')}
-          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+          className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
             isActive('/livraisons')
               ? 'text-foreground font-medium'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
+          <Truck className="w-4 h-4" />
           Livraisons
         </button>
 
         <button
           onClick={() => handleNavClick('/generation')}
-          className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+          className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
             isActive('/generation')
               ? 'text-foreground font-medium'
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Génération Livraisons
+          <RefreshCw className="w-4 h-4" />
+          Génération
         </button>
       </nav>
 
@@ -267,12 +271,7 @@ function AppContent() {
    Route Components
    ========================= */
 function HomePage() {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[50vh] text-center">
-      <h1 className="text-2xl font-semibold text-foreground mb-4">Bienvenue sur IntraPro</h1>
-      <p className="text-muted-foreground">Page d'accueil - En cours de développement</p>
-    </div>
-  );
+  return <Dashboard />;
 }
 
 function LivraisonsPage() {

@@ -146,29 +146,18 @@ function translateStatus(status?: string): string {
 
 /* Badge dark mode contrasté */
 function StatusBadge({ text, tone }: { text?: string; tone: BadgeColor }) {
-  const colorClasses: Record<BadgeColor, string> = {
-    gray: "bg-muted/20 border-border text-foreground",
-    blue: "bg-blue-500/20 border-blue-500 text-blue-200",
-    cyan: "bg-cyan-500/20 border-cyan-400 text-cyan-200",
-    orange: "bg-orange-500/20 border-orange-400 text-orange-200",
-    yellow: "bg-yellow-500/20 border-yellow-400 text-yellow-200",
-    green: "bg-green-500/20 border-green-500 text-green-200",
-    red: "bg-red-500/20 border-red-500 text-red-200",
-  };
-  
-  const dotClasses: Record<BadgeColor, string> = {
-    gray: "bg-muted",
-    blue: "bg-blue-500",
-    cyan: "bg-cyan-400",
-    orange: "bg-orange-400",
-    yellow: "bg-yellow-400",
-    green: "bg-green-500",
-    red: "bg-red-500",
+  const toneClasses = {
+    gray: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800",
+    blue: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
+    cyan: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-400 dark:border-cyan-800",
+    orange: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800",
+    yellow: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800",
+    green: "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800",
+    red: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
   };
   
   return text ? (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-semibold tracking-wide ${colorClasses[tone] || colorClasses.gray}`}>
-      <span className={`w-1 h-1 rounded-full ${dotClasses[tone] || dotClasses.gray}`} />
+    <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${toneClasses[tone]}`}>
       {text}
     </span>
   ) : null;
@@ -189,17 +178,17 @@ function MetaChip({
   return (
     <div
       title={title}
-      className="inline-flex items-center gap-2 px-3 py-2.5 bg-card/60 border border-border rounded-xl leading-none"
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600"
     >
       <span
         aria-hidden
-        className="grid place-items-center w-4.5 h-4.5 text-foreground"
+        className="flex items-center justify-center w-4 h-4 text-current"
       >
         {icon}
       </span>
-      <span className="inline-flex items-baseline gap-1.5 text-foreground text-sm">
+      <span className="inline-flex items-center gap-1.5 text-current text-sm">
         {label && (
-          <span className="text-muted-foreground font-medium">
+          <span className="font-medium opacity-80">
             {label}
           </span>
         )}
@@ -372,7 +361,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
   if (isLoading)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
-    <div className="bg-card rounded-2xl p-5 shadow-2xl border border-border">
+    <div className="bg-card rounded-md p-5 shadow-2xl border border-border">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white/40 mx-auto mb-3" />
       <span className="text-muted-foreground">Chargement…</span>
         </div>
@@ -382,7 +371,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
   if (error)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
-    <div className="bg-card rounded-2xl p-5 shadow-2xl border border-border max-w-md w-full">
+    <div className="bg-card rounded-md p-5 shadow-2xl border border-border max-w-md w-full">
           <Alert className="border-red-500/50 bg-red-500/10">
             <AlertTriangle className="h-4 w-4 text-red-400" />
             <AlertDescription className="text-red-200">
@@ -396,7 +385,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
   if (!livraison)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
-        <div className="bg-card rounded-2xl p-5 shadow-2xl border border-border">
+        <div className="bg-card rounded-md p-5 shadow-2xl border border-border">
           <span className="text-muted-foreground">
             Aucune donnée disponible pour cette livraison.
           </span>
@@ -417,11 +406,10 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
             </div>
             <div className="flex items-center gap-3">
               {livraison.name && (
-                <MetaChip
-                  icon={<Clipboard className="w-4 h-4" />}
-                  label="ID"
-                  value={livraison.name}
-                />
+                <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30">
+                  <Clipboard className="w-3 h-3" />
+                  <span className="text-xs font-medium">Livraison {livraison.name}</span>
+                </button>
               )}
               <StatusBadge
                 text={livraison.status}
@@ -435,7 +423,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
       {/* Content */}
       <div className="max-w-6xl mx-auto px-4 pt-6 pb-8">
         {/* Meta chips */}
-        <div className="bg-card/50 rounded-2xl border border-border shadow-2xl p-4 mb-5">
+        <div className="bg-card/50 rounded-md border border-border shadow-2xl p-4 mb-5">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <MetaChip
               icon={<Calendar className="w-4 h-4" />}
@@ -461,7 +449,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
         </div>
 
         {/* Informations générales */}
-        <div className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden mb-5">
+        <div className="bg-card rounded-md border border-border shadow-2xl overflow-hidden mb-5">
           {/* Vue desktop - En-tête horizontal */}
           <div className="hidden md:flex px-4 py-3 items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">Informations générales</h2>
@@ -483,10 +471,10 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                   mutatePaiements();
                 }}
                 trigger={
-                  <Button variant="outline" className="h-9 px-3 text-xs border-blue-500 hover:bg-blue-50 min-w-[140px]">
-                    <CreditCard className="w-3 h-3 mr-1" />
-                    Saisir paiement
-                  </Button>
+                  <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30 min-w-[140px] justify-center">
+                    <CreditCard className="w-4 h-4" />
+                    <span className="text-sm font-medium">Saisir paiement</span>
+                  </button>
                 }
               />
             </div>
@@ -513,10 +501,10 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                   mutatePaiements();
                 }}
                 trigger={
-                  <Button variant="outline" className="h-9 px-3 text-xs border-blue-500 hover:bg-blue-50 w-full sm:flex-1">
-                    <CreditCard className="w-3 h-3 mr-1" />
-                    Saisir paiement
-                  </Button>
+                  <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30 w-full sm:flex-1 justify-center">
+                    <CreditCard className="w-4 h-4" />
+                    <span className="text-sm font-medium">Saisir paiement</span>
+                  </button>
                 }
               />
             </div>
@@ -579,7 +567,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
             <div className="md:hidden">
               {/* Informations générales */}
               <div className="space-y-3 mb-6">
-                <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="bg-card/50 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Articles</span>
                     <span className="text-lg font-bold text-foreground">
@@ -587,7 +575,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     </span>
                   </div>
                 </div>
-                <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="bg-card/50 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Clients</span>
                     <span className="text-lg font-bold text-foreground">
@@ -595,7 +583,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     </span>
                   </div>
                 </div>
-                <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="bg-card/50 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Communes</span>
                     <span className="text-lg font-bold text-foreground">
@@ -610,7 +598,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
               
               {/* Informations financières */}
               <div className="space-y-3">
-                <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="bg-card/50 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Total à encaisser</span>
                     <span className="text-lg font-bold text-green-400">
@@ -618,7 +606,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     </span>
                   </div>
                 </div>
-                <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="bg-card/50 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Paiements reçus</span>
                     <span className="text-lg font-bold text-blue-400">
@@ -626,7 +614,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                     </span>
                   </div>
                 </div>
-                <div className="bg-card/50 rounded-lg border border-border p-3">
+                <div className="bg-card/50 rounded-md border border-border p-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Solde restant</span>
                     <span className={`text-lg font-bold ${
@@ -643,7 +631,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
 
         {/* Liste des Paiements */}
         {showPaiements && paiements && paiements.length > 0 && (
-          <div className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden mb-6">
+          <div className="bg-card rounded-md border border-border shadow-2xl overflow-hidden mb-6">
             <div className="px-4 py-3 border-b border-border bg-muted/50">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
@@ -665,7 +653,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
             <div className="p-3">
               <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-3">
                 {paiements.map((paiement) => (
-                  <div key={paiement.name} className="bg-card/50 rounded-lg border border-border p-3 hover:border-blue-400 transition-all duration-200">
+                  <div key={paiement.name} className="bg-card/50 rounded-md border border-border p-3 hover:border-blue-400 transition-all duration-200">
                     {/* En-tête avec client, montant et actions */}
                     <div className="flex items-start justify-between mb-2">
                       <div className="min-w-0 flex-1">
@@ -741,7 +729,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
         )}
 
         {/* Bons de Livraison et Colis */}
-        <div className="bg-card rounded-2xl border border-border shadow-2xl overflow-hidden">
+        <div className="bg-card rounded-md border border-border shadow-2xl overflow-hidden">
           <div className="px-4 py-3">
             <h2 className="text-lg font-semibold text-foreground">Bons de Livraison et Colis</h2>
           </div>
@@ -758,7 +746,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                 return (
                   <div 
                     key={bonLivraison.name}
-                    className="bg-card/50 rounded-xl border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
+                    className="bg-card/50 rounded-md border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
                   >
                     {/* En-tête du bon de livraison - Cliquable */}
                     <div 
@@ -768,9 +756,10 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                       <div className="mb-4">
                         {/* Titre du bon de livraison avec icône chevron */}
                         <div className="mb-3 flex items-center justify-between">
-                          <h3 className="text-base font-bold text-foreground">
-                            {bonLivraison.bon_de_livraison}
-                          </h3>
+                          <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30">
+                            <Clipboard className="w-3 h-3" />
+                            <span className="text-xs font-medium">{bonLivraison.bon_de_livraison}</span>
+                          </button>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">
                               {colisDuBon.length} colis
@@ -851,7 +840,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                               return (
                                 <div
                                   key={colis.name}
-                                  className="bg-card/50 rounded-xl border cursor-pointer transition-all duration-200 p-4 hover:bg-accent/50 hover:-translate-y-0.5 hover:border-blue-400"
+                                  className="bg-card/50 rounded-md border cursor-pointer transition-all duration-200 p-4 hover:bg-accent/50 hover:-translate-y-0.5 hover:border-blue-400"
                                   style={{
                                     borderColor: borderColor,
                                   }}
@@ -861,11 +850,12 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                   <div className="mb-3">
                                     {/* Nom du colis et statut */}
                                     <div className="mb-2">
-                                      <div className="text-sm font-bold text-foreground truncate">
-                                        {colis.name}
-                                      </div>
+                                      <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30 mb-2">
+                                        <Package className="w-3 h-3" />
+                                        <span className="text-xs font-medium">{colis.name}</span>
+                                      </button>
                                       {/* Statut sous l'ID en badge */}
-                                       <div className="mt-1">
+                                       <div>
                                          <StatusBadge
                                            text={translateStatus(colis.status)}
                                            tone={statusToColor(colis.status)}
@@ -874,24 +864,24 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                     </div>
                                     
                                     {/* Numéro de séquence */}
-                                    <div className="text-xs text-muted-foreground">
-                                      N° {colis.custom_numero_sequence || colis.numero_sequence || '—'}
+                                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600">
+                                      <span className="text-xs font-medium">N° {colis.custom_numero_sequence || colis.numero_sequence || '—'}</span>
                                     </div>
                                   </div>
 
                                   {/* Informations du colis */}
                                   <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                      <User className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                                      <span className="text-xs text-muted-foreground truncate">
+                                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600">
+                                      <User className="w-3 h-3 text-current flex-shrink-0" />
+                                      <span className="text-xs font-medium truncate">
                                         {colis.client || '—'}
                                       </span>
                                     </div>
                                     
                                     {colis.total_art && (
-                                      <div className="flex items-center gap-2">
-                                        <Package className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                                        <span className="text-xs text-muted-foreground">
+                                      <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600">
+                                        <Package className="w-3 h-3 text-current flex-shrink-0" />
+                                        <span className="text-xs font-medium">
                                           {colis.total_art} articles
                                         </span>
                                       </div>

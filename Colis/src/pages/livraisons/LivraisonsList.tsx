@@ -1,13 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Search as SearchIcon,
   AlertTriangle as AlertTriangleIcon,
   Dot as DotIcon,
-  Truck
+  Truck,
+  Grid3X3,
+  List
 } from 'lucide-react';
 import { useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
 
@@ -123,29 +133,18 @@ function statusToColor(status?: string): BadgeColor {
 
 /* Badge dark mode contrasté */
 function StatusBadge({ text, tone }: { text?: string; tone: BadgeColor }) {
-  const colorClasses: Record<BadgeColor, string> = {
-    gray: "bg-muted/20 border-border text-foreground",
-    blue: "bg-blue-500/20 border-blue-500 text-blue-200",
-    cyan: "bg-cyan-500/20 border-cyan-400 text-cyan-200",
-    orange: "bg-orange-500/20 border-orange-400 text-orange-200",
-    yellow: "bg-yellow-500/20 border-yellow-400 text-yellow-200",
-    green: "bg-green-500/20 border-green-500 text-green-200",
-    red: "bg-red-500/20 border-red-500 text-red-200",
-  };
-  
-  const dotClasses: Record<BadgeColor, string> = {
-    gray: "bg-muted",
-    blue: "bg-blue-500",
-    cyan: "bg-cyan-400",
-    orange: "bg-orange-400",
-    yellow: "bg-yellow-400",
-    green: "bg-green-500",
-    red: "bg-red-500",
+  const toneClasses = {
+    gray: "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800",
+    blue: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800",
+    cyan: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-400 dark:border-cyan-800",
+    orange: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800",
+    yellow: "bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800",
+    green: "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800",
+    red: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800",
   };
   
   return text ? (
-    <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-xs font-semibold tracking-wide ${colorClasses[tone] || colorClasses.gray}`}>
-      <span className={`w-1 h-1 rounded-full ${dotClasses[tone] || dotClasses.gray}`} />
+    <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium border ${toneClasses[tone]}`}>
       {text}
     </span>
   ) : null;
@@ -166,17 +165,17 @@ function MetaChip({
   return (
     <div
       title={title}
-      className="inline-flex items-center gap-2 px-3 py-2.5 bg-card/60 border border-border rounded-xl leading-none"
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600"
     >
       <span
         aria-hidden
-        className="grid place-items-center w-4.5 h-4.5 text-foreground"
+        className="flex items-center justify-center w-4 h-4 text-current"
       >
         {icon}
       </span>
-      <span className="inline-flex items-baseline gap-1.5 text-foreground text-sm">
+      <span className="inline-flex items-center gap-1.5 text-current text-sm">
         {label && (
-          <span className="text-muted-foreground font-medium">
+          <span className="font-medium opacity-80">
             {label}
           </span>
         )}
@@ -200,6 +199,21 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
   const [statusFilterOpen, setStatusFilterOpen] = useState(false);
   const [livreurFilterOpen, setLivreurFilterOpen] = useState(false);
   const [vehiculeFilterOpen, setVehiculeFilterOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => {
+    // Default to cards on mobile, table on desktop
+    return window.innerWidth < 768 ? 'cards' : 'table';
+  });
+
+  // Handle window resize to switch view mode automatically
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobile = window.innerWidth < 768;
+      setViewMode(isMobile ? 'cards' : 'table');
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Filtres pour les livraisons (sans le filtre bon de livraison côté serveur)
   const filters = useMemo(() => {
@@ -426,7 +440,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
   if (isLoading)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
-    <div className="bg-card rounded-2xl p-5 shadow-lg border border-border">
+    <div className="bg-card rounded-md p-5 shadow-lg border border-border">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-white/40 mx-auto mb-3" />
       <span className="text-muted-foreground">Chargement…</span>
         </div>
@@ -436,7 +450,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
   if (error)
     return (
       <div className="w-full min-h-screen flex items-center justify-center px-4 bg-background">
-    <div className="bg-card rounded-2xl p-5 shadow-lg border border-border max-w-md w-full">
+    <div className="bg-card rounded-md p-5 shadow-lg border border-border max-w-md w-full">
           <Alert className="border-red-500/50 bg-red-500/10">
             <AlertTriangleIcon className="h-4 w-4 text-red-400" />
             <AlertDescription className="text-red-300">
@@ -459,12 +473,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
               <span>Liste</span>
             </div>
             <div className="flex items-center gap-3">
-              <MetaChip
-                icon={<DotIcon width={16} height={16} />}
-                label="Total"
-                value={finalFilteredLivraisons.length}
-              />
-
+              
             </div>
           </div>
         </div>
@@ -479,41 +488,13 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
         {/* Filtres */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
           <div>
-            <label className="block text-sm text-muted-foreground mb-2">
-              Date de livraison
-            </label>
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="h-8"
-            />
-          </div>
-          
-          <div>
-            <label className="block text-sm text-muted-foreground mb-2">
-              Recherche
-            </label>
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Rechercher par numéro de livraison..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9"
-              />
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            </div>
-          </div>
-          
-          <div>
-            <label className="block text-sm text-muted-foreground mb-2">
+            <label className="block text-sm text-muted-foreground mb-3">
               Statut
             </label>
             <div className="relative" data-select-container>
               <button
                 onClick={() => setStatusFilterOpen(!statusFilterOpen)}
-                className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
               >
                 <span>
                   {statusFilter === "all" ? "Tous les statuts" : 
@@ -530,7 +511,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
               </button>
               
               {statusFilterOpen && (
-                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-md shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
                   {[
                     { value: "all", label: "Tous les statuts" },
                     { value: "Nouveau", label: "Nouveau" },
@@ -561,13 +542,13 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground mb-2">
+            <label className="block text-sm text-muted-foreground mb-3">
               Livreur
             </label>
             <div className="relative" data-select-container>
               <button
                 onClick={() => setLivreurFilterOpen(!livreurFilterOpen)}
-                className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
               >
                 <span>
                   {livreurFilter === "all" || !livreurFilter ? "Tous les livreurs" : 
@@ -577,7 +558,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
               </button>
               
               {livreurFilterOpen && (
-                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-md shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
                   <div
                     onClick={() => {
                       setLivreurFilter("all");
@@ -609,13 +590,13 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground mb-2">
+            <label className="block text-sm text-muted-foreground mb-3">
               Véhicule
             </label>
             <div className="relative" data-select-container>
               <button
                 onClick={() => setVehiculeFilterOpen(!vehiculeFilterOpen)}
-                className="w-full px-3 py-2 rounded-xl bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-foreground text-sm cursor-pointer flex justify-between items-center h-8 min-h-8 box-border hover:bg-accent transition-colors"
               >
                 <span>
                   {vehiculeFilter === "all" || !vehiculeFilter ? "Tous les véhicules" : 
@@ -625,7 +606,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
               </button>
               
               {vehiculeFilterOpen && (
-                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-xl shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 bg-card border border-border rounded-md shadow-lg z-50 mt-1 max-h-48 overflow-y-auto">
                   <div
                     onClick={() => {
                       setVehiculeFilter("all");
@@ -657,7 +638,35 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground mb-2">
+            <label className="block text-sm text-muted-foreground mb-3">
+              Date de livraison
+            </label>
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="h-8"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm text-muted-foreground mb-3">
+              Recherche
+            </label>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Rechercher par numéro de livraison..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-muted-foreground mb-3">
               &nbsp;
             </label>
             <button
@@ -668,7 +677,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
                 setLivreurFilter("all");
                 setVehiculeFilter("all");
               }}
-              className="w-full px-3 py-2 text-sm bg-secondary text-secondary-foreground rounded-xl hover:bg-secondary/80 transition-colors h-8 flex items-center justify-center"
+              className="w-full px-3 py-1 rounded-md bg-card border border-border text-foreground text-sm cursor-pointer flex justify-center items-center h-9 min-h-9 box-border hover:bg-accent transition-colors"
             >
               Réinitialiser les filtres
             </button>
@@ -676,124 +685,232 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
 
         </div>
 
+        {/* Table header with title and controls */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground">Liste des livraisons</h2>
+          
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">
+              {finalFilteredLivraisons.length} Livraison{finalFilteredLivraisons.length > 1 ? 's' : ''}
+            </span>
+            
+            {/* View Mode Toggle - Hidden on mobile */}
+            <div className="hidden md:flex items-center gap-1 bg-muted rounded-md p-1">
+              <button
+                onClick={() => setViewMode('cards')}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  viewMode === 'cards'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Grid3X3 className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => setViewMode('table')}
+                className={`px-2 py-1 rounded text-xs transition-colors ${
+                  viewMode === 'table'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <List className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
 
-
-        {/* Liste des livraisons regroupées par date */}
-        <div className="space-y-6">
-          {groupedLivraisons.length > 0 ? (
-            groupedLivraisons.map((group) => (
-              <div key={group.date} className="space-y-4">
-                {/* En-tête de date */}
-                <div className="flex items-center gap-3 px-2">
-                  <h3 className="text-lg font-semibold text-foreground">
-                    {group.date === 'Sans date' ? 'Sans date de livraison' : formatDate(group.date)}
-                  </h3>
-                  <div className="flex-1 h-px bg-border"></div>
-                  <span className="text-sm text-muted-foreground">
-                    {group.livraisons.length} livraison{group.livraisons.length > 1 ? 's' : ''}
-                  </span>
-                </div>
-                
-                {/* Livraisons du groupe */}
-                <div className="space-y-4">
-                  {group.livraisons.map((livraison) => (
-                    <div 
-                      key={livraison.name}
-                      className="bg-card/50 rounded-xl border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
-                    >
-                      {/* En-tête de la livraison - Cliquable */}
-                      <div 
-                        className="p-4 cursor-pointer hover:bg-accent/30 transition-colors duration-200"
+        {/* Content - Table or Cards View */}
+        {viewMode === 'table' ? (
+          /* Table View */
+          <div className="border border-border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Livraison</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead>Livreur</TableHead>
+                  <TableHead>Véhicule</TableHead>
+                  <TableHead>Colis</TableHead>
+                  <TableHead>Montant</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {finalFilteredLivraisons.length > 0 ? (
+                  finalFilteredLivraisons.map((livraison) => {
+                    return (
+                      <TableRow 
+                        key={livraison.name}
+                        className="cursor-pointer hover:bg-accent/50"
                         onClick={() => onLivraisonSelect?.(livraison.name)}
                       >
-                        <div className="mb-4">
-                          {/* Titre de la livraison avec badge statut */}
-                          <div className="mb-3 flex items-center justify-between">
-                            <h4 className="text-base font-bold text-foreground">
-                              {livraison.name}
-                            </h4>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-muted-foreground">
-                                {livraison.total_colis || 0} colis
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                              <Truck className="w-3 h-3" />
+                              <span className="text-xs font-medium">{livraison.name}</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{formatDate(livraison.date_liv)}</span>
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge
+                            text={livraison.status}
+                            tone={statusToColor(livraison.status)}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">
+                            {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : '—'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm font-medium">{livraison.total_colis || 0}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{formatAmount(livraison.total_montant_a_encaisser)}</span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <DotIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Aucune livraison trouvée</span>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          /* Cards View */
+          <div className="space-y-6">
+            {groupedLivraisons.length > 0 ? (
+              groupedLivraisons.map((group) => (
+                <div key={group.date} className="space-y-4">
+                  {/* En-tête de date */}
+                  <div className="flex items-center gap-3 px-2">
+                    <h3 className="text-lg font-semibold text-foreground">
+                      {group.date === 'Sans date' ? 'Sans date de livraison' : formatDate(group.date)}
+                    </h3>
+                    <div className="flex-1 h-px bg-border"></div>
+                    <span className="text-sm text-muted-foreground">
+                      {group.livraisons.length} livraison{group.livraisons.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  
+                  {/* Livraisons du groupe */}
+                  <div className="space-y-4">
+                    {group.livraisons.map((livraison) => (
+                      <div 
+                        key={livraison.name}
+                        className="bg-card/50 rounded-md border border-border overflow-hidden hover:border-blue-400 transition-all duration-200"
+                      >
+                        {/* En-tête de la livraison - Cliquable */}
+                        <div 
+                          className="p-4 cursor-pointer hover:bg-accent/30 transition-colors duration-200"
+                          onClick={() => onLivraisonSelect?.(livraison.name)}
+                        >
+                          <div className="mb-4">
+                            {/* Titre de la livraison avec badge statut */}
+                            <div className="mb-3 flex items-center justify-between">
+                              <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30">
+                                <Truck className="w-3 h-3" />
+                                <span className="text-xs font-medium">Livraison {livraison.name}</span>
+                              </button>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">
+                                  {livraison.total_colis || 0} colis
+                                </span>
+                                <StatusBadge
+                                  text={livraison.status}
+                                  tone={statusToColor(livraison.status)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Détails de la livraison - Toujours visible */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 pb-2 border-t border-border mb-2">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-muted-foreground">Livreur</span>
+                              <span className="text-sm text-foreground">
+                                {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : '—'}
                               </span>
-                              <StatusBadge
-                                text={livraison.status}
-                                tone={statusToColor(livraison.status)}
-                              />
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-muted-foreground">Véhicule</span>
+                              <span className="text-sm text-foreground">
+                                {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : '—'}
+                              </span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-muted-foreground">Nombre de colis</span>
+                              <span className="text-sm text-foreground">{livraison.total_colis || 0}</span>
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-muted-foreground">Montant total</span>
+                              <span className="text-sm text-foreground">{formatAmount(livraison.total_montant_a_encaisser)}</span>
                             </div>
                           </div>
+
+                          {/* Bons de livraison associés */}
+                          {livraison.bons_de_livraison && livraison.bons_de_livraison.length > 0 && (
+                            <div className="pt-2 border-t border-border">
+                              <span className="text-xs text-muted-foreground mb-2 block">Bons de livraison :</span>
+                              <div className="flex flex-wrap gap-2">
+                                {livraison.bons_de_livraison.map((bon: any, index: number) => (
+                                   <span 
+                                     key={index}
+                                     className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md"
+                                   >
+                                     {bon.bon_de_livraison}
+                                   </span>
+                                 ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Clients associés */}
+                          {livraison.bons_de_livraison && livraison.bons_de_livraison.length > 0 && (
+                            <div className="pt-2 border-t border-border">
+                              <span className="text-xs text-muted-foreground mb-2 block">Clients :</span>
+                              <div className="flex flex-wrap gap-2">
+                                {[...new Set(livraison.bons_de_livraison.map((bon: any) => bon.customer).filter(Boolean))].map((client: unknown, index: number) => (
+                                    <span 
+                                      key={index}
+                                      className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md"
+                                    >
+                                      {String(client)}
+                                    </span>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-
-                        {/* Détails de la livraison - Toujours visible */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-4 pb-2 border-t border-border mb-2">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Livreur</span>
-                            <span className="text-sm text-foreground">
-                              {livraison.livreur ? livreursMapping[livraison.livreur] || livraison.livreur : '—'}
-                            </span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Véhicule</span>
-                            <span className="text-sm text-foreground">
-                              {livraison.vehicule ? vehiculesMapping[livraison.vehicule] || livraison.vehicule : '—'}
-                            </span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Nombre de colis</span>
-                            <span className="text-sm text-foreground">{livraison.total_colis || 0}</span>
-                          </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="text-xs text-muted-foreground">Montant total</span>
-                            <span className="text-sm text-foreground">{formatAmount(livraison.total_montant_a_encaisser)}</span>
-                          </div>
-                        </div>
-
-                        {/* Bons de livraison associés */}
-                        {livraison.bons_de_livraison && livraison.bons_de_livraison.length > 0 && (
-                          <div className="pt-2 border-t border-border">
-                            <span className="text-xs text-muted-foreground mb-2 block">Bons de livraison :</span>
-                            <div className="flex flex-wrap gap-2">
-                              {livraison.bons_de_livraison.map((bon: any, index: number) => (
-                                 <span 
-                                   key={index}
-                                   className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-md"
-                                 >
-                                   {bon.bon_de_livraison}
-                                 </span>
-                               ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Clients associés */}
-                        {livraison.bons_de_livraison && livraison.bons_de_livraison.length > 0 && (
-                          <div className="pt-2 border-t border-border">
-                            <span className="text-xs text-muted-foreground mb-2 block">Clients :</span>
-                            <div className="flex flex-wrap gap-2">
-                              {[...new Set(livraison.bons_de_livraison.map((bon: any) => bon.customer).filter(Boolean))].map((client: unknown, index: number) => (
-                                  <span 
-                                    key={index}
-                                    className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md"
-                                  >
-                                    {String(client)}
-                                  </span>
-                                ))}
-                            </div>
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))
-           ) : (
-             <div className="p-8 text-center">
-               <DotIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-               <span className="text-muted-foreground">Aucune livraison trouvée</span>
-             </div>
-           )}
-        </div>
+              ))
+             ) : (
+               <div className="p-8 text-center">
+                 <DotIcon className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                 <span className="text-muted-foreground">Aucune livraison trouvée</span>
+               </div>
+             )}
+          </div>
+        )}
 
 
 
