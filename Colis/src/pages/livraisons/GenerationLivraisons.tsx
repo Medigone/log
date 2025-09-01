@@ -36,7 +36,7 @@ interface LivraisonData {
   repartition?: {
     [livreurNom: string]: {
       livreur: string;
-      total_colis: number;
+      total_articles: number;
       total_bons: number;
       taux_charge: number;
       communes?: string[];
@@ -415,9 +415,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                                <option value="">-- Changer de livreur --</option>
                              {livreursDisponibles.map((livreur: any) => {
                                // Calculer la charge actuelle pour cet affichage
-                               const chargeActuelle = realTimeCharges[livreur.name]?.charge || livreur.charge_actuelle_date || 0;
-                               const capaciteMax = livreur.capacite_max || 100;
-                               const tauxCharge = Math.round((chargeActuelle / capaciteMax) * 100);
+                               const chargeActuelle = Number(realTimeCharges[livreur.name]?.charge || livreur.charge_actuelle || livreur.charge_actuelle_date) || 0;
+                               const capaciteMax = Number(livreur.capacite_max) || 100;
+                               const tauxCharge = capaciteMax > 0 ? Math.round((chargeActuelle / capaciteMax) * 100) : 0;
                                const depasseCapacite = tauxCharge > 100;
                                
                                return (
@@ -436,7 +436,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                          variant="outline" 
                          className="bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 font-medium text-xs px-2 py-1 rounded-lg"
                        >
-                         {bon.total_colis || bon.custom_nombre_colis || 0} colis
+                         {bon.total_qty || 0} articles
                        </Badge>
                        {isEditing && (
                          <Badge 
@@ -502,26 +502,57 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
 
     setIsLoading(true);
     try {
+
+      
       const result = await callRepartition({
         date_livraison: dateLivraison,
         mode: 'auto',
         simulate: modeSimulation
       });
 
-      if (result?.message) {
-        setCurrentData(result.message);
+
+      
+      // Following Frappe API response handling pattern
+      const actualResponse = result?.message || result;
+
+      
+      if (actualResponse) {
+        setCurrentData(actualResponse);
         setShowResults(true);
         
         // Si des communes nécessitent une attribution manuelle, activer le mode interactif
-        if (result.message.communes_data && result.message.communes_data.length > 0) {
+        if (actualResponse.communes_data && actualResponse.communes_data.length > 0) {
           setShowManualInterface(true);
           // Initialiser les assignations interactives avec les attributions automatiques existantes
-          initializeInteractiveAssignments(result.message);
+          initializeInteractiveAssignments(actualResponse);
         }
+        
+        showAlert('Aperçu généré avec succès', 'success');
+      } else {
+
+        showAlert('La réponse de l\'API est vide', 'warning');
       }
     } catch (error) {
-      console.error('Erreur lors de la génération:', error);
-      showAlert('Erreur lors de la génération de l\'aperçu', 'error');
+
+      
+      // Enhanced error handling based on memory
+      let errorMessage = 'Erreur lors de la génération de l\'aperçu';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        if ('message' in error) {
+          errorMessage = String(error.message);
+        } else if ('exc' in error) {
+          errorMessage = String(error.exc);
+        } else if ('status' in error) {
+          errorMessage = `Erreur HTTP ${(error as {status: number}).status}: ${(error as {statusText?: string}).statusText || 'Erreur serveur'}`;
+        }
+      }
+      
+
+      
+      showAlert(`Erreur: ${errorMessage}`, 'error');
     } finally {
       setIsLoading(false);
     }
@@ -724,7 +755,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
        const livreurId = manualAssignments[commune.commune];
        const livreur = commune.livreurs_disponibles?.find((l: any) => l.name === livreurId);
       
-      if (livreur && (livreur.charge_actuelle_date + commune.nb_colis) > livreur.capacite_max) {
+      if (livreur && ((livreur.charge_actuelle || livreur.charge_actuelle_date) + commune.total_qty) > livreur.capacite_max) {
         erreurs.push(`${commune.commune}: Capacité insuffisante pour ${livreur.nom_complet}`);
       }
     }
@@ -777,7 +808,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
        const livreur = communeData?.livreurs_disponibles?.find((l: any) => l.name === livreurId);
       
       if (livreur && communeData) {
-        const nouvelleCharge = livreur.charge_actuelle_date + communeData.nb_colis;
+        const nouvelleCharge = (livreur.charge_actuelle || livreur.charge_actuelle_date) + communeData.total_qty;
         if (nouvelleCharge > livreur.capacite_max) {
           showAlert(
             `Attention: ${livreur.nom_complet} dépassera sa capacité (${nouvelleCharge}/${livreur.capacite_max})`,
@@ -812,7 +843,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
       const livreurId = interactiveAssignments[commune.commune];
       const livreur = commune.livreurs_disponibles?.find((l: any) => l.name === livreurId);
       
-      if (livreur && (livreur.charge_actuelle_date + commune.nb_colis) > livreur.capacite_max) {
+      if (livreur && ((livreur.charge_actuelle || livreur.charge_actuelle_date) + commune.total_qty) > livreur.capacite_max) {
         erreurs.push(`${commune.commune}: Capacité insuffisante pour ${livreur.nom_complet}`);
       }
     }
@@ -854,9 +885,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
       commune.livreurs_disponibles?.forEach((livreur: any) => {
         if (!charges[livreur.name]) {
           charges[livreur.name] = {
-            charge: livreur.charge_actuelle_date,
-            capacite: livreur.capacite_max,
-            nom: livreur.nom_complet
+            charge: Number(livreur.charge_actuelle || livreur.charge_actuelle_date) || 0,
+            capacite: Number(livreur.capacite_max) || 100,
+            nom: livreur.nom_complet || livreur.name || 'Livreur'
           };
         }
       });
@@ -866,9 +897,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
     sourceData?.livreurs_disponibles?.forEach((livreur: any) => {
       if (!charges[livreur.name]) {
         charges[livreur.name] = {
-          charge: livreur.charge_actuelle_date || 0,
-          capacite: livreur.capacite_max || 100,
-          nom: livreur.nom_complet || livreur.name
+          charge: Number(livreur.charge_actuelle || livreur.charge_actuelle_date) || 0,
+          capacite: Number(livreur.capacite_max) || 100,
+          nom: livreur.nom_complet || livreur.name || 'Livreur'
         };
       }
     });
@@ -878,7 +909,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
       if (livreurId && charges[livreurId]) {
         const communeData = sourceData?.communes_data?.find((c: any) => c.commune === commune);
         if (communeData) {
-          charges[livreurId].charge += communeData.nb_colis || 0;
+          charges[livreurId].charge += Number(communeData.total_qty) || 0;
         }
       }
     });
@@ -903,20 +934,22 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
       const chargeData = charges[livreurId];
       
       if (livreur && chargeData && communeData) {
-        const tauxCharge = (chargeData.charge / chargeData.capacite) * 100;
+        const chargeValue = Number(chargeData.charge) || 0;
+        const capaciteValue = Number(chargeData.capacite) || 100;
+        const tauxCharge = capaciteValue > 0 ? (chargeValue / capaciteValue) * 100 : 0;
         
         if (tauxCharge > 100) {
           errors.push({
             commune,
-            livreur: livreur.nom_complet,
-            message: `Capacité dépassée: ${chargeData.charge}/${chargeData.capacite} colis (${Math.round(tauxCharge)}%)`,
+            livreur: livreur.nom_complet || 'Livreur',
+            message: `Capacité dépassée: ${chargeValue}/${capaciteValue} articles (${Math.round(tauxCharge)}%)`,
             severity: 'error'
           });
         } else if (tauxCharge > 90) {
           warnings.push({
             commune,
-            livreur: livreur.nom_complet,
-            message: `Presque saturé: ${chargeData.charge}/${chargeData.capacite} colis (${Math.round(tauxCharge)}%)`,
+            livreur: livreur.nom_complet || 'Livreur',
+            message: `Presque saturé: ${chargeValue}/${capaciteValue} articles (${Math.round(tauxCharge)}%)`,
             severity: 'warning'
           });
         }
@@ -990,7 +1023,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
     
     if (livreurData && newCharges[livreurId]) {
       const charge = newCharges[livreurId];
-      const tauxCharge = Math.round((charge.charge / charge.capacite) * 100);
+      const chargeValue = Number(charge.charge) || 0;
+      const capaciteValue = Number(charge.capacite) || 100;
+      const tauxCharge = capaciteValue > 0 ? Math.round((chargeValue / capaciteValue) * 100) : 0;
       
       if (tauxCharge > 100) {
         showAlert(
@@ -1045,9 +1080,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
             
             // Recalculer les totaux pour l'ancien livreur
             repartition.total_bons = repartition.bons_de_livraison.length;
-            repartition.total_colis = repartition.bons_de_livraison.reduce(
-              (sum: number, bon: any) => sum + (bon.total_colis || bon.custom_nombre_colis || 0), 0
-            );
+            repartition.total_articles = repartition.bons_de_livraison.reduce(
+          (sum: number, bon: any) => sum + (bon.total_qty || 0), 0
+        );
             
             // Mettre à jour les communes assignées
             if (bonCommune) {
@@ -1062,8 +1097,8 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
             );
             if (livreurData) {
               repartition.taux_charge = Math.round(
-                (repartition.total_colis / livreurData.capacite_max) * 100
-              );
+          (repartition.total_articles / livreurData.capacite_max) * 100
+        );
             }
           }
         }
@@ -1096,9 +1131,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
             
             // Recalculer les totaux pour le nouveau livreur
             repartition.total_bons = repartition.bons_de_livraison.length;
-            repartition.total_colis = repartition.bons_de_livraison.reduce(
-              (sum: number, bon: any) => sum + (bon.total_colis || bon.custom_nombre_colis || 0), 0
-            );
+            repartition.total_articles = repartition.bons_de_livraison.reduce(
+          (sum: number, bon: any) => sum + (bon.total_qty || 0), 0
+        );
             
             // Recalculer le taux de charge
             const livreurData = updatedData.livreurs_disponibles?.find(
@@ -1106,8 +1141,8 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
             );
             if (livreurData) {
               repartition.taux_charge = Math.round(
-                (repartition.total_colis / livreurData.capacite_max) * 100
-              );
+          (repartition.total_articles / livreurData.capacite_max_articles) * 100
+        );
             }
           }
         });
@@ -1125,10 +1160,10 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
               bons_de_livraison: [bonToMove],
               communes: bonCommune ? [bonCommune] : [],
               total_bons: 1,
-              total_colis: bonToMove.total_colis || bonToMove.custom_nombre_colis || 0,
+              total_articles: bonToMove.total_qty || 0,
               taux_charge: Math.round(
-                ((bonToMove.total_colis || bonToMove.custom_nombre_colis || 0) / livreurData.capacite_max) * 100
-              )
+            ((bonToMove.total_qty || 0) / livreurData.capacite_max) * 100
+          )
             };
           }
         }
@@ -1358,7 +1393,9 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                       {Object.entries(realTimeCharges)
                         .filter(([livreurId]) => Object.values(interactiveAssignments).includes(livreurId))
                         .map(([livreurId, data]) => {
-                          const tauxCharge = (data.charge / data.capacite) * 100;
+                          const chargeValue = Number(data.charge) || 0;
+                          const capaciteValue = Number(data.capacite) || 100;
+                          const tauxCharge = capaciteValue > 0 ? (chargeValue / capaciteValue) * 100 : 0;
                           const couleur = tauxCharge > 100 ? 'red' : tauxCharge > 90 ? 'amber' : 'green';
                           
                           return (
@@ -1378,7 +1415,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                                 </Badge>
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                {data.charge}/{data.capacite} colis
+                                {chargeValue}/{capaciteValue} articles
                               </div>
                               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
                                 <div 
@@ -1412,7 +1449,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                             <div>
                               <h3 className="font-semibold text-foreground text-base">{communeNom}</h3>
                               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                <span>{commune.nb_colis} colis à assigner</span>
+                                <span>{commune.total_qty} articles à assigner</span>
                                 {commune.bons_livraison && commune.bons_livraison.length > 0 && (
                                   <>
                                     <span>•</span>
@@ -1435,7 +1472,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                               {commune.bons_livraison?.length || 0} bon(s)
                             </Badge>
                             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
-                              {commune.nb_colis} colis
+                              {commune.total_qty} articles
                             </Badge>
                           </div>
                         </div>
@@ -1464,23 +1501,24 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                                   -- Choisir un livreur --
                                 </option>
                                 {commune.livreurs_disponibles?.map((livreur: any) => {
-                                  const chargeRealTime = realTimeCharges[livreur.name]?.charge || livreur.charge_actuelle_date;
-                                  const nouvelleCharge = chargeRealTime + commune.nb_colis;
-                                  const depasseCapacite = nouvelleCharge > livreur.capacite_max;
-                                  const tauxCharge = (chargeRealTime / livreur.capacite_max) * 100;
+                                  const chargeRealTime = Number(realTimeCharges[livreur.name]?.charge || livreur.charge_actuelle || livreur.charge_actuelle_date) || 0;
+                                  const nouvelleCharge = chargeRealTime + (Number(commune.total_qty) || 0);
+                                  const capaciteMax = Number(livreur.capacite_max) || 100;
+                                  const depasseCapacite = nouvelleCharge > capaciteMax;
+                                  const tauxCharge = capaciteMax > 0 ? (chargeRealTime / capaciteMax) * 100 : 0;
                                   
                                   return (
                                     <option 
                                       key={livreur.name} 
                                       value={livreur.name}
-                                      disabled={chargeRealTime >= livreur.capacite_max}
+                                      disabled={chargeRealTime >= capaciteMax}
                                       className={`py-2 ${
                                         depasseCapacite ? 'text-red-600' : 
                                         tauxCharge > 80 ? 'text-amber-600' : 
                                         'text-green-600'
                                       }`}
                                     >
-                                      {livreur.nom_complet} - {livreur.vehicule} ({chargeRealTime}/{livreur.capacite_max})
+                                      {livreur.nom_complet || 'Livreur'} - {livreur.vehicule} ({chargeRealTime}/{capaciteMax})
                                       {depasseCapacite && ' ⚠️ Dépassement'}
                                       {!depasseCapacite && tauxCharge > 80 && ' ⚡ Presque plein'}
                                     </option>
@@ -1500,30 +1538,31 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                                   if (!livreurSelectionne) return null;
                                   
                                   // Utiliser les données de charges en temps réel
-                                  const chargeRealTime = realTimeCharges[livreurSelectionne.name]?.charge || livreurSelectionne.charge_actuelle_date;
+                                  const chargeRealTime = Number(realTimeCharges[livreurSelectionne.name]?.charge || livreurSelectionne.charge_actuelle || livreurSelectionne.charge_actuelle_date) || 0;
                                   const nouvelleCharge = chargeRealTime;
-                                  const depasseCapacite = nouvelleCharge > livreurSelectionne.capacite_max;
-                                  const tauxCharge = (nouvelleCharge / livreurSelectionne.capacite_max) * 100;
+                                  const capaciteMax = Number(livreurSelectionne.capacite_max) || 100;
+                                  const depasseCapacite = nouvelleCharge > capaciteMax;
+                                  const tauxCharge = capaciteMax > 0 ? (nouvelleCharge / capaciteMax) * 100 : 0;
                                   
                                   if (depasseCapacite) {
                                     return (
                                       <div className="flex items-center gap-1 text-red-600 animate-pulse">
                                         <AlertTriangle className="h-3 w-3" />
-                                        <span>Capacité dépassée ({nouvelleCharge}/{livreurSelectionne.capacite_max}) - {Math.round(tauxCharge)}%</span>
+                                        <span>Capacité dépassée ({nouvelleCharge}/{capaciteMax}) - {Math.round(tauxCharge)}%</span>
                                       </div>
                                     );
                                   } else if (tauxCharge > 90) {
                                     return (
                                       <div className="flex items-center gap-1 text-amber-600">
                                         <AlertTriangle className="h-3 w-3" />
-                                        <span>Presque saturé ({nouvelleCharge}/{livreurSelectionne.capacite_max}) - {Math.round(tauxCharge)}%</span>
+                                        <span>Presque saturé ({nouvelleCharge}/{capaciteMax}) - {Math.round(tauxCharge)}%</span>
                                       </div>
                                     );
                                   } else {
                                     return (
                                       <div className="flex items-center gap-1 text-green-600">
                                         <Check className="h-3 w-3" />
-                                        <span>Assignation valide ({nouvelleCharge}/{livreurSelectionne.capacite_max}) - {Math.round(tauxCharge)}%</span>
+                                        <span>Assignation valide ({nouvelleCharge}/{capaciteMax}) - {Math.round(tauxCharge)}%</span>
                                       </div>
                                     );
                                   }
@@ -1711,7 +1750,7 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                 <MetaChip 
                   icon={Package} 
                   label="Articles" 
-                  value={Object.values(currentData.repartition || {}).reduce((total: number, rep: any) => total + (rep.total_colis || 0), 0)} 
+                  value={Object.values(currentData.repartition || {}).reduce((total: number, rep: any) => total + (rep.total_articles || 0), 0)} 
                 />
                 <MetaChip 
                   icon={Map} 
@@ -1761,49 +1800,57 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
                         </div>
                         <div className="flex flex-col gap-2">
                           <div className="flex flex-wrap items-center gap-1 sm:gap-2">
-                             <Badge variant="outline" className="text-xs font-medium px-2 py-1 rounded-lg bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">{repartition.total_colis} colis</Badge>
+                             <Badge variant="outline" className="text-xs font-medium px-2 py-1 rounded-lg bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">{repartition.total_articles} articles</Badge>
                              <Badge variant="outline" className="text-xs font-medium px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">{repartition.communes?.length || 0} commune(s)</Badge>
                              <Badge variant="outline" className="text-xs font-medium px-2 py-1 rounded-lg bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-400 dark:border-purple-800">{repartition.total_bons} bon(s)</Badge>
                              <Badge 
                                variant="outline" 
                                className={`${(() => {
                                  // Toujours utiliser les calculs frontend pour la cohérence
-                                 let chargePercentage = repartition.taux_charge; // Fallback sur backend
+                                 let chargePercentage = Number(repartition.taux_charge) || 0; // Fallback sur backend
                                  
                                  // Essayer d'utiliser les calculs frontend en priorité
                                  if (realTimeCharges[repartition.livreur]) {
                                    const charge = realTimeCharges[repartition.livreur];
-                                   chargePercentage = Math.round((charge.charge / charge.capacite) * 100);
+                                   const chargeValue = Number(charge.charge) || 0;
+                                   const capaciteValue = Number(charge.capacite) || 100;
+                                   chargePercentage = capaciteValue > 0 ? Math.round((chargeValue / capaciteValue) * 100) : 0;
                                  } else if (currentData?.livreurs_disponibles) {
                                    // Calculer dynamiquement si pas de charge en temps réel
                                    const livreur = currentData.livreurs_disponibles.find((l: any) => 
                                      l.name === repartition.livreur || l.nom_complet === repartition.livreur
                                    );
                                    if (livreur) {
-                                     chargePercentage = Math.round((repartition.total_colis / livreur.capacite_max) * 100);
+                                     const totalArticles = Number(repartition.total_articles) || 0;
+                                     const capaciteMax = Number(livreur.capacite_max) || 100;
+                                     chargePercentage = capaciteMax > 0 ? Math.round((totalArticles / capaciteMax) * 100) : 0;
                                    }
                                  }
                                  
-                                 return getChargeColor(chargePercentage);
+                                 return getChargeColor(isNaN(chargePercentage) ? 0 : chargePercentage);
                                })()} font-medium text-xs px-2 py-1 rounded-lg`}
                              >
                                {(() => {
                                  // Même logique pour l'affichage du pourcentage
-                                 let chargePercentage = repartition.taux_charge;
+                                 let chargePercentage = Number(repartition.taux_charge) || 0;
                                  
                                  if (realTimeCharges[repartition.livreur]) {
                                    const charge = realTimeCharges[repartition.livreur];
-                                   chargePercentage = Math.round((charge.charge / charge.capacite) * 100);
+                                   const chargeValue = Number(charge.charge) || 0;
+                                   const capaciteValue = Number(charge.capacite) || 100;
+                                   chargePercentage = capaciteValue > 0 ? Math.round((chargeValue / capaciteValue) * 100) : 0;
                                  } else if (currentData?.livreurs_disponibles) {
                                    const livreur = currentData.livreurs_disponibles.find((l: any) => 
                                      l.name === repartition.livreur || l.nom_complet === repartition.livreur
                                    );
                                    if (livreur) {
-                                     chargePercentage = Math.round((repartition.total_colis / livreur.capacite_max) * 100);
+                                     const totalArticles = Number(repartition.total_articles) || 0;
+                                     const capaciteMax = Number(livreur.capacite_max) || 100;
+                                     chargePercentage = capaciteMax > 0 ? Math.round((totalArticles / capaciteMax) * 100) : 0;
                                    }
                                  }
                                  
-                                 return chargePercentage;
+                                 return isNaN(chargePercentage) ? 0 : chargePercentage;
                                })()}% charge
                              </Badge>
                            </div>

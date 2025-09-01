@@ -1,0 +1,101 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-01-31 10:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "article",
+  "column_break_1",
+  "quantite_demandee",
+  "column_break_2",
+  "quantite_preparee",
+  "column_break_3",
+  "statut_preparation",
+  "section_break_details",
+  "bon_de_livraison",
+  "column_break_details",
+  "notes_article"
+ ],
+ "fields": [
+  {
+   "fieldname": "article",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Article",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quantite_demandee",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantité Demandée",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "quantite_preparee",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantité Préparée",
+   "non_negative": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "En attente",
+   "fieldname": "statut_preparation",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Statut Préparation",
+   "options": "En attente\nEn cours\nTerminé\nManquant",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_details",
+   "fieldtype": "Section Break",
+   "label": "Détails"
+  },
+  {
+   "fieldname": "bon_de_livraison",
+   "fieldtype": "Link",
+   "label": "Bon de Livraison Source",
+   "options": "Delivery Note",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_details",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "notes_article",
+   "fieldtype": "Small Text",
+   "label": "Notes Article"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-01-31 10:00:00",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Articles Preparation",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

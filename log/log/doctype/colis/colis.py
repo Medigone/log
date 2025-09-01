@@ -16,6 +16,10 @@ class Colis(Document):
 			if not self.bl:
 				frappe.throw("Le champ BL (Delivery Note) est obligatoire")
 			
+			# Validation de la cohérence avec la préparation
+			if self.preparation:
+				self.validate_preparation_consistency()
+			
 			# Calculer le statut global si des articles existent
 			if self.articles:
 				self.calculate_global_status(use_smart_status=False)  # Éviter la récursion lors de la validation
@@ -24,6 +28,53 @@ class Colis(Document):
 			frappe.logger().error(f"Erreur lors de la validation du Colis {self.name}: {e}")
 			# Ne pas bloquer la validation pour des erreurs de calcul de statut
 			pass
+	
+	def validate_preparation_consistency(self):
+		"""Valide la cohérence entre le colis et sa préparation"""
+		if not self.preparation:
+			return
+		
+		try:
+			# Récupérer la préparation
+			preparation = frappe.get_doc("Preparation", self.preparation)
+			
+			# Vérifier que le client correspond
+			if self.client != preparation.client:
+				frappe.throw(f"Le client du colis ({self.client}) ne correspond pas au client de la préparation ({preparation.client})")
+			
+			# Vérifier que le bon de livraison est dans la préparation
+			bl_in_preparation = any(
+				article.bon_de_livraison == self.bl 
+				for article in preparation.articles
+			)
+			
+			if not bl_in_preparation:
+				frappe.throw(f"Le bon de livraison {self.bl} n'est pas présent dans la préparation {self.preparation}")
+			
+			# Vérifier que les articles du colis correspondent aux articles préparés
+			prep_articles = {
+				(article.article, article.bon_de_livraison): article.quantite_preparee
+				for article in preparation.articles
+				if article.bon_de_livraison == self.bl
+			}
+			
+			for colis_article in self.articles:
+				key = (colis_article.article, self.bl)
+				if key not in prep_articles:
+					frappe.throw(f"L'article {colis_article.article} n'est pas dans la préparation pour le bon de livraison {self.bl}")
+				
+				# Vérifier que la quantité totale ne dépasse pas la quantité préparée
+				if colis_article.quantite_totale > prep_articles[key]:
+					frappe.throw(f"La quantité totale de l'article {colis_article.article} ({colis_article.quantite_totale}) dépasse la quantité préparée ({prep_articles[key]})")
+			
+		except Exception as e:
+			if "n'est pas" in str(e) or "ne correspond pas" in str(e) or "dépasse" in str(e):
+				# Re-lever les erreurs de validation métier
+				raise
+			else:
+				# Logger les autres erreurs sans bloquer
+				frappe.logger().error(f"Erreur lors de la validation de cohérence pour {self.name}: {str(e)}")
+				pass
 
 	def autoname(self):
 		"""Génère automatiquement le nom du document au format {bl}-{numero_fixe}"""
@@ -47,8 +98,57 @@ class Colis(Document):
 	
 
 	
+	def sync_with_preparation(self):
+		"""Synchronise les quantités livrées avec la Préparation associée"""
+		if not self.preparation or not self.articles:
+			return
+		
+		try:
+			# Récupérer la Préparation
+			preparation = frappe.get_doc("Preparation", self.preparation)
+			
+			# Créer un dictionnaire des quantités livrées par article
+			delivered_quantities = {}
+			for article in self.articles:
+				if article.article and article.quantite_livree > 0:
+					key = (article.article, self.bl)  # Clé combinée article + bon de livraison
+					if key in delivered_quantities:
+						delivered_quantities[key] += article.quantite_livree
+					else:
+						delivered_quantities[key] = article.quantite_livree
+			
+			# Mettre à jour les quantités dans la Préparation
+			for prep_article in preparation.articles:
+				key = (prep_article.article, prep_article.bon_de_livraison)
+				if key in delivered_quantities:
+					# Calculer la nouvelle quantité livrée
+					new_delivered_qty = delivered_quantities[key]
+					
+					# S'assurer que la quantité livrée ne dépasse pas la quantité préparée
+					if new_delivered_qty > prep_article.quantite_preparee:
+						new_delivered_qty = prep_article.quantite_preparee
+					
+					# Mettre à jour les quantités dans l'article de préparation
+					if hasattr(prep_article, 'quantite_livree'):
+						prep_article.quantite_livree = new_delivered_qty
+			
+			# Sauvegarder la Préparation avec les nouvelles quantités
+			preparation.save(ignore_permissions=True)
+			
+			frappe.logger().info(f"Synchronisation réussie avec Préparation {self.preparation}")
+			
+		except Exception as e:
+			frappe.logger().error(f"Erreur lors de la synchronisation avec Préparation {self.preparation}: {str(e)}")
+			# Ne pas lever l'erreur pour éviter de bloquer la sauvegarde du Colis
+	
 	def sync_with_delivery_note(self):
-		"""Synchronise les quantités livrées avec le Delivery Note associé"""
+		"""Synchronise les quantités livrées avec le Delivery Note associé (méthode de compatibilité)"""
+		# Si le colis est lié à une préparation, synchroniser avec la préparation
+		if self.preparation:
+			self.sync_with_preparation()
+			return
+		
+		# Sinon, utiliser l'ancienne logique pour la compatibilité
 		if not self.bl or not self.articles:
 			return
 		
@@ -1843,8 +1943,219 @@ def is_valid_status_transition(current_status, new_status, config):
 		frappe.log_error(f"Erreur get_public_colis_data: {str(e)}")
 		frappe.local.response.http_status_code = 500
 		return {
-			'error': 'Erreur serveur',
-			'message': 'Une erreur est survenue lors de la récupération des données.'
+				'error': 'Erreur serveur',
+				'message': 'Une erreur est survenue lors de la récupération des données.'
+			}
+
+
+# ===== FONCTIONS POUR LA GÉNÉRATION DIRECTE DE COLIS =====
+
+@frappe.whitelist()
+def create_colis_from_delivery_note(delivery_note_name, articles_data=None):
+	"""Crée un colis directement depuis un bon de livraison avec sélection manuelle des articles
+	
+	Args:
+		delivery_note_name (str): Nom du bon de livraison
+		articles_data (list): Liste des articles avec quantités sélectionnées
+			[{"item_code": "ITEM001", "quantity": 5}, ...]
+	
+	Returns:
+		dict: Résultat de la création avec le nom du colis créé
+	"""
+	try:
+		# Vérifier les permissions
+		if not frappe.has_permission("Colis", "create"):
+			frappe.throw("Permission refusée pour créer un colis")
+		
+		# Vérifier que le bon de livraison existe
+		if not frappe.db.exists("Delivery Note", delivery_note_name):
+			frappe.throw(f"Le bon de livraison {delivery_note_name} n'existe pas")
+		
+		# Récupérer le bon de livraison
+		delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
+		
+		# Créer le nouveau colis
+		colis = frappe.new_doc("Colis")
+		colis.client = delivery_note.customer
+		colis.bl = delivery_note_name
+		colis.date = frappe.utils.today()
+		colis.status = "Nouveau"
+		
+		# Si des articles spécifiques sont fournis, les utiliser
+		if articles_data:
+			# Convertir en dict pour faciliter la recherche
+			articles_dict = {item["item_code"]: item["quantity"] for item in articles_data}
+			
+			# Ajouter les articles sélectionnés
+			for item in delivery_note.items:
+				if item.item_code in articles_dict:
+					quantity = articles_dict[item.item_code]
+					if quantity > 0:
+						colis.append("articles", {
+							"article": item.item_code,
+							"quantite_totale": quantity,
+							"quantite_livree": 0,
+							"quantite_restante": quantity,
+							"statut_article": "Nouveau"
+						})
+		else:
+			# Ajouter tous les articles du bon de livraison
+			for item in delivery_note.items:
+				colis.append("articles", {
+					"article": item.item_code,
+					"quantite_totale": item.qty,
+					"quantite_livree": 0,
+					"quantite_restante": item.qty,
+					"statut_article": "Nouveau"
+				})
+		
+		# Sauvegarder le colis
+		colis.insert()
+		
+		# Mettre à jour le nombre de colis dans le bon de livraison
+		from log.delivery_note_hooks import force_update_colis_count
+		force_update_colis_count(delivery_note_name)
+		
+		return {
+			"success": True,
+			"colis_name": colis.name,
+			"message": f"Colis {colis.name} créé avec succès"
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur création colis depuis bon de livraison: {str(e)}")
+		return {
+			"success": False,
+			"message": f"Erreur lors de la création: {str(e)}"
+		}
+
+@frappe.whitelist()
+def get_delivery_note_items_for_colis(delivery_note_name):
+	"""Récupère les articles d'un bon de livraison disponibles pour création de colis
+	
+	Args:
+		delivery_note_name (str): Nom du bon de livraison
+	
+	Returns:
+		dict: Liste des articles avec quantités disponibles
+	"""
+	try:
+		# Vérifier que le bon de livraison existe
+		if not frappe.db.exists("Delivery Note", delivery_note_name):
+			frappe.throw(f"Le bon de livraison {delivery_note_name} n'existe pas")
+		
+		# Récupérer le bon de livraison
+		delivery_note = frappe.get_doc("Delivery Note", delivery_note_name)
+		
+		# Calculer les quantités déjà dans les colis
+		colis_quantities = {}
+		existing_colis = frappe.get_all("Colis", 
+			filters={"bl": delivery_note_name, "docstatus": ["<", 2]},
+			fields=["name"]
+		)
+		
+		for colis in existing_colis:
+			colis_doc = frappe.get_doc("Colis", colis.name)
+			for article in colis_doc.articles:
+				if article.article in colis_quantities:
+					colis_quantities[article.article] += article.quantite_totale
+				else:
+					colis_quantities[article.article] = article.quantite_totale
+		
+		# Préparer la liste des articles disponibles
+		available_items = []
+		for item in delivery_note.items:
+			used_quantity = colis_quantities.get(item.item_code, 0)
+			available_quantity = item.qty - used_quantity
+			
+			available_items.append({
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"total_quantity": item.qty,
+				"used_quantity": used_quantity,
+				"available_quantity": available_quantity,
+				"uom": item.uom,
+				"rate": item.rate
+			})
+		
+		return {
+			"success": True,
+			"delivery_note": {
+				"name": delivery_note.name,
+				"customer": delivery_note.customer,
+				"posting_date": delivery_note.posting_date
+			},
+			"items": available_items
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur récupération articles bon de livraison: {str(e)}")
+		return {
+			"success": False,
+			"message": f"Erreur lors de la récupération: {str(e)}"
+		}
+
+@frappe.whitelist()
+def get_unpacked_delivery_notes(date_from=None, date_to=None, customer=None):
+	"""Récupère les bons de livraison qui ont des articles non encore emballés en colis
+	
+	Args:
+		date_from (str): Date de début (optionnel)
+		date_to (str): Date de fin (optionnel)
+		customer (str): Client spécifique (optionnel)
+	
+	Returns:
+		dict: Liste des bons de livraison avec articles non emballés
+	"""
+	try:
+		# Construire les filtres
+		filters = {"docstatus": 1}  # Seulement les bons de livraison soumis
+		
+		if date_from:
+			filters["posting_date"] = [">=", date_from]
+		if date_to:
+			if "posting_date" in filters:
+				filters["posting_date"] = ["between", [date_from, date_to]]
+			else:
+				filters["posting_date"] = ["<=", date_to]
+		if customer:
+			filters["customer"] = customer
+		
+		# Récupérer tous les bons de livraison
+		delivery_notes = frappe.get_all("Delivery Note", 
+			filters=filters,
+			fields=["name", "customer", "posting_date", "grand_total", "custom_nombre_colis"]
+		)
+		
+		unpacked_notes = []
+		
+		for dn in delivery_notes:
+			# Utiliser la fonction existante pour vérifier les articles non emballés
+			from log.delivery_note_hooks import get_unpacked_items
+			unpacked_items = get_unpacked_items(dn.name)
+			
+			if unpacked_items:
+				unpacked_notes.append({
+					"name": dn.name,
+					"customer": dn.customer,
+					"posting_date": dn.posting_date,
+					"grand_total": dn.grand_total,
+					"total_colis": dn.custom_nombre_colis or 0,
+					"unpacked_items_count": len(unpacked_items),
+					"unpacked_items": unpacked_items
+				})
+		
+		return {
+			"success": True,
+			"unpacked_delivery_notes": unpacked_notes,
+			"total_count": len(unpacked_notes)
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur récupération bons de livraison non emballés: {str(e)}")
+		return {
+			"success": False,
+			"message": f"Erreur lors de la récupération: {str(e)}"
 		}
 
 

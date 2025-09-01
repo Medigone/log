@@ -24,7 +24,7 @@ def can_create_colis(delivery_note_name):
             fields=["article", "quantite_totale"]):
             cumul[r.article] = cumul.get(r.article, 0) + (r.quantite_totale or 0)
 
-    # s’il reste au moins une unité d’un article
+    # s'il reste au moins une unité d'un article
     for code, total in dn_qty.items():
         if total - cumul.get(code, 0) > 0:
             return True
@@ -79,23 +79,138 @@ def create_colis(delivery_note_name):
             row.statut_article = "En attente"  # Initialiser statut_article
             row.description = item.get("description")
 
-    # Définir explicitement le statut avant l'insertion
-    colis.status = "Nouveau"
     colis.insert(ignore_permissions=True)
-    # Sauvegarder pour s'assurer que le statut est persisté
-    colis.save(ignore_permissions=True)
-    
-    # Recharger le document pour s'assurer qu'il est dans un état cohérent
-    colis.reload()
-    
-    # Forcer la mise à jour du cache
-    frappe.db.commit()
-    frappe.clear_document_cache("Colis", colis.name)
 
     # 3) Mise à jour des séquences et du compteur sur la DN
     _update_sequences(delivery_note_name)
 
     return colis.name
+
+def _update_sequences(delivery_note_name):
+    """
+    Re-calcule custom_numero_sequence pour chaque Colis lié
+    et met à jour custom_nombre_colis sur la Delivery Note.
+    """
+    try:
+        # Vérifier que la Delivery Note existe
+        if not frappe.db.exists("Delivery Note", delivery_note_name):
+            frappe.log_error(f"Delivery Note {delivery_note_name} n'existe pas", 
+                           "Erreur mise à jour séquences Colis")
+            return
+        
+        # Forcer une requête SQL directe pour vérifier les colis liés
+        # en contournant le cache potentiellement obsolète
+        sql_query = """
+            SELECT name 
+            FROM `tabColis` 
+            WHERE bl = %s AND docstatus < 2
+            ORDER BY creation ASC
+        """
+        docs_result = frappe.db.sql(sql_query, (delivery_note_name,), as_dict=True)
+        
+        # Vérifier si des colis sont encore liés à cette DN
+        total = len(docs_result)
+        
+        # Mettre à jour la séquence pour chaque Colis
+        for idx, d in enumerate(docs_result, start=1):
+            try:
+                frappe.db.set_value("Colis", d.name,
+                    "custom_numero_sequence", f"{idx}/{total}",
+                    update_modified=False)
+            except Exception as e:
+                frappe.log_error(f"Erreur lors de la mise à jour de la séquence pour Colis {d.name}: {str(e)}", 
+                               "Erreur mise à jour séquences Colis")
+        
+        # Mettre à jour le nombre total de Colis sur la Delivery Note avec une requête SQL directe
+        try:
+            # Utiliser une requête SQL directe pour mettre à jour le champ
+            update_query = """
+                UPDATE `tabDelivery Note`
+                SET custom_nombre_colis = %s
+                WHERE name = %s
+            """
+            frappe.db.sql(update_query, (total, delivery_note_name))
+        except Exception as e:
+            frappe.log_error(f"Erreur lors de la mise à jour du nombre de colis pour DN {delivery_note_name}: {str(e)}", 
+                           "Erreur mise à jour nombre colis")
+        
+        # S'assurer que les modifications sont bien enregistrées
+        frappe.db.commit()
+        
+        # Invalider le cache pour s'assurer que les modifications sont visibles
+        frappe.clear_cache(doctype="Delivery Note")
+        frappe.clear_cache(doctype="Colis")
+        
+    except Exception as e:
+        frappe.log_error(f"Erreur générale lors de la mise à jour des séquences pour DN {delivery_note_name}: {str(e)}", 
+                       "Erreur mise à jour séquences")
+        # Essayer de faire un commit même en cas d'erreur pour sauvegarder ce qui a pu être fait
+        frappe.db.commit()
+
+def _update_sequences_after_delete(delivery_note_name):
+    """
+    Version spéciale de _update_sequences qui s'exécute après suppression
+    avec un délai pour s'assurer que la suppression est complètement terminée.
+    """
+    try:
+        # Attendre un court instant pour s'assurer que la suppression est complètement terminée
+        time.sleep(3)
+        
+        # Vérifier que la Delivery Note existe
+        if not frappe.db.exists("Delivery Note", delivery_note_name):
+            frappe.log_error(f"Delivery Note {delivery_note_name} n'existe pas", 
+                           "Erreur mise à jour séquences après suppression")
+            return
+        
+        # Forcer une nouvelle connexion à la base de données pour éviter les problèmes de cache
+        frappe.db.commit()
+        
+        # Requête SQL directe pour récupérer les colis restants
+        colis_query = """
+            SELECT name 
+            FROM `tabColis` 
+            WHERE bl = %s AND docstatus < 2
+            ORDER BY creation ASC
+        """
+        colis_result = frappe.db.sql(colis_query, (delivery_note_name,), as_dict=True)
+        total = len(colis_result)
+        
+        # Mettre à jour les séquences des colis restants
+        for idx, colis in enumerate(colis_result, start=1):
+            try:
+                sequence_update = """
+                    UPDATE `tabColis`
+                    SET custom_numero_sequence = %s
+                    WHERE name = %s
+                """
+                frappe.db.sql(sequence_update, (f"{idx}/{total}", colis.name))
+            except Exception as e:
+                frappe.log_error(f"Erreur lors de la mise à jour de la séquence pour Colis {colis.name}: {str(e)}", 
+                               "Erreur mise à jour séquences après suppression")
+        
+        # Mettre à jour le nombre total de colis sur la Delivery Note
+        try:
+            count_update = """
+                UPDATE `tabDelivery Note`
+                SET custom_nombre_colis = %s
+                WHERE name = %s
+            """
+            frappe.db.sql(count_update, (total, delivery_note_name))
+        except Exception as e:
+            frappe.log_error(f"Erreur lors de la mise à jour du nombre de colis après suppression pour DN {delivery_note_name}: {str(e)}", 
+                           "Erreur mise à jour nombre colis après suppression")
+        
+        # S'assurer que les modifications sont bien enregistrées
+        frappe.db.commit()
+        
+        # Invalider le cache
+        frappe.clear_cache(doctype="Delivery Note")
+        frappe.clear_cache(doctype="Colis")
+        
+    except Exception as e:
+        frappe.log_error(f"Erreur générale lors de la mise à jour des séquences après suppression pour DN {delivery_note_name}: {str(e)}", 
+                       "Erreur mise à jour séquences après suppression")
+        frappe.db.commit()
 
 def _update_sequences(delivery_note_name):
     """
@@ -249,31 +364,33 @@ def _update_sequences_after_delete(delivery_note_name):
 
 def validate_colis_quantities(doc, method):
     """
-    Valide les quantités, génère le QR code et calcule le statut global.
+    Bloque si somme(qtés des autres colis + qtés de ce colis)
+    > qtés de la DN.
     """
-    # Validation des quantités
-    if doc.bl:
-        dn = frappe.get_doc("Delivery Note", doc.bl)
-        dn_qty = {i.item_code: i.qty for i in dn.items}
+    if not doc.bl:
+        return
 
-        autres = [c.name for c in frappe.get_all("Colis",
-            filters={"bl": doc.bl, "name": ("!=", doc.name)},
-            fields=["name"])]
-        cumul = {}
-        if autres:
-            for r in frappe.get_all("Articles Colis",
-                filters={"parent": ["in", autres]},
-                fields=["article", "quantite_totale"]):
-                cumul[r.article] = cumul.get(r.article, 0) + (r.quantite_totale or 0)
+    dn = frappe.get_doc("Delivery Note", doc.bl)
+    dn_qty = {i.item_code: i.qty for i in dn.items}
 
-        for line in doc.articles:
-            code = line.article
-            qt   = line.quantite_totale or 0
-            if cumul.get(code, 0) + qt > dn_qty.get(code, 0):
-                frappe.throw(_(
-                    "Quantité trop élevée pour l'article « {0} » : "
-                    "{1} déjà colisé + {2} ici > {3} sur la DN."
-                ).format(code, cumul.get(code, 0), qt, dn_qty.get(code, 0)))
+    autres = [c.name for c in frappe.get_all("Colis",
+        filters={"bl": doc.bl, "name": ("!=", doc.name)},
+        fields=["name"])]
+    cumul = {}
+    if autres:
+        for r in frappe.get_all("Articles Colis",
+            filters={"parent": ["in", autres]},
+            fields=["article", "quantite_totale"]):
+            cumul[r.article] = cumul.get(r.article, 0) + (r.quantite_totale or 0)
+
+    for line in doc.articles:
+        code = line.article
+        qt   = line.quantite_totale or 0
+        if cumul.get(code, 0) + qt > dn_qty.get(code, 0):
+            frappe.throw(_(
+                "Quantité trop élevée pour l'article « {0} » : "
+                "{1} déjà colisé + {2} ici > {3} sur la DN."
+            ).format(code, cumul.get(code, 0), qt, dn_qty.get(code, 0)))
     
     # Générer le QR code seulement si le document est nouveau et n'a pas encore d'image
     if doc.is_new() and (not doc.image or not doc.image.strip()):
@@ -446,3 +563,30 @@ def force_update_colis_count(delivery_note_name):
         frappe.log_error(f"Erreur lors de la mise à jour forcée pour DN {delivery_note_name}: {str(e)}", 
                        "Erreur force update")
         return {"success": False, "message": str(e)}
+
+def calculate_global_status(doc):
+    """
+    Calcule le statut global du colis basé sur les statuts des articles
+    """
+    if not doc.articles:
+        return "En attente"
+    
+    # Compter les statuts des articles
+    article_statuses = [article.statut_article for article in doc.articles if article.statut_article]
+    
+    if not article_statuses:
+        return "En attente"
+    
+    # Logique de calcul du statut global
+    if all(status == "Livré" for status in article_statuses):
+        return "Livré"
+    elif all(status == "En attente" for status in article_statuses):
+        return "En attente"
+    elif any(status == "Partiellement livré" for status in article_statuses) or \
+         (any(status == "Livré" for status in article_statuses) and 
+          any(status in ["En attente", "Partiellement livré"] for status in article_statuses)):
+        return "Partiellement Livré"
+    elif all(status == "Non livré" for status in article_statuses):
+        return "Non Livré"
+    else:
+        return "En attente"

@@ -27,8 +27,8 @@ class DistributionMemoryBuffer:
 	
 	def __init__(self, date_livraison: str):
 		self.date_livraison = date_livraison
-		self.charges_jour: Dict[str, int] = {}  # livreur_id -> nb_colis
-		self.capacites: Dict[str, int] = {}     # livreur_id -> capacite_max
+		self.charges_jour: Dict[str, int] = {}  # livreur_id -> nb_articles
+		self.capacites: Dict[str, int] = {}     # livreur_id -> capacite_max_articles
 		self.repartition: Dict[str, List[DeliveryNoteLite]] = defaultdict(list)
 		self.rejets: List[Dict] = []
 		
@@ -43,10 +43,10 @@ class DistributionMemoryBuffer:
 		# Récupérer les capacités des livreurs actifs
 		livreurs = frappe.get_all("Livreur", 
 			filters={"active": 1}, 
-			fields=["name", "capacite_max_colis"]
+			fields=["name", "capacite_max_articles"]
 		)
 		for livreur in livreurs:
-			self.capacites[livreur.name] = livreur.capacite_max_colis or 0
+			self.capacites[livreur.name] = livreur.capacite_max_articles or 0
 			if livreur.name not in self.charges_jour:
 				self.charges_jour[livreur.name] = 0
 	
@@ -56,10 +56,10 @@ class DistributionMemoryBuffer:
 		charge_actuelle = self.charges_jour.get(livreur_id, 0)
 		return max(0, capacite_max - charge_actuelle)
 	
-	def reserver_charge(self, livreur_id: str, nb_colis: int) -> bool:
+	def reserver_charge(self, livreur_id: str, nb_articles: int) -> bool:
 		"""Réserve une charge pour un livreur. Retourne True si possible, False sinon."""
-		if self.capacite_restante(livreur_id) >= nb_colis:
-			self.charges_jour[livreur_id] = self.charges_jour.get(livreur_id, 0) + nb_colis
+		if self.capacite_restante(livreur_id) >= nb_articles:
+			self.charges_jour[livreur_id] = self.charges_jour.get(livreur_id, 0) + nb_articles
 			return True
 		return False
 	
@@ -109,16 +109,16 @@ def classifier_livraison_par_distance(commune_name):
 	return "Éloignée"
 
 
-def verifier_capacite_livreur(livreur_id, nb_colis, date_livraison):
-	"""Vérifie si le livreur peut accepter les colis supplémentaires pour une date donnée."""
+def verifier_capacite_livreur(livreur_id, nb_articles, date_livraison):
+	"""Vérifie si le livreur peut accepter les articles supplémentaires pour une date donnée."""
 	livreur = frappe.get_doc("Livreur", livreur_id)
 	charge_actuelle_date = obtenir_charge_livreur_pour_date(livreur_id, date_livraison)
-	capacite_max = livreur.capacite_max_colis or 0
+	capacite_max = livreur.capacite_max_articles or 0
 	
-	if charge_actuelle_date + nb_colis > capacite_max:
+	if charge_actuelle_date + nb_articles > capacite_max:
 		frappe.throw(f"Capacité maximale dépassée pour le livreur {livreur.nom}. "
 					f"Charge actuelle pour {date_livraison}: {charge_actuelle_date}, Capacité max: {capacite_max}, "
-					f"Tentative d'ajout: {nb_colis}")
+					f"Tentative d'ajout: {nb_articles}")
 	
 	return True
 
@@ -156,7 +156,7 @@ def candidats_eligibles_v2(commune: str, classification: str, buffer: Distributi
 	# 1. Filtrer par statut actif uniquement
 	filters = {"active": 1}
 	candidats = frappe.get_all("Livreur", filters=filters,
-		fields=["name", "capacite_max_colis", "priorite_attribution", "vehicule", "type_couverture", "specialisation"])
+		fields=["name", "capacite_max_articles", "priorite_attribution", "vehicule", "type_couverture", "specialisation"])
 	
 	if not candidats:
 		return []
@@ -217,7 +217,7 @@ def scorer_candidats_v2(candidats: List[Dict], buffer: DistributionMemoryBuffer)
 
 	# Scorer chaque candidat
 	for c in candidats:
-		capacite_max = c.get("capacite_max_colis", 0) or 1
+		capacite_max = c.get("capacite_max_articles", 0) or 1
 		charge_actuelle = buffer.charges_jour.get(c["name"], 0)
 		
 		# Facteur 1: Équilibrage (charge relative du jour) - 0.70 (augmenté)
@@ -255,19 +255,19 @@ def scorer_candidats_v2(candidats: List[Dict], buffer: DistributionMemoryBuffer)
 	return candidats
 
 
-def choisir_candidat_v2(candidats_tries: List[Dict], nb_colis: int, buffer: DistributionMemoryBuffer) -> Optional[str]:
+def choisir_candidat_v2(candidats_tries: List[Dict], nb_articles: int, buffer: DistributionMemoryBuffer) -> Optional[str]:
 	"""Essaie les candidats en cascade jusqu'à trouver un qui a la capacité."""
 	for candidat in candidats_tries:
 		# Vérifier la capacité avant de choisir
-		if buffer.capacite_restante(candidat["name"]) >= nb_colis:
+		if buffer.capacite_restante(candidat["name"]) >= nb_articles:
 			return candidat["name"]
 	return None
 
 
-def split_commune_ffd(candidats_tries: List[Dict], nb_colis_total: int, buffer: DistributionMemoryBuffer) -> Tuple[List[Tuple[str, int]], int]:
+def split_commune_ffd(candidats_tries: List[Dict], nb_articles_total: int, buffer: DistributionMemoryBuffer) -> Tuple[List[Tuple[str, int]], int]:
 	"""Split d'une commune selon l'heuristique First-Fit Decreasing (FFD)."""
-	attribution = []  # list[(livreur_id, nb_colis)]
-	reste = nb_colis_total
+	attribution = []  # list[(livreur_id, nb_articles)]
+	reste = nb_articles_total
 	
 	# Simulation sans réservation réelle pour éviter les doubles comptabilisations
 	charges_simulees = buffer.charges_jour.copy()
@@ -298,7 +298,7 @@ def split_commune_ffd(candidats_tries: List[Dict], nb_colis_total: int, buffer: 
 	return attribution, reste
 
 
-def generer_suggestions_top3(candidats_tries: List[Dict], nb_colis: int, buffer: DistributionMemoryBuffer) -> List[Dict]:
+def generer_suggestions_top3(candidats_tries: List[Dict], nb_articles: int, buffer: DistributionMemoryBuffer) -> List[Dict]:
 	"""Génère les suggestions top-3 pour les rejets."""
 	suggestions = []
 	for candidat in candidats_tries[:3]:
@@ -308,13 +308,13 @@ def generer_suggestions_top3(candidats_tries: List[Dict], nb_colis: int, buffer:
 			"nom_livreur": frappe.db.get_value("Livreur", candidat["name"], "nom") or candidat["name"],
 			"capacite_restante": cap_restante,
 			"score": round(candidat.get("_score", 0), 4),
-			"manque": max(0, nb_colis - cap_restante)
+			"manque": max(0, nb_articles - cap_restante)
 		})
 	return suggestions
 
 
 # Fonction de compatibilité (ancienne interface)
-def attribuer_livreur_optimal(classification, nb_colis, commune_name=None, date_livraison=None):
+def attribuer_livreur_optimal(classification, nb_articles, commune_name=None, date_livraison=None):
 	"""Fonction de compatibilité - utilise l'ancien algorithme pour éviter les régressions."""
 	filters = {"active": 1}
 	
@@ -326,7 +326,7 @@ def attribuer_livreur_optimal(classification, nb_colis, commune_name=None, date_
 		filters["type_couverture"] = "Locale"
 
 	candidats = frappe.get_all("Livreur", filters=filters,
-		fields=["name", "capacite_max_colis", "priorite_attribution", "vehicule"])
+		fields=["name", "capacite_max_articles", "priorite_attribution", "vehicule"])
 	
 	if not candidats:
 		return None
@@ -368,7 +368,7 @@ def attribuer_livreur_optimal(classification, nb_colis, commune_name=None, date_
 
 	for c in candidats:
 		# Utiliser la charge spécifique à la date
-		taux_charge = c.charge_actuelle_date / float(c.capacite_max_colis or 1)
+		taux_charge = c.charge_actuelle_date / float(c.capacite_max_articles or 1)
 		# Plus besoin de pénalité de zone car tous les candidats sont autorisés
 		penalite_zone = 0
 		cout_km_norm = normalise(veh_map.get(c.vehicule, 0), min_c, max_c)
@@ -380,10 +380,10 @@ def attribuer_livreur_optimal(classification, nb_colis, commune_name=None, date_
 	# CORRECTION: Choisir le candidat avec le score le plus bas (meilleur)
 	choisi = min(candidats, key=lambda x: x._score)
 	
-	if (choisi.capacite_max_colis or 0) <= 0:
+	if (choisi.capacite_max_articles or 0) <= 0:
 		return None
 	# Vérifier la capacité avec la charge spécifique à la date
-	if choisi.charge_actuelle_date + nb_colis > (choisi.capacite_max_colis or 0):
+	if choisi.charge_actuelle_date + nb_articles > (choisi.capacite_max_articles or 0):
 		return None
 	
 	return choisi.name
@@ -597,7 +597,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 	buffer = DistributionMemoryBuffer(date_livraison)
 
 	with db_txn():
-		# 1) Récupération des bons de livraison avec leurs colis
+		# 1) Récupération des bons de livraison avec leurs articles (même sans colis)
 		bons_a_livrer = frappe.db.sql("""
 			SELECT 
 				dn.name as bon_de_livraison,
@@ -610,11 +610,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 			FROM `tabDelivery Note` dn
 			WHERE dn.custom_date_de_livraison = %s
 			AND dn.docstatus = 0
-			AND EXISTS (
-				SELECT 1 FROM `tabColis` c 
-				WHERE c.bl = dn.name 
-				AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-			)
+			AND dn.total_qty > 0
 		""", (date_livraison,), as_dict=True)
 
 		# 2) Groupement par commune
@@ -627,7 +623,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 			# Récupérer la liste des livreurs actifs
 			livreurs_actifs = frappe.get_all("Livreur", 
 				filters={"active": 1}, 
-				fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation"]
+				fields=["name", "nom", "capacite_max_articles", "type_couverture", "specialisation"]
 			)
 			
 			# Préparer les données par commune pour l'interface manuelle
@@ -637,6 +633,8 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 		
 			for commune_id, bons_liste in par_commune.items():
 				nb_colis_total = sum(bon.custom_nombre_colis or 0 for bon in bons_liste)
+				# CORRECTION: Calculer le total des articles au lieu des colis
+				total_qty = sum(bon.total_qty or 0 for bon in bons_liste)
 				nom_commune = frappe.db.get_value("Commune", commune_id, "nom") or commune_id
 				classification = classifier_livraison_par_distance(commune_id)
 				
@@ -651,7 +649,9 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 							"nom_complet": livreur["nom_complet"],
 							"vehicule": livreur.get("vehicule", "N/A"),
 							"charge_actuelle": livreur["charge_actuelle_date"],
+							"charge_actuelle_date": livreur["charge_actuelle_date"],  # Garder pour compatibilité
 							"capacite_max": livreur["capacite_max"],
+							"capacite_max_articles": livreur["capacite_max"],  # Garder pour compatibilité
 							"taux_charge": livreur["taux_charge_date"]
 						})
 				
@@ -704,6 +704,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 						"communes": [],
 						"total_bons": 0,
 						"total_colis": 0,
+						"total_articles": 0,
 						"taux_charge": 0
 					}
 				
@@ -711,6 +712,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 				if commune not in repartition[livreur_id]["communes"]:
 					repartition[livreur_id]["communes"].append(commune)
 				repartition[livreur_id]["total_bons"] += len(bons_commune)
+				repartition[livreur_id]["total_articles"] += sum(bon.total_qty or 0 for bon in bons_commune)
 				repartition[livreur_id]["total_colis"] += sum(bon.custom_nombre_colis or 0 for bon in bons_commune)
 		else:
 			# Mode automatique : attribution par commune selon l'algorithme
@@ -778,6 +780,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 										"communes": [],
 										"total_bons": 0,
 										"total_colis": 0,
+										"total_articles": 0,
 										"taux_charge": 0
 									})
 									
@@ -800,6 +803,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 										rep["communes"].append(commune)
 									rep["total_bons"] += len(bons_a_retirer)
 									rep["total_colis"] += colis_attribues
+									rep["total_articles"] += sum(bon.total_qty or 0 for bon in bons_a_retirer)
 								continue  # Passer à la commune suivante
 							else:
 								# Split échoué
@@ -817,6 +821,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 					"communes": [],
 					"total_bons": 0,
 					"total_colis": 0,
+					"total_articles": 0,
 					"taux_charge": 0
 				})
 				rep["bons_de_livraison"].extend(bons_liste)
@@ -824,13 +829,14 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 					rep["communes"].append(commune)
 				rep["total_bons"] += len(bons_liste)
 				rep["total_colis"] += nb_colis_total
+				rep["total_articles"] += sum(bon.total_qty or 0 for bon in bons_liste)
 			
 			# Si des communes n'ont pas pu être attribuées automatiquement, déclencher le mode manuel
 			if communes_non_attribuees and simulate:
 				# Récupérer la liste des livreurs actifs
 				livreurs_actifs = frappe.get_all("Livreur", 
 					filters={"active": 1}, 
-					fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation"]
+					fields=["name", "nom", "capacite_max_articles", "type_couverture", "specialisation"]
 				)
 				
 				# Préparer les données par commune pour l'interface manuelle
@@ -842,6 +848,8 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 				for commune_id in communes_non_attribuees:
 					bons_liste = par_commune.get(commune_id, [])
 					nb_colis_total = sum(bon.custom_nombre_colis or 0 for bon in bons_liste)
+					# CORRECTION: Calculer le total des articles au lieu des colis pour cette commune aussi
+					total_qty = sum(bon.total_qty or 0 for bon in bons_liste)
 					nom_commune = frappe.db.get_value("Commune", commune_id, "nom") or commune_id
 					classification = classifier_livraison_par_distance(commune_id)
 					
@@ -866,6 +874,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 						"classification": classification,
 						"nb_bons": len(bons_liste),
 						"nb_colis": nb_colis_total,
+						"total_qty": total_qty,  # AJOUT: Inclure le total des articles
 						"bons_livraison": bons_liste,
 						"livreurs_disponibles": livreurs_disponibles
 					})
@@ -915,7 +924,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 			cap = buffer.capacites.get(livreur_id, 0)
 			# Utiliser la charge du buffer (qui inclut déjà les réservations)
 			charge_proj = buffer.charges_jour.get(livreur_id, 0)
-			data["taux_charge"] = round(100 * charge_proj / cap, 2) if cap else 0
+			data["taux_charge"] = round(100 * data.get("total_articles", 0) / cap, 2) if cap else 0
 			
 			# Conserver les IDs des communes pour la création des livraisons
 			communes_ids = data["communes"].copy()
@@ -1002,7 +1011,9 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 				"nom_complet": livreur["nom_complet"],
 				"vehicule": livreur.get("vehicule", "N/A"),
 				"charge_actuelle": livreur["charge_actuelle_date"],
+				"charge_actuelle_date": livreur["charge_actuelle_date"],  # Garder pour compatibilité
 				"capacite_max": livreur["capacite_max"],
+				"capacite_max_articles": livreur["capacite_max"],  # Garder pour compatibilité
 				"taux_charge": livreur["taux_charge_date"]
 			})
 
@@ -1080,20 +1091,20 @@ def calculer_charges_par_date(date_livraison):
 	# Récupérer les livraisons pour cette date spécifique
 	livraisons = frappe.get_all("Livraison",
 		filters={"date_liv": date_livraison, "docstatus": 0},
-		fields=["name", "livreur"]
+		fields=["name", "livreur", "total_articles"]
 	)
 	
 	charges_par_livreur = {}
 	
 	for livraison in livraisons:
 		try:
-			livraison_doc = frappe.get_doc("Livraison", livraison.name)
-			total_colis = len(livraison_doc.colis) if livraison_doc.colis else 0
+			# Utiliser total_articles au lieu de compter les colis
+			total_articles = livraison.total_articles or 0
 			
-			if total_colis > 0 and livraison.livreur:
+			if total_articles > 0 and livraison.livreur:
 				if livraison.livreur not in charges_par_livreur:
 					charges_par_livreur[livraison.livreur] = 0
-				charges_par_livreur[livraison.livreur] += total_colis
+				charges_par_livreur[livraison.livreur] += total_articles
 				
 		except Exception as e:
 			frappe.log_error(f"Erreur calcul charge livreur {livraison.livreur} pour date {date_livraison}: {str(e)}")
@@ -1110,15 +1121,15 @@ def obtenir_charge_livreur_pour_date(livreur_id, date_livraison):
 	# Calculer la charge pour cette date spécifique
 	livraisons = frappe.get_all("Livraison",
 		filters={"date_liv": date_livraison, "livreur": livreur_id, "docstatus": 0},
-		fields=["name"]
+		fields=["name", "total_articles"]
 	)
 	
 	charge_totale = 0
 	for livraison in livraisons:
 		try:
-			livraison_doc = frappe.get_doc("Livraison", livraison.name)
-			total_colis = len(livraison_doc.colis) if livraison_doc.colis else 0
-			charge_totale += total_colis
+			# Utiliser total_articles au lieu de compter les colis
+			total_articles = livraison.total_articles or 0
+			charge_totale += total_articles
 		except Exception as e:
 			frappe.log_error(f"Erreur calcul charge livreur {livreur_id} pour date {date_livraison}: {str(e)}")
 	
@@ -1134,7 +1145,7 @@ def obtenir_livreurs_avec_charge_par_date(date_livraison):
 	# Récupérer tous les livreurs actifs
 	livreurs = frappe.get_all("Livreur",
 		filters={"active": 1},
-		fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation", "vehicule"]
+		fields=["name", "nom", "capacite_max_articles", "type_couverture", "specialisation", "vehicule"]
 	)
 	
 	# Calculer les charges pour cette date spécifique
@@ -1144,10 +1155,12 @@ def obtenir_livreurs_avec_charge_par_date(date_livraison):
 	for livreur in livreurs:
 		livreur.charge_actuelle_date = charges_par_date.get(livreur.name, 0)
 		livreur.nom_complet = livreur.nom or livreur.name
-		livreur.capacite_max = livreur.capacite_max_colis or 0
+		# Utiliser capacite_max_articles comme capacité maximale
+		capacite_max_articles = livreur.capacite_max_articles or 0
+		livreur.capacite_max = capacite_max_articles
 		# Calculer le taux de charge pour cette date
-		if livreur.capacite_max > 0:
-			livreur.taux_charge_date = round(100 * (livreur.charge_actuelle_date / livreur.capacite_max), 2)
+		if capacite_max_articles > 0:
+			livreur.taux_charge_date = round(100 * (livreur.charge_actuelle_date / capacite_max_articles), 2)
 		else:
 			livreur.taux_charge_date = 0
 	
@@ -1182,7 +1195,7 @@ def diagnostiquer_distribution_bons(date_livraison):
 	# 2) Compter les livreurs actifs
 	livreurs_actifs = frappe.get_all("Livreur", 
 		filters={"active": 1}, 
-		fields=["name", "nom", "capacite_max_colis", "type_couverture"]
+		fields=["name", "nom", "capacite_max_articles", "type_couverture"]
 	)
 	
 	# Remplacer les IDs par les noms des livreurs
@@ -1783,7 +1796,7 @@ def equilibrer_charges_livreurs(repartition: Dict, date_livraison: str) -> Dict:
 	# Récupérer les capacités des livreurs
 	livreurs_info = {}
 	for livreur_id in repartition.keys():
-		capacite = frappe.db.get_value("Livreur", livreur_id, "capacite_max_colis") or 0
+		capacite = frappe.db.get_value("Livreur", livreur_id, "capacite_max_articles") or 0
 		charge_actuelle = obtenir_charge_livreur_pour_date(livreur_id, date_livraison)
 		livreurs_info[livreur_id] = {
 			"capacite": capacite,
@@ -1944,7 +1957,7 @@ def diagnostiquer_equilibrage_livreurs(date_livraison):
 		# 1. Récupérer tous les livreurs actifs
 		livreurs = frappe.get_all("Livreur", 
 			filters={"active": 1}, 
-			fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation"]
+			fields=["name", "nom", "capacite_max_articles", "type_couverture", "specialisation"]
 		)
 		
 		# 2. Calculer les charges actuelles par date
@@ -1963,7 +1976,7 @@ def diagnostiquer_equilibrage_livreurs(date_livraison):
 		
 		for livreur in livreurs:
 			livreur_id = livreur["name"]
-			capacite_max = livreur["capacite_max_colis"] or 0
+			capacite_max = livreur["capacite_max_articles"] or 0
 			charge_actuelle = charges_par_date.get(livreur_id, 0)
 			
 			if capacite_max > 0:
@@ -2023,7 +2036,7 @@ def diagnostiquer_equilibrage_livreurs(date_livraison):
 					(sum((l.get("taux_utilisation", 0) - taux_utilisation_moyen)**2 for l in livreurs) / len(livreurs))**0.5, 2
 				),
 				"total_colis_attribues": sum(charges_par_date.values()),
-				"capacite_totale": sum(l.get("capacite_max_colis", 0) for l in livreurs)
+				"capacite_totale": sum(l.get("capacite_max_articles", 0) for l in livreurs)
 			}
 		
 		return {
@@ -2043,7 +2056,7 @@ def debug_attribution_livreurs(date_livraison):
 		frappe.throw("Permission refusée.")
 	
 	try:
-		# 1. Récupérer les bons de livraison éligibles
+		# 1. Récupérer les bons de livraison éligibles (avec articles, même sans colis)
 		bons_eligibles = frappe.db.sql("""
 			SELECT 
 				dn.name as bon_de_livraison,
@@ -2055,17 +2068,13 @@ def debug_attribution_livreurs(date_livraison):
 			FROM `tabDelivery Note` dn
 			WHERE dn.custom_date_de_livraison = %s
 			AND dn.docstatus = 0
-			AND EXISTS (
-				SELECT 1 FROM `tabColis` c 
-				WHERE c.bl = dn.name 
-				AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-			)
+			AND dn.total_qty > 0
 		""", (date_livraison,), as_dict=True)
 		
 		# 2. Récupérer les livreurs actifs
 		livreurs = frappe.get_all("Livreur", 
 			filters={"active": 1}, 
-			fields=["name", "nom", "capacite_max_colis", "type_couverture", "specialisation"]
+			fields=["name", "nom", "capacite_max_articles", "type_couverture", "specialisation"]
 		)
 		
 		# 3. Calculer les charges actuelles

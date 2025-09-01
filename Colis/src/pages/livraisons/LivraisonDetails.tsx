@@ -14,9 +14,11 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard,
-  DollarSign
+  DollarSign,
+  PackageCheck,
+  AlertCircle
 } from 'lucide-react';
-import { useFrappeGetDoc, useFrappeGetDocList, useFrappeDocTypeEventListener } from 'frappe-react-sdk';
+import { useFrappeGetDoc, useFrappeGetDocList, useFrappeDocTypeEventListener, useFrappePostCall } from 'frappe-react-sdk';
 import type { Livraison, LivraisonColis, LivraisonBonDeLivraison } from '../../types/Livraison';
 import PaiementClientDialog from '../../components/PaiementClientDialog';
 import PaiementActionsDialog from '../../components/PaiementActionsDialog';
@@ -37,7 +39,7 @@ interface LivraisonData {
   livreur?: string;
   nom_livreur?: string;
   vehicule?: string;
-  total_colis?: number;
+  total_articles?: number;
   total_montant_a_encaisser?: number;
   total_paiements?: number;
   solde_restant?: number;
@@ -206,6 +208,10 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
   const [expandedBons, setExpandedBons] = useState<Set<string>>(new Set());
   // État pour gérer l'affichage de la liste des paiements
   const [showPaiements, setShowPaiements] = useState(false);
+  // État pour gérer l'affichage des articles non emballés
+  const [showUnpackedItems, setShowUnpackedItems] = useState<Record<string, boolean>>({});
+  // État pour stocker les articles non emballés par bon de livraison
+  const [unpackedItemsData, setUnpackedItemsData] = useState<Record<string, any[]>>({});
 
   // Fonction pour basculer l'état d'un bon de livraison
   const toggleBonExpansion = (bonId: string) => {
@@ -220,6 +226,41 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
     });
   };
 
+  // Fonction pour basculer l'affichage des articles non emballés
+  const toggleUnpackedItems = async (bonId: string) => {
+    const isCurrentlyShown = showUnpackedItems[bonId];
+    
+    if (!isCurrentlyShown && !unpackedItemsData[bonId]) {
+      // Récupérer les articles non emballés si pas encore chargés
+      try {
+        const response = await fetch('/api/method/log.delivery_note_hooks.get_unpacked_items', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Frappe-CSRF-Token': (window as any).csrf_token
+          },
+          body: JSON.stringify({
+            delivery_note_name: bonId
+          })
+        });
+        const data = await response.json();
+        if (data.message) {
+          setUnpackedItemsData(prev => ({
+            ...prev,
+            [bonId]: data.message
+          }));
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération des articles non emballés:', error);
+      }
+    }
+    
+    setShowUnpackedItems(prev => ({
+      ...prev,
+      [bonId]: !isCurrentlyShown
+    }));
+  };
+
   // Récupération des détails de la livraison
   const { data: livraison, mutate: mutateLivraison, error, isLoading } = useFrappeGetDoc<LivraisonData>(
     "Livraison",
@@ -232,7 +273,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
         "livreur",
         "nom_livreur",
         "vehicule",
-        "total_colis",
+        "total_articles",
         "total_montant_a_encaisser",
         "colis",
         "bons_de_livraison"
@@ -442,8 +483,8 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
             />
             <MetaChip
               icon={<Package className="w-4 h-4" />}
-              label="Colis"
-              value={livraison.total_colis || 0}
+              label="Articles"
+              value={livraison.total_articles || 0}
             />
           </div>
         </div>
@@ -454,6 +495,17 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
           <div className="hidden md:flex px-4 py-3 items-center justify-between">
             <h2 className="text-lg font-semibold text-foreground">Informations générales</h2>
             <div className="flex items-center gap-2">
+              {/* Bouton de navigation vers la préparation des colis */}
+              <button 
+                onClick={() => {
+                  // Navigation vers la page de préparation des colis
+                  window.location.href = `/app/preparation-colis?livraison=${livraisonId}`;
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30 min-w-[140px] justify-center"
+              >
+                <PackageCheck className="w-4 h-4" />
+                <span className="text-sm font-medium">Préparer colis</span>
+              </button>
               {paiements && paiements.length > 0 && (
                 <Button
                   variant="outline"
@@ -484,6 +536,17 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
           <div className="md:hidden px-4 py-3">
             <h2 className="text-lg font-semibold text-foreground mb-3">Informations générales</h2>
             <div className="flex flex-col gap-2 sm:flex-row sm:gap-2">
+              {/* Bouton de navigation vers la préparation des colis - Mobile */}
+              <button 
+                onClick={() => {
+                  // Navigation vers la page de préparation des colis
+                  window.location.href = `/app/preparation-colis?livraison=${livraisonId}`;
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30 w-full sm:flex-1 justify-center"
+              >
+                <PackageCheck className="w-4 h-4" />
+                <span className="text-sm font-medium">Préparer colis</span>
+              </button>
               {paiements && paiements.length > 0 && (
                 <Button
                   variant="outline"
@@ -814,6 +877,57 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                             <span className="text-sm text-foreground">{formatAmount(bonLivraison.grand_total)}</span>
                         </div>
                       </div>
+                      
+                      {/* Bouton pour afficher les articles non emballés */}
+                      <div className="pt-2 border-t border-border">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleUnpackedItems(bonLivraison.name)}
+                          className="flex items-center gap-2 text-xs"
+                        >
+                          <AlertCircle className="w-4 h-4" />
+                          {showUnpackedItems[bonLivraison.name] ? 'Masquer' : 'Voir'} les articles non emballés
+                          {showUnpackedItems[bonLivraison.name] ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                      
+                      {/* Affichage des articles non emballés */}
+                      {showUnpackedItems[bonLivraison.name] && unpackedItemsData[bonLivraison.name] && (
+                        <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                          <h4 className="text-sm font-medium text-orange-800 mb-3 flex items-center gap-2">
+                            <AlertCircle className="w-4 h-4" />
+                            Articles non emballés
+                          </h4>
+                          {unpackedItemsData[bonLivraison.name].length > 0 ? (
+                            <div className="space-y-2">
+                              {unpackedItemsData[bonLivraison.name].map((item: any, index: number) => (
+                                <div key={index} className="flex justify-between items-center p-2 bg-white rounded border">
+                                  <div className="flex-1">
+                                    <div className="text-sm font-medium text-gray-900">{item.item_code}</div>
+                                    <div className="text-xs text-gray-600">{item.description}</div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-sm font-medium text-orange-600">
+                                      {item.remaining_qty} / {item.total_qty}
+                                    </div>
+                                    <div className="text-xs text-gray-500">non emballé / total</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-sm text-green-600 flex items-center gap-2">
+                              <PackageCheck className="w-4 h-4" />
+                              Tous les articles sont emballés
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Liste des colis - Affichage conditionnel avec animation */}

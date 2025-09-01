@@ -86,8 +86,8 @@ class Livraison(Document):
 	
 
 	
-	def sync_colis_from_bons_de_livraison(self):
-		"""Synchronize colis from bons de livraison and remove orphaned colis."""
+	def sync_colis_from_preparations(self):
+		"""Synchronize colis from preparations linked to delivery notes and remove orphaned colis."""
 		# Récupérer la liste des bons de livraison actuels
 		bons_de_livraison_list = [row.bon_de_livraison for row in self.bons_de_livraison if row.bon_de_livraison] if self.bons_de_livraison else []
 		
@@ -107,7 +107,50 @@ class Livraison(Document):
 		# Récupérer les colis déjà existants pour éviter les doublons
 		colis_existants = [row.colis for row in self.colis if row.colis]
 		
-		# Récupérer tous les colis liés aux bons de livraison
+		# Récupérer tous les colis liés aux préparations des bons de livraison
+		colis_lies = frappe.get_all("Colis",
+			filters={
+				"preparation": ["is", "set"],
+				"bl": ["in", bons_de_livraison_list],
+				"docstatus": ["<", 2]  # Exclure les documents supprimés
+			},
+			fields=["name", "custom_numero_sequence", "client", "bl", "status"]
+		)
+		
+		# Ajouter les nouveaux colis
+		for colis in colis_lies:
+			if colis.name not in colis_existants:
+				# Ajouter le colis à la table enfant
+				self.append("colis", {
+					"colis": colis.name,
+					"numero_sequence": colis.custom_numero_sequence,
+					"client": colis.client,
+					"bon_de_livraison": colis.bl,
+					"status": colis.status
+				})
+	
+	def sync_colis_from_bons_de_livraison(self):
+		"""Synchronize colis directly from delivery notes without preparations."""
+		# Récupérer la liste des bons de livraison actuels
+		bons_de_livraison_list = [row.bon_de_livraison for row in self.bons_de_livraison if row.bon_de_livraison] if self.bons_de_livraison else []
+		
+		# Supprimer les colis qui ne sont plus liés à aucun bon de livraison présent
+		colis_to_remove = []
+		for colis_row in self.colis or []:
+			if colis_row.bon_de_livraison and colis_row.bon_de_livraison not in bons_de_livraison_list:
+				colis_to_remove.append(colis_row)
+		
+		# Supprimer les colis orphelins
+		for colis_row in colis_to_remove:
+			self.remove(colis_row)
+		
+		if not bons_de_livraison_list:
+			return
+		
+		# Récupérer les colis déjà existants pour éviter les doublons
+		colis_existants = [row.colis for row in self.colis if row.colis]
+		
+		# Récupérer tous les colis liés directement aux bons de livraison (sans préparation)
 		colis_lies = frappe.get_all("Colis",
 			filters={
 				"bl": ["in", bons_de_livraison_list],

@@ -7,7 +7,7 @@ import {
 } from "frappe-react-sdk";
 import { HashRouter as Router, Routes, Route, useNavigate, useLocation, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Truck, Home, RefreshCw } from "lucide-react";
+import { LogOut, User, Truck, Home, RefreshCw, Package } from "lucide-react";
 import Login from "./pages/auth/Login";
 import ColisDetails from "./pages/colis/ColisDetails";
 import ColisPublicView from "./pages/colis/ColisPublicView";
@@ -16,6 +16,7 @@ import { SmartColisRouter } from "./components/SmartColisRouter";
 import { useUserRole } from "./hooks/useUserRole";
 
 import { LivraisonsList, LivraisonDetails, GenerationLivraisons } from "./pages/livraisons";
+import { PreparationPage } from "./pages/preparation";
 import logoSvg from "./assets/IntraPro_fleetmaster.svg";
 
 /* =========================
@@ -163,6 +164,18 @@ function SidebarNavigation() {
           <RefreshCw className="w-4 h-4" />
           Génération
         </button>
+
+        <button
+          onClick={() => handleNavClick('/preparation')}
+          className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
+            isActive('/preparation')
+              ? 'text-foreground font-medium'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          Préparation
+        </button>
       </nav>
 
       {/* User Profile & Logout */}
@@ -247,6 +260,7 @@ function AppContent() {
               <Route path="/" element={<HomePage />} />
               <Route path="/livraisons" element={<LivraisonsPage />} />
               <Route path="/generation" element={<GenerationLivraisons />} />
+              <Route path="/preparation" element={<PreparationPage />} />
               <Route path="/livraison/:id" element={<LivraisonDetailsRoute />} />
               <Route path="/colis/:id" element={<ColisDetailsRoute />} />
               {/* Fallback route */}

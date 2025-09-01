@@ -15,7 +15,7 @@
   "section_break_qaod",
   "active",
   "section_break_capacite",
-  "capacite_max_colis",
+  "capacite_max_articles",
   "column_break_charge",
   "section_break_couverture",
   "type_couverture",
@@ -103,14 +103,14 @@
   {
    "fieldname": "section_break_capacite",
    "fieldtype": "Section Break",
-   "label": "Capacit\u00e9 et Charge"
+   "label": "Capacit\u00e9 Articles"
   },
   {
-   "default": "10",
-   "fieldname": "capacite_max_colis",
+   "default": "100",
+   "fieldname": "capacite_max_articles",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Capacit\u00e9 maximale (colis)",
+   "label": "Capacit\u00e9 maximale (articles)",
    "non_negative": 1,
    "reqd": 1
   },

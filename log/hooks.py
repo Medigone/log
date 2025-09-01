@@ -175,10 +175,10 @@ doc_events = {
         "after_delete": "log.paiement_hooks.update_livraison_totals_on_paiement_change"
     },
     "Transferts Marchandise": {
-        "validate": "log.transferts_marchandise_hooks.validate_transferts_marchandise",
-        "on_submit": "log.transferts_marchandise_hooks.on_submit_transferts_marchandise",
-        "on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
-    }
+		"validate": "log.transferts_marchandise_hooks.validate_transferts_marchandise",
+		"on_submit": "log.transferts_marchandise_hooks.on_submit_transferts_marchandise",
+		"on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
+	}
 }
 
 # Scheduled Tasks

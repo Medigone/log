@@ -55,7 +55,7 @@ interface Livraison {
   status: string;
   livreur?: string;
   vehicule?: string;
-  total_colis?: number;
+  total_articles?: number;
   total_montant_a_encaisser?: number;
   total_paiements?: number;
   solde_restant?: number;
@@ -242,7 +242,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
       'status',
       'livreur',
       'vehicule',
-      'total_colis',
+      'total_articles',
       'total_montant_a_encaisser',
       'total_paiements',
       'solde_restant',
@@ -773,7 +773,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
                           </span>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm font-medium">{livraison.total_colis || 0}</span>
+                          <span className="text-sm font-medium">{livraison.total_articles || 0}</span>
                         </TableCell>
                         <TableCell>
                           <span className="text-sm">{formatAmount(livraison.total_montant_a_encaisser)}</span>
@@ -830,7 +830,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
                               </button>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs text-muted-foreground">
-                                  {livraison.total_colis || 0} colis
+                                  {livraison.total_articles || 0} articles
                                 </span>
                                 <StatusBadge
                                   text={livraison.status}
@@ -855,8 +855,8 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
                               </span>
                             </div>
                             <div className="flex flex-col gap-1">
-                              <span className="text-xs text-muted-foreground">Nombre de colis</span>
-                              <span className="text-sm text-foreground">{livraison.total_colis || 0}</span>
+                              <span className="text-xs text-muted-foreground">Nombre d'articles</span>
+                              <span className="text-sm text-foreground">{livraison.total_articles || 0}</span>
                             </div>
                             <div className="flex flex-col gap-1">
                               <span className="text-xs text-muted-foreground">Montant total</span>
