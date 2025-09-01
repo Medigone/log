@@ -12,6 +12,8 @@ import Login from "./pages/auth/Login";
 import ColisDetails from "./pages/colis/ColisDetails";
 import ColisPublicView from "./pages/colis/ColisPublicView";
 import { Dashboard } from "./pages/dashboard";
+import { SmartColisRouter } from "./components/SmartColisRouter";
+import { useUserRole } from "./hooks/useUserRole";
 
 import { LivraisonsList, LivraisonDetails, GenerationLivraisons } from "./pages/livraisons";
 import logoSvg from "./assets/IntraPro_fleetmaster.svg";
@@ -307,6 +309,9 @@ function ColisDetailsRoute() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useFrappeAuth();
+  const userRole = useUserRole(currentUser);
+  const { data: colisData, isLoading } = useFrappeGetDoc("Colis", id || undefined);
   
   if (!id) {
     navigate('/');
@@ -318,9 +323,13 @@ function ColisDetailsRoute() {
   const livraisonId = urlParams.get('livraisonId');
   
   return (
-    <ColisDetails 
-      colisId={id} 
+    <SmartColisRouter
+      colisId={id}
       livraisonId={livraisonId || undefined}
+      colisData={colisData}
+      currentUser={currentUser}
+      userRole={userRole}
+      isLoading={isLoading}
       onBackToLivraison={() => {
         if (fromLivraison && livraisonId) {
           navigate(`/livraison/${livraisonId}`);

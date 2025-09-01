@@ -9,6 +9,22 @@ import base64
 
 
 class Colis(Document):
+	def validate(self):
+		"""Validation du document Colis"""
+		try:
+			# Validation basique
+			if not self.bl:
+				frappe.throw("Le champ BL (Delivery Note) est obligatoire")
+			
+			# Calculer le statut global si des articles existent
+			if self.articles:
+				self.calculate_global_status(use_smart_status=False)  # Éviter la récursion lors de la validation
+			
+		except Exception as e:
+			frappe.logger().error(f"Erreur lors de la validation du Colis {self.name}: {e}")
+			# Ne pas bloquer la validation pour des erreurs de calcul de statut
+			pass
+
 	def autoname(self):
 		"""Génère automatiquement le nom du document au format {bl}-{numero_fixe}"""
 		if self.bl:
@@ -72,12 +88,36 @@ class Colis(Document):
 			frappe.logger().error(f"Erreur lors de la synchronisation avec Delivery Note {self.bl}: {str(e)}")
 			# Ne pas lever l'erreur pour éviter de bloquer la sauvegarde du Colis
 	
-	def calculate_global_status(self):
-		"""Calcule automatiquement le statut global du colis basé sur les statuts des articles"""
+	def calculate_global_status(self, use_smart_status=True):
+		"""Calcule automatiquement le statut global du colis basé sur les statuts des articles
+		
+		Args:
+			use_smart_status (bool): Utiliser le système de statut intelligent avec seuils
+		"""
 		if not self.articles:
 			return
 		
-		# Compter les statuts des articles
+		if use_smart_status:
+			# Utiliser le système de statut intelligent
+			try:
+				# Éviter la récursion infinie en vérifiant si on est déjà en train de calculer
+				if getattr(self, '_calculating_smart_status', False):
+					frappe.logger().warning(f"Évitement de récursion pour {self.name}")
+					return
+				
+				self._calculating_smart_status = True
+				result = calculate_smart_status(self.name, force_recalculate=True)
+				if result.get('success') and result.get('status_changed'):
+					self.status = result['new_status']
+					frappe.logger().info(f"Statut intelligent appliqué pour {self.name}: {result['new_status']}")
+					return
+			except Exception as e:
+				frappe.logger().warning(f"Erreur calcul statut intelligent pour {self.name}: {e}")
+				# Retomber sur la logique classique en cas d'erreur
+			finally:
+				self._calculating_smart_status = False
+		
+		# Logique classique de calcul du statut global (fallback)
 		article_statuses = [article.statut_article for article in self.articles if article.statut_article]
 		
 		if not article_statuses:
@@ -1128,6 +1168,641 @@ def get_public_colis_data(colis_id):
 		# Vérifier que le colis existe
 		if not frappe.db.exists('Colis', colis_id):
 			frappe.throw("Colis non trouvé", frappe.DoesNotExistError)
+		
+		# Récupérer les données publiques du colis
+		colis_doc = frappe.get_doc("Colis", colis_id)
+		
+		return {
+			'success': True,
+			'data': {
+				'name': colis_doc.name,
+				'custom_numero_sequence': getattr(colis_doc, 'custom_numero_sequence', ''),
+				'client': colis_doc.client,
+				'status': colis_doc.status,
+				'date_creation': colis_doc.creation,
+				'wilaya_destination': getattr(colis_doc, 'wilaya_destination', ''),
+				'commune_destination': getattr(colis_doc, 'commune_destination', '')
+			}
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur get_public_colis_data: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur lors de la récupération: {str(e)}'
+		}
+
+
+@frappe.whitelist()
+def enhanced_delivery_update(colis_id, delivery_data, evidence_data=None):
+	"""API améliorée pour mise à jour de livraison avec gestion avancée des articles
+	
+	Args:
+		colis_id (str): ID du colis
+		delivery_data (dict): Données de livraison avec articles et quantités
+		evidence_data (dict): Photos, signature, GPS, commentaires (optionnel)
+	
+	Returns:
+		dict: Résultat détaillé de l'opération
+	"""
+	try:
+		frappe.logger().info(f"Début enhanced_delivery_update pour colis {colis_id}")
+		
+		# Vérifier que le colis existe
+		if not frappe.db.exists('Colis', colis_id):
+			return {
+				'success': False,
+				'message': 'Colis non trouvé'
+			}
+		
+		colis_doc = frappe.get_doc("Colis", colis_id)
+		results = []
+		errors = []
+		
+		# Parser les données de livraison
+		if isinstance(delivery_data, str):
+			import json
+			delivery_data = json.loads(delivery_data)
+		
+		# Traiter chaque article
+		for article_update in delivery_data.get('articles', []):
+			article_name = article_update.get('article_name')
+			quantity_delivered = article_update.get('quantity_delivered', 0)
+			reason = article_update.get('reason', '')
+			status = article_update.get('status', '')
+			
+			try:
+				# Trouver l'article dans le colis
+				article_found = None
+				for article in colis_doc.articles:
+					if (article.name == article_name or 
+					    article.article == article_name):
+						article_found = article
+						break
+				
+				if not article_found:
+					errors.append(f"Article {article_name} non trouvé")
+					continue
+				
+				# Sauvegarder les valeurs actuelles
+				old_livree = article_found.quantite_livree or 0
+				old_restante = article_found.quantite_restante or 0
+				totale = article_found.quantite_totale or 0
+				
+				# Traitement selon le type d'action
+				if status == 'delivered' and quantity_delivered > 0:
+					# Livraison partielle ou complète
+					new_livree = min(old_livree + quantity_delivered, totale)
+					new_restante = totale - new_livree
+					
+					article_found.quantite_livree = new_livree
+					article_found.quantite_restante = new_restante
+					
+					if new_restante == 0:
+						article_found.statut_article = "Livré"
+					elif new_livree > 0:
+						article_found.statut_article = "Partiellement livré"
+					else:
+						article_found.statut_article = "En attente"
+					
+				elif status == 'undeliverable':
+					# Article non livrable
+					article_found.statut_article = "Non livré"
+					if reason:
+						article_found.raison_non_livraison = reason
+					
+				elif status == 'deliver_all':
+					# Livrer tout le restant
+					article_found.quantite_livree = totale
+					article_found.quantite_restante = 0
+					article_found.statut_article = "Livré"
+					
+				else:
+					errors.append(f"Action non reconnue pour l'article {article_name}: {status}")
+					continue
+				
+				results.append({
+					'article_name': article_name,
+					'success': True,
+					'message': f'Article {article_name} mis à jour',
+					'updated_data': {
+						'quantite_totale': article_found.quantite_totale,
+						'quantite_livree': article_found.quantite_livree,
+						'quantite_restante': article_found.quantite_restante,
+						'statut_article': article_found.statut_article
+					}
+				})
+				
+			except Exception as e:
+				frappe.log_error(f"Erreur traitement article {article_name}: {str(e)}")
+				errors.append(f"Erreur article {article_name}: {str(e)}")
+		
+		# Traiter les données de preuve (photos, signature, etc.)
+		if evidence_data:
+			try:
+				if isinstance(evidence_data, str):
+					import json
+					evidence_data = json.loads(evidence_data)
+				
+				# Gérer les commentaires
+				if evidence_data.get('comments'):
+					colis_doc.commentaire_livreur = evidence_data['comments']
+					results.append({'evidence': 'comments', 'success': True})
+				
+			except Exception as e:
+				frappe.log_error(f"Erreur traitement evidence: {str(e)}")
+				errors.append(f"Erreur données de preuve: {str(e)}")
+		
+		# Recalculer le statut global du colis
+		try:
+			total_articles = len(colis_doc.articles)
+			delivered_articles = sum(1 for a in colis_doc.articles if a.statut_article == "Livré")
+			partial_articles = sum(1 for a in colis_doc.articles if a.statut_article == "Partiellement livré")
+			non_delivered_articles = sum(1 for a in colis_doc.articles if a.statut_article == "Non livré")
+			
+			if delivered_articles == total_articles:
+				colis_doc.status = "Livré"
+			elif delivered_articles > 0 or partial_articles > 0:
+				colis_doc.status = "Partiellement Livré"
+			elif non_delivered_articles == total_articles:
+				colis_doc.status = "Non Livré"
+			else:
+				colis_doc.status = "Enlevé"
+			
+		except Exception as e:
+			frappe.log_error(f"Erreur calcul statut global: {str(e)}")
+			errors.append(f"Erreur calcul statut: {str(e)}")
+		
+		# Sauvegarder le colis
+		try:
+			colis_doc.save()
+			frappe.db.commit()
+		except Exception as e:
+			frappe.log_error(f"Erreur sauvegarde colis: {str(e)}")
+			return {
+				'success': False,
+				'message': f'Erreur lors de la sauvegarde: {str(e)}'
+			}
+		
+		# Préparer la réponse
+		success_count = len([r for r in results if r.get('success')])
+		total_operations = len(delivery_data.get('articles', []))
+		
+		return {
+			'success': len(errors) == 0,
+			'message': f"Opération terminée: {success_count}/{total_operations} articles traités avec succès",
+			'results': results,
+			'errors': errors,
+			'updated_colis_status': colis_doc.status,
+			'updated_colis_data': {
+				'status': colis_doc.status,
+				'articles': [{
+					'name': article.name,
+					'article': article.article,
+					'quantite_totale': article.quantite_totale,
+					'quantite_livree': article.quantite_livree,
+					'quantite_restante': article.quantite_restante,
+					'statut_article': article.statut_article
+				} for article in colis_doc.articles]
+			}
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur enhanced_delivery_update: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur lors de la mise à jour: {str(e)}'
+		}
+
+
+@frappe.whitelist()
+def get_smart_delivery_actions(colis_id):
+	"""Retourne les actions de livraison intelligentes disponibles pour un colis
+	
+	Args:
+		colis_id (str): ID du colis
+	
+	Returns:
+		dict: Actions disponibles selon le contexte
+	"""
+	try:
+		colis_doc = frappe.get_doc("Colis", colis_id)
+		
+		# Analyser l'état des articles
+		total_articles = len(colis_doc.articles)
+		delivered_articles = sum(1 for a in colis_doc.articles if a.statut_article == "Livré")
+		partial_articles = sum(1 for a in colis_doc.articles if a.statut_article == "Partiellement livré")
+		undelivered_articles = sum(1 for a in colis_doc.articles if a.statut_article in ["En attente", "Non livré"])
+		
+		# Calculer les quantités globales
+		total_quantity = sum(a.quantite_totale for a in colis_doc.articles)
+		delivered_quantity = sum(a.quantite_livree for a in colis_doc.articles)
+		remaining_quantity = sum(a.quantite_restante for a in colis_doc.articles)
+		
+		# Déterminer les actions rapides disponibles
+		quick_actions = []
+		
+		if remaining_quantity > 0:
+			quick_actions.append({
+				'id': 'deliver_all',
+				'label': 'Livrer Tout',
+				'description': f'Livrer les {remaining_quantity} articles restants',
+				'type': 'success',
+				'icon': 'check-circle'
+			})
+		
+		if undelivered_articles > 0:
+			quick_actions.extend([
+				{
+					'id': 'partial_delivery',
+					'label': 'Livraison Partielle',
+					'description': 'Livrer certains articles seulement',
+					'type': 'warning',
+					'icon': 'package'
+				},
+				{
+					'id': 'client_absent',
+					'label': 'Client Absent',
+					'description': 'Marquer comme non livré - client absent',
+					'type': 'error',
+					'icon': 'user-x'
+				},
+				{
+					'id': 'access_refused',
+					'label': 'Accès Refusé',
+					'description': 'Impossible d\'accéder au lieu de livraison',
+					'type': 'error',
+					'icon': 'lock'
+				}
+			])
+		
+		return {
+			'success': True,
+			'quick_actions': quick_actions,
+			'delivery_summary': {
+				'total_articles': total_articles,
+				'delivered_articles': delivered_articles,
+				'partial_articles': partial_articles,
+				'undelivered_articles': undelivered_articles,
+				'total_quantity': total_quantity,
+				'delivered_quantity': delivered_quantity,
+				'remaining_quantity': remaining_quantity,
+				'completion_percentage': round((delivered_quantity / total_quantity * 100) if total_quantity > 0 else 0, 1)
+			},
+			'status_info': {
+				'current_status': colis_doc.status,
+				'can_complete': remaining_quantity == 0,
+				'requires_partial_status': delivered_quantity > 0 and remaining_quantity > 0
+			}
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur get_smart_delivery_actions: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur: {str(e)}'
+		}
+
+
+@frappe.whitelist()
+def get_delivery_completion_config():
+	"""Récupère la configuration des seuils de complétion de livraison
+	
+	Returns:
+		dict: Configuration des seuils
+	"""
+	# Configuration par défaut (peut être stockée dans Frappe Settings)
+	default_config = {
+		'completion_thresholds': {
+			'partial_threshold': 20,  # Seuil minimum pour "Partiellement Livré" (%)
+			'nearly_complete_threshold': 80,  # Seuil pour "Presque Livré" (%)
+			'complete_threshold': 100  # Seuil pour "Livré" (%)
+		},
+		'auto_status_transitions': {
+			'enable_auto_transitions': True,
+			'require_evidence_for_completion': True,
+			'min_articles_for_partial': 1
+		},
+		'status_priorities': {
+			'Nouveau': 1,
+			'Préparé': 2,
+			'Enlevé': 3,
+			'Partiellement Livré': 4,
+			'Presque Livré': 5,
+			'Livré': 6,
+			'Non Livré': 0,
+			'Annulé': 0
+		}
+	}
+	
+	try:
+		# Récupérer la configuration depuis les paramètres système si disponible
+		settings = frappe.get_single('Parametres Livraison')
+		if settings:
+			# Récupérer les seuils personnalisés si définis
+			if hasattr(settings, 'seuil_livraison_partielle') and settings.seuil_livraison_partielle:
+				default_config['completion_thresholds']['partial_threshold'] = settings.seuil_livraison_partielle
+			
+			if hasattr(settings, 'seuil_presque_livre') and settings.seuil_presque_livre:
+				default_config['completion_thresholds']['nearly_complete_threshold'] = settings.seuil_presque_livre
+			
+			if hasattr(settings, 'transitions_automatiques') and settings.transitions_automatiques is not None:
+				default_config['auto_status_transitions']['enable_auto_transitions'] = settings.transitions_automatiques
+	except Exception as e:
+		frappe.logger().warning(f"Impossible de charger les paramètres de livraison: {e}")
+	
+	return {
+		'success': True,
+		'config': default_config
+	}
+
+
+@frappe.whitelist()
+def calculate_smart_status(docname, force_recalculate=False):
+	"""Calcule le statut intelligent basé sur les seuils de complétion
+	
+	Args:
+		docname (str): Nom du document Colis
+		force_recalculate (bool): Forcer le recalcul même si déjà calculé
+	
+	Returns:
+		dict: Nouveau statut et métriques
+	"""
+	try:
+		# Vérification de base
+		if not docname:
+			return {
+				'success': False,
+				'message': 'Document name is required'
+			}
+		
+		# Vérifier que le document existe
+		if not frappe.db.exists("Colis", docname):
+			return {
+				'success': False,
+				'message': f'Colis document "{docname}" does not exist'
+			}
+		
+		colis_doc = frappe.get_doc("Colis", docname)
+		
+		# Vérifier les permissions
+		if not colis_doc.has_permission("read"):
+			return {
+				'success': False,
+				'message': 'Insufficient permissions to read the document'
+			}
+		
+		config_response = get_delivery_completion_config()
+		config = config_response['config']
+		
+		# Calculer les métriques de livraison
+		metrics = calculate_delivery_metrics(colis_doc.articles)
+		
+		# Déterminer le nouveau statut basé sur les seuils
+		new_status = determine_smart_status(metrics, config, colis_doc.status)
+		
+		# Mettre à jour le statut si différent et si les transitions automatiques sont activées
+		if (config['auto_status_transitions']['enable_auto_transitions'] and 
+			new_status != colis_doc.status and 
+			is_valid_status_transition(colis_doc.status, new_status, config)):
+			
+			old_status = colis_doc.status
+			colis_doc.status = new_status
+			colis_doc.save()
+			
+			# Log de la transition automatique
+			frappe.logger().info(f"Transition automatique Colis {docname}: {old_status} → {new_status} (Completion: {metrics['completion_percentage']}%)")
+			
+			return {
+				'success': True,
+				'status_changed': True,
+				'old_status': old_status,
+				'new_status': new_status,
+				'metrics': metrics,
+				'message': f'Statut mis à jour automatiquement vers "{new_status}"'
+			}
+		else:
+			return {
+				'success': True,
+				'status_changed': False,
+				'current_status': colis_doc.status,
+				'suggested_status': new_status,
+				'metrics': metrics,
+				'message': f'Statut actuel: "{colis_doc.status}", suggéré: "{new_status}"'
+			}
+			
+	except frappe.DoesNotExistError:
+		frappe.logger().error(f"Document Colis '{docname}' n'existe pas")
+		return {
+			'success': False,
+			'message': f'Document Colis "{docname}" introuvable'
+		}
+	except frappe.PermissionError:
+		frappe.logger().error(f"Permissions insuffisantes pour accéder au Colis '{docname}'")
+		return {
+			'success': False,
+			'message': 'Permissions insuffisantes pour accéder au document'
+		}
+	except Exception as e:
+		frappe.log_error(f"Erreur calculate_smart_status pour {docname}: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur lors du calcul: {str(e)}'
+		}
+
+
+def calculate_delivery_metrics(articles):
+	"""Calcule les métriques de livraison pour un ensemble d'articles
+	
+	Args:
+		articles: Liste des articles du colis
+	
+	Returns:
+		dict: Métriques de livraison
+	"""
+	if not articles:
+		return {
+			'total_articles': 0,
+			'total_quantity': 0,
+			'delivered_quantity': 0,
+			'remaining_quantity': 0,
+			'completion_percentage': 0,
+			'delivered_articles': 0,
+			'partial_articles': 0,
+			'undelivered_articles': 0
+		}
+	
+	try:
+		total_articles = len(articles)
+		total_quantity = sum(getattr(article, 'quantite_totale', 0) for article in articles)
+		delivered_quantity = sum(getattr(article, 'quantite_livree', 0) for article in articles)
+		remaining_quantity = sum(getattr(article, 'quantite_restante', 0) for article in articles)
+		
+		# Compter les articles par statut
+		delivered_articles = sum(1 for a in articles if getattr(a, 'statut_article', '') == 'Livré')
+		partial_articles = sum(1 for a in articles if getattr(a, 'statut_article', '') == 'Partiellement livré')
+		undelivered_articles = sum(1 for a in articles if getattr(a, 'statut_article', '') in ['En attente', 'Non livré'])
+		
+		# Calculer le pourcentage de complétion
+		completion_percentage = round((delivered_quantity / total_quantity * 100) if total_quantity > 0 else 0, 1)
+		
+		return {
+			'total_articles': total_articles,
+			'total_quantity': total_quantity,
+			'delivered_quantity': delivered_quantity,
+			'remaining_quantity': remaining_quantity,
+			'completion_percentage': completion_percentage,
+			'delivered_articles': delivered_articles,
+			'partial_articles': partial_articles,
+			'undelivered_articles': undelivered_articles,
+			'article_completion_rate': round((delivered_articles / total_articles * 100) if total_articles > 0 else 0, 1)
+		}
+	except Exception as e:
+		frappe.logger().error(f"Erreur lors du calcul des métriques de livraison: {e}")
+		return {
+			'total_articles': 0,
+			'total_quantity': 0,
+			'delivered_quantity': 0,
+			'remaining_quantity': 0,
+			'completion_percentage': 0,
+			'delivered_articles': 0,
+			'partial_articles': 0,
+			'undelivered_articles': 0
+		}
+
+def determine_smart_status(metrics, config, current_status):
+	"""Détermine le statut intelligent basé sur les métriques et la configuration
+	
+	Args:
+		metrics (dict): Métriques de livraison
+		config (dict): Configuration des seuils
+		current_status (str): Statut actuel
+	
+	Returns:
+		str: Nouveau statut suggéré
+	"""
+	completion = metrics['completion_percentage']
+	thresholds = config['completion_thresholds']
+	
+	# Si aucune quantité n'est définie, garder le statut actuel ou "Nouveau"
+	if metrics['total_quantity'] == 0:
+		return current_status if current_status else 'Nouveau'
+	
+	# Logique de détermination du statut
+	if completion >= thresholds['complete_threshold']:
+		return 'Livré'
+	elif completion >= thresholds['nearly_complete_threshold']:
+		return 'Presque Livré'
+	elif completion >= thresholds['partial_threshold']:
+		return 'Partiellement Livré'
+	elif completion > 0:
+		# Quelque chose a été livré mais sous le seuil partiel
+		return 'Partiellement Livré'
+	else:
+		# Rien n'a été livré
+		if current_status in ['Enlevé', 'Préparé']:
+			return current_status  # Garder le statut de workflow
+		else:
+			return 'Nouveau'
+
+def is_valid_status_transition(current_status, new_status, config):
+	"""Vérifie si une transition de statut est valide
+	
+	Args:
+		current_status (str): Statut actuel
+		new_status (str): Nouveau statut proposé
+		config (dict): Configuration
+	
+	Returns:
+		bool: True si la transition est valide
+	"""
+	if current_status == new_status:
+		return False
+	
+	priorities = config['status_priorities']
+	current_priority = priorities.get(current_status, 0)
+	new_priority = priorities.get(new_status, 0)
+	
+	# Permettre les transitions vers un statut de priorité plus élevée
+	# ou les transitions entre statuts de livraison
+	if new_priority > current_priority:
+		return True
+	
+	# Permettre certaines transitions spéciales
+	special_transitions = {
+		'Partiellement Livré': ['Presque Livré', 'Livré'],
+		'Presque Livré': ['Livré', 'Partiellement Livré'],  # Peut revenir en arrière si des articles sont annulés
+		'Enlevé': ['Partiellement Livré', 'Presque Livré', 'Livré', 'Non Livré']
+	}
+	
+	return new_status in special_transitions.get(current_status, [])
+	"""Exécute une action rapide de livraison
+	
+	Args:
+		colis_id (str): ID du colis
+		action_id (str): ID de l'action à exécuter
+		reason (str): Raison pour les actions d'échec (optionnel)
+	
+	Returns:
+		dict: Résultat de l'action
+	"""
+	try:
+		colis_doc = frappe.get_doc("Colis", colis_id)
+		
+		if action_id == 'deliver_all':
+			# Livrer tous les articles restants
+			return deliver_all_articles(colis_id, confirm=True)
+			
+		elif action_id == 'client_absent':
+			# Marquer tous les articles non livrés comme "client absent"
+			results = []
+			for article in colis_doc.articles:
+				if article.statut_article in ['En attente', 'Partiellement livré'] and article.quantite_restante > 0:
+					article_doc = frappe.get_doc("Articles Colis", article.name)
+					result = article_doc.mark_as_undeliverable(reason or "Client absent")
+					results.append(result)
+			
+			colis_doc.reload()
+			colis_doc.calculate_global_status()
+			colis_doc.save()
+			frappe.db.commit()
+			
+			return {
+				'success': True,
+				'message': 'Colis marqué comme non livré - client absent',
+				'new_status': colis_doc.status
+			}
+			
+		elif action_id == 'access_refused':
+			# Marquer comme "accès refusé"
+			for article in colis_doc.articles:
+				if article.statut_article in ['En attente', 'Partiellement livré'] and article.quantite_restante > 0:
+					article_doc = frappe.get_doc("Articles Colis", article.name)
+					article_doc.mark_as_undeliverable(reason or "Accès refusé au lieu de livraison")
+			
+			colis_doc.reload()
+			colis_doc.calculate_global_status()
+			colis_doc.save()
+			frappe.db.commit()
+			
+			return {
+				'success': True,
+				'message': 'Colis marqué comme non livré - accès refusé',
+				'new_status': colis_doc.status
+			}
+			
+		else:
+			return {
+				'success': False,
+				'message': f'Action non reconnue: {action_id}'
+			}
+			
+	except Exception as e:
+		frappe.log_error(f"Erreur execute_quick_action: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur lors de l\'exécution: {str(e)}'
+		}
 		
 		# Récupérer les données du colis avec seulement les champs nécessaires
 		colis_data = frappe.get_doc('Colis', colis_id)
