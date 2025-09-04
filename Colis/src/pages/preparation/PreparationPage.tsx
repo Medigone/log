@@ -1350,6 +1350,11 @@ export function PreparationPage({ }: PreparationPageProps) {
                                         <div className="w-full px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors">
                                           <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
+                                              {isColisSectionCollapsed ? (
+                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                              ) : (
+                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                              )}
                                               <Package className="w-4 h-4 text-green-600 dark:text-green-400" />
                                               <span className="font-medium text-green-700 dark:text-green-400">
                                                 Colis créés ({colisForThisDeliveryNote.length})
@@ -1359,11 +1364,6 @@ export function PreparationPage({ }: PreparationPageProps) {
                                               <Badge className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs">
                                                 {colisForThisDeliveryNote.reduce((total: number, colis: any) => total + (colis.articles?.reduce((artTotal: number, article: any) => artTotal + (article.quantite_totale || 0), 0) || 0), 0)} articles
                                               </Badge>
-                                              {isColisSectionCollapsed ? (
-                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                                              ) : (
-                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                              )}
                                             </div>
                                           </div>
                                         </div>
