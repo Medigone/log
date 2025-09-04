@@ -227,9 +227,9 @@ class Colis(Document):
 		if all(status == "Livré" for status in article_statuses):
 			self.status = "Livré"
 		elif all(status == "En attente" for status in article_statuses):
-			# Définir le statut "Nouveau" si tous les articles sont en attente et aucun statut n'est défini
+			# Définir le statut "Préparé" si tous les articles sont en attente et aucun statut n'est défini
 			if not self.status or self.status in ["Draft", ""]:
-				self.status = "Nouveau"
+				self.status = "Préparé"
 		elif any(status == "Partiellement livré" for status in article_statuses) or \
 			 (any(status == "Livré" for status in article_statuses) and 
 			  any(status in ["En attente", "Partiellement livré"] for status in article_statuses)):
@@ -1979,7 +1979,11 @@ def create_colis_from_delivery_note(delivery_note_name, articles_data=None):
 		colis.client = delivery_note.customer
 		colis.bl = delivery_note_name
 		colis.date = frappe.utils.today()
-		colis.status = "Nouveau"
+		colis.status = "Préparé"
+		
+		# Enregistrer l'utilisateur de préparation
+		user_doc = frappe.get_doc("User", frappe.session.user)
+		colis.preparation_user = user_doc.full_name or frappe.session.user
 		
 		# Si des articles spécifiques sont fournis, les utiliser
 		if articles_data:
@@ -1996,7 +2000,7 @@ def create_colis_from_delivery_note(delivery_note_name, articles_data=None):
 							"quantite_totale": quantity,
 							"quantite_livree": 0,
 							"quantite_restante": quantity,
-							"statut_article": "Nouveau"
+							"statut_article": "En attente"
 						})
 		else:
 			# Ajouter tous les articles du bon de livraison
@@ -2006,11 +2010,18 @@ def create_colis_from_delivery_note(delivery_note_name, articles_data=None):
 					"quantite_totale": item.qty,
 					"quantite_livree": 0,
 					"quantite_restante": item.qty,
-					"statut_article": "Nouveau"
+					"statut_article": "En attente"
 				})
+		
+		# Calculer le total des quantités d'articles (somme des quantités)
+		colis.total_art = sum(article.quantite_totale for article in colis.articles)
 		
 		# Sauvegarder le colis
 		colis.insert()
+		
+		# Générer le QR code après la création
+		colis.generate_qr_code()
+		colis.save()
 		
 		# Mettre à jour le nombre de colis dans le bon de livraison
 		from log.delivery_note_hooks import force_update_colis_count
@@ -2214,6 +2225,94 @@ def get_unpacked_delivery_notes(date_from=None, date_to=None, customer=None):
 		
 	except Exception as e:
 		frappe.log_error(f"Erreur récupération bons de livraison non emballés: {str(e)}")
+		return {
+			"success": False,
+			"message": f"Erreur lors de la récupération: {str(e)}"
+		}
+
+
+@frappe.whitelist()
+def get_colis_for_delivery_notes(delivery_notes):
+	"""
+	Récupère les colis créés pour une liste de bons de livraison
+	"""
+	try:
+		frappe.log_error(f"get_colis_for_delivery_notes appelé avec: {delivery_notes}")
+		
+		if not delivery_notes:
+			return {
+				"success": True,
+				"colis": []
+			}
+		
+		# Convertir en liste si c'est une string
+		if isinstance(delivery_notes, str):
+			delivery_notes = [delivery_notes]
+		
+		# Récupérer les colis pour ces bons de livraison
+		colis_list = frappe.get_all("Colis", 
+			filters={
+				"bl": ["in", delivery_notes]
+			},
+			fields=[
+				"name",
+				"custom_numero_sequence", 
+				"status",
+				"client",
+				"date_creation",
+				"bl",
+				"total_art",
+				"image"
+			],
+			order_by="date_creation desc"
+		)
+		
+		# Pour chaque colis, récupérer ses articles
+		for colis in colis_list:
+			try:
+				# Utiliser "Articles Colis" (le bon nom du DocType)
+				articles = frappe.get_all("Articles Colis",
+					filters={"parent": colis.name},
+					fields=[
+						"article",
+						"quantite_totale",
+						"quantite_livree", 
+						"quantite_restante",
+						"statut_article"
+					]
+				)
+				
+				# Si total_art est 0 mais qu'il y a des articles, corriger la valeur
+				if colis.get('total_art') == 0 and len(articles) > 0:
+					# Calculer la quantité totale (somme des quantités)
+					total_quantity = sum(article.get('quantite_totale', 0) for article in articles)
+					colis['total_art'] = total_quantity
+					
+					# Mettre à jour en base de données
+					try:
+						frappe.db.set_value("Colis", colis.name, "total_art", total_quantity)
+						frappe.db.commit()
+					except Exception as e:
+						frappe.log_error(f"Erreur mise à jour total_art pour colis {colis.name}: {str(e)}")
+			except Exception as e:
+				frappe.log_error(f"Erreur récupération articles pour colis {colis.name}: {str(e)}")
+				articles = []
+			
+			# L'image est déjà en base64, pas besoin de construire une URL
+			if colis.get("image") and colis["image"].startswith("data:image"):
+				colis["image_url"] = colis["image"]  # Utiliser directement le base64
+			else:
+				colis["image_url"] = None
+
+			colis["articles"] = articles
+
+		return {
+			"success": True,
+			"colis": colis_list
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur récupération colis pour bons de livraison: {str(e)}")
 		return {
 			"success": False,
 			"message": f"Erreur lors de la récupération: {str(e)}"

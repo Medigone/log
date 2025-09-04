@@ -13,7 +13,6 @@ import {
   Rows3,
   Circle,
   CheckCircle,
-  MapPin
 } from 'lucide-react';
 
 interface PickupInterfaceProps {
@@ -87,7 +86,22 @@ export function PickupInterface({
       alert("Veuillez vérifier le colis avant de confirmer l'enlèvement");
       return;
     }
-    await handleStatusChange('Enlevé');
+    
+    setIsSaving(true);
+    try {
+      // Mettre à jour le statut et l'utilisateur d'enlèvement
+      await updateColis("Colis", colisId, { 
+        status: 'Enlevé',
+        enlevement_user: (currentUser as any)?.full_name || currentUser || 'Utilisateur inconnu'
+      });
+      // Reload page to reflect changes
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      throw new Error("Erreur lors de la confirmation de l'enlèvement");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const formatDate = (dateStr?: string) => {

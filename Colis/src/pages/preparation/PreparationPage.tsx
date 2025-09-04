@@ -17,11 +17,15 @@ import {
   AlertTriangle,
   CheckCircle,
   Clock,
-  Circle,
   Plus,
   X,
+  Trash,
+  Minus,
+  Dot,
   ChevronDown,
   ChevronRight,
+  QrCode,
+  Printer,
 } from 'lucide-react';
 import { useFrappeGetCall, useFrappePostCall } from 'frappe-react-sdk';
 
@@ -87,7 +91,7 @@ function formatDate(dateStr?: string) {
   try {
     return new Date(dateStr).toLocaleDateString("fr-FR", {
       year: "numeric",
-      month: "long",
+      month: "2-digit",
       day: "2-digit",
     });
   } catch {
@@ -159,6 +163,18 @@ function ArticleRow({
     }
   };
 
+  const handleIncrement = () => {
+    if (quantity < remainingQuantity) {
+      setQuantity(quantity + 1);
+    }
+  };
+
+  const handleDecrement = () => {
+    if (quantity > 1) {
+      setQuantity(quantity - 1);
+    }
+  };
+
   return (
     <>
       {/* Version tableau pour desktop */}
@@ -173,15 +189,35 @@ function ArticleRow({
         </TableCell>
         <TableCell>
           <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              min="1"
-              max={remainingQuantity}
-              value={quantity}
-              onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-              className="w-20"
-              disabled={remainingQuantity === 0 || !canAddToPackage}
-            />
+            <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDecrement}
+                disabled={quantity <= 1 || remainingQuantity === 0 || !canAddToPackage}
+                className="h-8 w-8 p-0 rounded-none border-r border-gray-300 hover:bg-gray-100"
+              >
+                <Minus className="w-4 h-4" />
+              </Button>
+              <Input
+                type="number"
+                min="1"
+                max={remainingQuantity}
+                value={quantity}
+                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                className="w-16 h-8 text-center border-0 rounded-none focus:ring-0"
+                disabled={remainingQuantity === 0 || !canAddToPackage}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleIncrement}
+                disabled={quantity >= remainingQuantity || remainingQuantity === 0 || !canAddToPackage}
+                className="h-8 w-8 p-0 rounded-none border-l border-gray-300 hover:bg-gray-100"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
             <Button
               size="sm"
               onClick={handleAdd}
@@ -228,16 +264,35 @@ function ArticleRow({
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min="1"
-                max={remainingQuantity}
-                value={quantity}
-                onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                className="w-20"
-                disabled={remainingQuantity === 0 || !canAddToPackage}
-                placeholder="Qté"
-              />
+              <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleDecrement}
+                  disabled={quantity <= 1 || remainingQuantity === 0 || !canAddToPackage}
+                  className="h-8 w-8 p-0 rounded-none border-r border-gray-300 hover:bg-gray-100"
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <Input
+                  type="number"
+                  min="1"
+                  max={remainingQuantity}
+                  value={quantity}
+                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                  className="w-16 h-8 text-center border-0 rounded-none focus:ring-0"
+                  disabled={remainingQuantity === 0 || !canAddToPackage}
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={handleIncrement}
+                  disabled={quantity >= remainingQuantity || remainingQuantity === 0 || !canAddToPackage}
+                  className="h-8 w-8 p-0 rounded-none border-l border-gray-300 hover:bg-gray-100"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
               <Button
                 size="sm"
                 onClick={handleAdd}
@@ -311,9 +366,12 @@ export function PreparationPage({ }: PreparationPageProps) {
   const [collapsedDeliveryNotes, setCollapsedDeliveryNotes] = useState<Set<string>>(
     new Set(savedState?.collapsedDeliveryNotes || [])
   );
+  const [collapsedColisSections, setCollapsedColisSections] = useState<Set<string>>(new Set());
+  const [showQRCode, setShowQRCode] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [colisData, setColisData] = useState<any>(null);
 
   // Function to save state to localStorage
   const saveStateToStorage = () => {
@@ -414,12 +472,38 @@ export function PreparationPage({ }: PreparationPageProps) {
     delivery_note_name: selectedDeliveryNote
   }, (selectedDeliveryNote && !livraisonParam) ? undefined : null);
 
-  // Créer un colis
-  const { call: createColis } = useFrappePostCall('log.log.doctype.colis.colis.create_colis_from_delivery_note');
-
   // Déterminer les données à utiliser
   const singleDeliveryNoteData = !livraisonParam ? deliveryNoteItems : null;
   const actualLivraisonData = livraisonData?.message;
+
+  // Fonction pour rafraîchir les colis
+  const refreshColis = async () => {
+    try {
+      const deliveryNotes = livraisonParam && actualLivraisonData?.delivery_notes 
+        ? actualLivraisonData.delivery_notes.map((dn: any) => dn.bon_de_livraison)
+        : selectedDeliveryNote ? [selectedDeliveryNote] : [];
+      
+      if (deliveryNotes.length > 0) {
+        const response = await fetch('/api/method/log.log.doctype.colis.colis.get_colis_for_delivery_notes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Frappe-CSRF-Token': (window as any).csrf_token
+          },
+          body: JSON.stringify({
+            delivery_notes: deliveryNotes
+          })
+        });
+        const data = await response.json();
+        setColisData(data.message);
+      }
+    } catch (error) {
+      console.error('Erreur lors du rafraîchissement des colis:', error);
+    }
+  };
+
+  // Créer un colis
+  const { call: createColis } = useFrappePostCall('log.log.doctype.colis.colis.create_colis_from_delivery_note');
 
   // Effet pour initialiser les quantités restantes
   useEffect(() => {
@@ -430,8 +514,13 @@ export function PreparationPage({ }: PreparationPageProps) {
         actualLivraisonData.delivery_notes.forEach((dn: any) => {
           dn.items?.forEach((item: any) => {
             const key = `${dn.bon_de_livraison}-${item.item_code}`;
+            // Calculer la quantité déjà utilisée dans le colis virtuel
+            const usedInVirtualPackage = virtualPackage
+              .filter(vp => vp.bon_de_livraison === dn.bon_de_livraison && vp.item_code === item.item_code)
+              .reduce((total, vp) => total + vp.quantity, 0);
+            
             newRemainingQuantities[key] = {
-              available: item.available_quantity,
+              available: Math.max(0, item.available_quantity - usedInVirtualPackage),
               total: item.total_quantity
             };
           });
@@ -439,8 +528,13 @@ export function PreparationPage({ }: PreparationPageProps) {
       } else if (singleDeliveryNoteData?.items && selectedDeliveryNote) {
         singleDeliveryNoteData.items.forEach((item: any) => {
           const key = `${selectedDeliveryNote}-${item.item_code}`;
+          // Calculer la quantité déjà utilisée dans le colis virtuel
+          const usedInVirtualPackage = virtualPackage
+            .filter(vp => vp.bon_de_livraison === selectedDeliveryNote && vp.item_code === item.item_code)
+            .reduce((total, vp) => total + vp.quantity, 0);
+          
           newRemainingQuantities[key] = {
-            available: item.available_quantity,
+            available: Math.max(0, item.available_quantity - usedInVirtualPackage),
             total: item.total_quantity
           };
         });
@@ -450,7 +544,7 @@ export function PreparationPage({ }: PreparationPageProps) {
     };
     
     initRemainingQuantities();
-  }, [actualLivraisonData, singleDeliveryNoteData, selectedDeliveryNote, livraisonParam]);
+  }, [actualLivraisonData, singleDeliveryNoteData, selectedDeliveryNote, livraisonParam, virtualPackage]);
 
   // Effet pour pré-sélectionner le bon de livraison si le paramètre livraison est fourni
   useEffect(() => {
@@ -458,6 +552,14 @@ export function PreparationPage({ }: PreparationPageProps) {
       setSelectedDeliveryNote(livraisonParam);
     }
   }, [livraisonParam, selectedDeliveryNote]);
+
+  // Effet pour rafraîchir les colis quand les données de livraison sont chargées
+  useEffect(() => {
+    if (actualLivraisonData?.delivery_notes || selectedDeliveryNote) {
+      refreshColis();
+    }
+  }, [actualLivraisonData, selectedDeliveryNote]);
+
   
   // Filtrer les bons de livraison (seulement si pas de bon spécifique)
   const filteredNotes = livraisonParam ? [] : (unpackedNotes?.unpacked_delivery_notes?.filter(note =>
@@ -486,6 +588,125 @@ export function PreparationPage({ }: PreparationPageProps) {
     });
   };
 
+  // Gérer l'état des sections colis
+  const toggleColisSection = (deliveryNoteName: string) => {
+    setCollapsedColisSections(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(deliveryNoteName)) {
+        newSet.delete(deliveryNoteName);
+      } else {
+        newSet.add(deliveryNoteName);
+      }
+      return newSet;
+    });
+  };
+
+  // Fonction pour afficher le QR code
+  const handleShowQRCode = (colisId: string) => {
+    setShowQRCode(colisId);
+  };
+
+  // Fonction pour imprimer le QR code
+  const handlePrintQRCode = (colis: any) => {
+    if (!colis.image_url) {
+      alert('Aucun QR code disponible pour ce colis');
+      return;
+    }
+
+    // Créer une fenêtre d'impression optimisée pour imprimante thermique
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Dimensions optimisées pour étiquette thermique carrée (50mm x 50mm)
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>QR Code - ${colis.name}</title>
+        <style>
+          @page {
+            size: 50mm 50mm;
+            margin: 2mm;
+          }
+          body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            font-size: 8px;
+            text-align: center;
+          }
+          .label {
+            width: 46mm;
+            height: 46mm;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #000;
+            box-sizing: border-box;
+          }
+          .qr-code {
+            width: 30mm;
+            height: 30mm;
+            margin-bottom: 3mm;
+          }
+          .colis-id {
+            font-weight: bold;
+            font-size: 10px;
+            margin-bottom: 1mm;
+          }
+          .sequence {
+            font-size: 9px;
+            color: #666;
+            margin-bottom: 1mm;
+          }
+          .client {
+            font-size: 8px;
+            color: #666;
+            margin-bottom: 1mm;
+          }
+          .date {
+            font-size: 7px;
+            color: #999;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="label">
+          <img src="${colis.image_url}" alt="QR Code" class="qr-code" />
+          <div class="colis-id">${colis.name}</div>
+          ${colis.custom_numero_sequence ? `<div class="sequence">N° ${colis.custom_numero_sequence}</div>` : ''}
+          <div class="client">${colis.client}</div>
+          <div class="date">${formatDate(colis.date_creation)}</div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    
+    // Attendre que l'image soit chargée avant d'imprimer
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    };
+  };
+
+  // Fonction pour vérifier si un bon de livraison est complètement préparé
+  const isDeliveryNoteFullyPrepared = (deliveryNote: any) => {
+    if (!deliveryNote.items) return false;
+    
+    // Vérifier si tous les articles ont une quantité restante de 0
+    return deliveryNote.items.every((item: any) => {
+      const key = `${deliveryNote.bon_de_livraison}-${item.item_code}`;
+      const remaining = remainingQuantities[key]?.available || 0;
+      return remaining === 0;
+    });
+  };
+
   // Ouvrir/fermer toutes les sections
   const toggleAllDeliveryNotes = () => {
     if (!actualLivraisonData?.delivery_notes) return;
@@ -501,8 +722,10 @@ export function PreparationPage({ }: PreparationPageProps) {
     
     if (allClosed) {
       setCollapsedDeliveryNotes(new Set());
+      setCollapsedColisSections(new Set());
     } else {
       setCollapsedDeliveryNotes(new Set(allDeliveryNoteNames));
+      setCollapsedColisSections(new Set(allDeliveryNoteNames));
     }
   };
 
@@ -643,21 +866,40 @@ export function PreparationPage({ }: PreparationPageProps) {
           results.push({ deliveryNote: deliveryNoteName, result });
         }
 
-        const successfulResults = results.filter(r => r.result.success);
-        const failedResults = results.filter(r => !r.result.success);
+        // Vérifier si le résultat contient un colis_name (indicateur de succès)
+        const successfulResults = results.filter(r => 
+          (r.result.message && r.result.message.colis_name) || 
+          (r.result.colis_name) || 
+          (r.result.success === true)
+        );
+        const failedResults = results.filter(r => 
+          !(r.result.message && r.result.message.colis_name) && 
+          !r.result.colis_name && 
+          r.result.success !== true
+        );
         
         if (successfulResults.length > 0) {
-          const colisNames = successfulResults.map(r => r.result.colis_name).join(', ');
-          setSuccessMessage(`${successfulResults.length} colis créé(s) avec succès : ${colisNames}`);
-          setVirtualPackage([]);
+          const colisNames = successfulResults.map(r => 
+            (r.result.message && r.result.message.colis_name) || r.result.colis_name
+          ).join(', ');
+          // Rafraîchir les données immédiatement
           refreshNotes();
           refreshItems();
+          refreshColis();
           // Clear localStorage since colis are now created
           clearSavedState();
+          // Vider le colis virtuel et afficher le message de succès
+          setVirtualPackage([]);
+          setSuccessMessage(`${successfulResults.length} colis créé(s) avec succès : ${colisNames}`);
         }
         
         if (failedResults.length > 0) {
-          const errorMessages = failedResults.map(r => `${r.deliveryNote}: ${r.result.message}`).join('; ');
+          const errorMessages = failedResults.map(r => {
+            const message = typeof r.result.message === 'string' 
+              ? r.result.message 
+              : r.result.message?.message || r.result.message?.exc || 'Erreur inconnue';
+            return `${r.deliveryNote}: ${message}`;
+          }).join('; ');
           setErrorMessage(`Erreurs lors de la création : ${errorMessages}`);
         }
       } else {
@@ -672,15 +914,23 @@ export function PreparationPage({ }: PreparationPageProps) {
           articles_data: articlesData
         });
 
-        if (result.success) {
-          setSuccessMessage(`Colis créé avec succès : ${result.colis_name}`);
-          setVirtualPackage([]);
+        
+        if ((result.message && result.message.colis_name) || result.colis_name || result.success === true) {
+          const colisName = (result.message && result.message.colis_name) || result.colis_name;
+          // Rafraîchir les données immédiatement
           refreshNotes();
           refreshItems();
+          refreshColis();
           // Clear localStorage since colis is now created
           clearSavedState();
+          // Vider le colis virtuel et afficher le message de succès
+          setVirtualPackage([]);
+          setSuccessMessage(`Colis créé avec succès : ${colisName}`);
         } else {
-          setErrorMessage(result.message || 'Erreur lors de la création du colis');
+          const message = typeof result.message === 'string' 
+            ? result.message 
+            : result.message?.message || result.message?.exc || 'Erreur lors de la création du colis';
+          setErrorMessage(message);
         }
       }
     } catch (error) {
@@ -695,29 +945,27 @@ export function PreparationPage({ }: PreparationPageProps) {
     <div className="bg-background min-h-screen flex flex-col">
       {/* Header */}
       <div className="border-b border-border flex-shrink-0">
-        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3">
+        <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap justify-between">
             <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
-              {livraisonParam && (
-                <>
-                  <button
-                    onClick={() => window.history.back()}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30"
-                    title="Retour aux détails de la livraison"
-                  >
-                    <FileText className="w-3 h-3" />
-                    <span className="text-xs font-medium hidden sm:inline">Livraison {livraisonParam}</span>
-                    <span className="text-xs font-medium sm:hidden">{livraisonParam}</span>
-                  </button>
-                  <Circle className="w-1 h-1 fill-current hidden sm:block" />
-                </>
-              )}
-
+              <span>Livraison</span>
+              <Dot className="w-4 h-4" />
+              <span>Création de Colis</span>
             </div>
-            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
-              <Package className="w-3 h-3" />
-              <span className="text-xs font-medium hidden sm:inline">Mode Préparateur</span>
-              <span className="text-xs font-medium sm:hidden">Préparateur</span>
+            <div className="flex items-center gap-3">
+              {livraisonParam && (
+                <button 
+                  onClick={() => window.location.href = `#/livraison/${livraisonParam}`}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30"
+                >
+                  <Clipboard className="w-3 h-3" />
+                  <span className="text-xs font-medium">Livraison {livraisonParam}</span>
+                </button>
+              )}
+              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                <Package className="w-3 h-3" />
+                <span className="text-xs font-medium">Mode Préparateur</span>
+              </div>
             </div>
           </div>
         </div>
@@ -725,11 +973,6 @@ export function PreparationPage({ }: PreparationPageProps) {
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 pt-4 sm:pt-6 pb-8 flex-1 flex flex-col min-h-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 gap-2 sm:gap-3">
-          <h1 className="text-lg sm:text-2xl font-bold text-foreground leading-tight">
-            {livraisonParam ? 'Création de Colis' : 'Préparation de Colis'}
-          </h1>
-        </div>
 
         {livraisonParam && (
           <Card className="p-3 sm:p-4 mb-5">
@@ -925,11 +1168,14 @@ export function PreparationPage({ }: PreparationPageProps) {
                       // Affichage pour une livraison avec plusieurs bons de livraison
                       actualLivraisonData.delivery_notes.map((deliveryNote: any) => {
                         const isCollapsed = collapsedDeliveryNotes.has(deliveryNote.bon_de_livraison);
-                        const deliveryNoteArticlesCount = deliveryNote.items?.length || 0;
-                        const deliveryNoteItemsInPackage = virtualPackage.filter(
-                          item => item.bon_de_livraison === deliveryNote.bon_de_livraison
-                        ).length;
-                        
+                        const deliveryNoteItemsInPackage = virtualPackage
+                          .filter((item: any) => item.bon_de_livraison === deliveryNote.bon_de_livraison)
+                          .reduce((total: number, item: any) => total + item.quantity, 0);
+                        const deliveryNoteRemainingTotal = deliveryNote.items?.reduce((total: number, item: any) => {
+                          const key = `${deliveryNote.bon_de_livraison}-${item.item_code}`;
+                          return total + (remainingQuantities[key]?.available || 0);
+                        }, 0) || 0;
+                        const isFullyPrepared = isDeliveryNoteFullyPrepared(deliveryNote);
                         return (
                           <Collapsible
                             key={deliveryNote.bon_de_livraison}
@@ -947,16 +1193,35 @@ export function PreparationPage({ }: PreparationPageProps) {
                                       ) : (
                                         <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                                       )}
-                                      <div className="p-2 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex-shrink-0">
-                                        <Clipboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                      <div className={`p-2 rounded-lg flex-shrink-0 ${
+                                        isFullyPrepared 
+                                          ? 'bg-green-100 dark:bg-green-900/20' 
+                                          : 'bg-blue-100 dark:bg-blue-900/20'
+                                      }`}>
+                                        {isFullyPrepared ? (
+                                          <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                        ) : (
+                                          <Clipboard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                        )}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <div className="font-semibold text-sm sm:text-base text-blue-700 dark:text-blue-400 truncate">
+                                        <div className={`font-semibold text-sm sm:text-base truncate ${
+                                          isFullyPrepared 
+                                            ? 'text-green-700 dark:text-green-400' 
+                                            : 'text-blue-700 dark:text-blue-400'
+                                        }`}>
                                           {deliveryNote.bon_de_livraison}
                                         </div>
                                         <div className="text-xs sm:text-sm text-muted-foreground mt-1">
                                           <div className="flex items-center gap-2">
-                                            <span className="truncate">{deliveryNote.customer}</span>
+                                            <span className="hidden sm:flex items-center gap-1">
+                                              <User className="w-3 h-3" />
+                                              <span className="truncate">{deliveryNote.customer}</span>
+                                            </span>
+                                            <span className="sm:hidden flex items-center gap-1">
+                                              <User className="w-3 h-3" />
+                                              <span className="truncate">{deliveryNote.customer}</span>
+                                            </span>
                                             {deliveryNote.custom_date_de_livraison && (
                                               <>
                                                 <span className="text-muted-foreground/60 hidden sm:inline">•</span>
@@ -979,14 +1244,26 @@ export function PreparationPage({ }: PreparationPageProps) {
                                     
                                     {/* Section des badges et statistiques */}
                                     <div className="flex items-center gap-2">
-                                      {deliveryNoteItemsInPackage > 0 && (
+                                      {isFullyPrepared ? (
                                         <Badge className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs font-medium px-2 py-1">
-                                          {deliveryNoteItemsInPackage} ajouté(s)
+                                          <CheckCircle className="w-3 h-3 mr-1" />
+                                          Finalisé
                                         </Badge>
+                                      ) : (
+                                        <>
+                                          <Badge className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs font-medium px-2 py-1">
+                                            {deliveryNoteItemsInPackage} ajouté(s)
+                                          </Badge>
+                                          {deliveryNoteRemainingTotal > 0 && (
+                                            <Badge className="bg-red-100 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 text-xs font-medium px-2 py-1">
+                                              {deliveryNoteRemainingTotal} restant(s)
+                                            </Badge>
+                                          )}
+                                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 text-xs font-medium px-2 py-1">
+                                            {virtualPackage.filter(item => item.bon_de_livraison === deliveryNote.bon_de_livraison).length} article(s)
+                                          </Badge>
+                                        </>
                                       )}
-                                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 text-xs font-medium px-2 py-1">
-                                        {deliveryNoteArticlesCount} article(s)
-                                      </Badge>
                                     </div>
                                   </div>
                                 </div>
@@ -1052,6 +1329,193 @@ export function PreparationPage({ }: PreparationPageProps) {
                                   </div>
                                 </div>
                               </CollapsibleContent>
+                              
+                              {/* Section des colis créés - intégrée dans la même carte */}
+                              {(() => {
+                                const colisForThisDeliveryNote = colisData?.colis?.filter(
+                                  (colis: any) => colis.bl === deliveryNote.bon_de_livraison
+                                ) || [];
+                                
+                                if (colisForThisDeliveryNote.length === 0) return null;
+                                
+                                const isColisSectionCollapsed = collapsedColisSections.has(deliveryNote.bon_de_livraison);
+                                
+                                return (
+                                  <div className="border-t border-border">
+                                    <Collapsible
+                                      open={!isColisSectionCollapsed}
+                                      onOpenChange={() => toggleColisSection(deliveryNote.bon_de_livraison)}
+                                    >
+                                      <CollapsibleTrigger asChild>
+                                        <div className="w-full px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors">
+                                          <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                              <Package className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                              <span className="font-medium text-green-700 dark:text-green-400">
+                                                Colis créés ({colisForThisDeliveryNote.length})
+                                              </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <Badge className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs">
+                                                {colisForThisDeliveryNote.reduce((total: number, colis: any) => total + (colis.articles?.reduce((artTotal: number, article: any) => artTotal + (article.quantite_totale || 0), 0) || 0), 0)} articles
+                                              </Badge>
+                                              {isColisSectionCollapsed ? (
+                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                              ) : (
+                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </CollapsibleTrigger>
+                                      
+                                      <CollapsibleContent className="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-up-2 data-[state=open]:slide-down-2">
+                                        <div className="px-4 pb-4">
+                                          <div className="space-y-3">
+                                            {colisForThisDeliveryNote.map((colis: any) => (
+                                              <Card key={colis.name} className="p-3 bg-background border-gray-200 dark:border-gray-700">
+                                                <div className="space-y-3">
+                                                  {/* Top Section */}
+                                                  <div className="flex items-center gap-2">
+                                                    <Package className="w-4 h-4 text-green-600 dark:text-green-400" />
+                                                    <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                                                      {colis.name}
+                                                    </Badge>
+                                                    {colis.custom_numero_sequence && (
+                                                      <Badge variant="outline" className="text-xs">
+                                                        N° {colis.custom_numero_sequence}
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+
+                                                  {/* Date Section */}
+                                                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <Calendar className="w-3 h-3" />
+                                                    <span>{formatDate(colis.date_creation)}</span>
+                                                  </div>
+
+                                                  {/* Actions Section */}
+                                                  <div className="flex items-center justify-center gap-2">
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      onClick={() => handleShowQRCode(colis.name)}
+                                                      className="h-8 px-3 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+                                                      title="Afficher QR Code"
+                                                    >
+                                                      <QrCode className="w-3 h-3 mr-1" />
+                                                      QR Code
+                                                    </Button>
+                                                    <Button
+                                                      size="sm"
+                                                      variant="outline"
+                                                      onClick={() => handlePrintQRCode(colis)}
+                                                      className="h-8 px-3 text-xs hover:bg-green-50 dark:hover:bg-green-900/20 border-green-200 dark:border-green-800"
+                                                      title="Imprimer QR Code"
+                                                    >
+                                                      <Printer className="w-3 h-3 mr-1" />
+                                                      Imprimer
+                                                    </Button>
+                                                  </div>
+
+                                                  {/* Bottom Section - Status and Totals */}
+                                                  <div className="flex items-center justify-between">
+                                                    <Badge className={`text-xs ${
+                                                      colis.status === 'Livré' 
+                                                        ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                                                        : colis.status === 'En attente'
+                                                        ? 'bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
+                                                        : 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                                                    }`}>
+                                                      {colis.status}
+                                                    </Badge>
+                                                    <div className="flex items-center gap-2">
+                                                      <Badge className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs">
+                                                        {colis.articles.reduce((total: number, article: any) => total + (article.quantite_totale || 0), 0)} total
+                                                      </Badge>
+                                                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 text-xs">
+                                                        {colis.articles.length} unique(s)
+                                                      </Badge>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Articles du colis */}
+                                                  {colis.articles && colis.articles.length > 0 && (
+                                                    <div className="space-y-2 mt-4">
+                                                      {/* Version desktop - tableau */}
+                                                      <div className="hidden sm:block space-y-1">
+                                                        {colis.articles.map((article: any, index: number) => (
+                                                          <div key={index} className="flex items-center justify-between text-xs bg-gray-50 dark:bg-gray-900/50 rounded p-2">
+                                                            <div className="flex-1 min-w-0">
+                                                              <div className="font-medium truncate">{article.article}</div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 ml-2">
+                                                              <span className="text-muted-foreground">
+                                                                Qté: {article.quantite_totale}
+                                                              </span>
+                                                              <Badge 
+                                                                variant="outline" 
+                                                                className={`text-xs ${
+                                                                  article.statut_article === 'Livré'
+                                                                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                                                                    : article.statut_article === 'En attente'
+                                                                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
+                                                                    : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                                                                }`}
+                                                              >
+                                                                {article.statut_article}
+                                                              </Badge>
+                                                            </div>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+
+                                                      {/* Version mobile - cartes */}
+                                                      <div className="sm:hidden space-y-2">
+                                                        {colis.articles.map((article: any, index: number) => (
+                                                          <Card key={index} className="p-3 border border-border/50 bg-card/30 hover:shadow-md transition-all duration-200">
+                                                            <div className="space-y-3">
+                                                              {/* En-tête de l'article */}
+                                                              <div className="flex flex-col gap-2">
+                                                                <div className="flex-1 min-w-0">
+                                                                  <div className="font-medium text-sm text-foreground truncate">
+                                                                    {article.article}
+                                                                  </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 text-xs">
+                                                                    Qté: {article.quantite_totale}
+                                                                  </Badge>
+                                                                  <Badge 
+                                                                    variant="outline" 
+                                                                    className={`text-xs ${
+                                                                      article.statut_article === 'Livré'
+                                                                        ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                                                                        : article.statut_article === 'En attente'
+                                                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
+                                                                        : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                                                                    }`}
+                                                                  >
+                                                                    {article.statut_article}
+                                                                  </Badge>
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                          </Card>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              </Card>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </CollapsibleContent>
+                                    </Collapsible>
+                                  </div>
+                                );
+                              })()}
                             </Card>
                           </Collapsible>
                         );
@@ -1163,35 +1627,34 @@ export function PreparationPage({ }: PreparationPageProps) {
                   <div className="space-y-3 mb-4">
                     {virtualPackage.map((item, index) => (
                       <Card key={`${item.bon_de_livraison}-${item.item_code}-${index}`} 
-                            className="p-3 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800">
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm text-green-800 dark:text-green-300 truncate">
-                              {item.item_code}
-                            </div>
-                            <div className="text-xs text-green-700 dark:text-green-400 mt-1 break-words">
-                              {item.item_name}
-                            </div>
-                            {livraisonParam && (
-                              <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                                <span className="hidden sm:inline">BL: {item.bon_de_livraison}</span>
-                                <span className="sm:hidden">{item.bon_de_livraison}</span>
+                            className="p-3 bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              <Package className="w-4 h-4 text-white flex-shrink-0" />
+                              <div className="font-medium text-sm text-white truncate">
+                                {item.item_code}
                               </div>
-                            )}
-                            <div className="text-sm font-semibold text-green-800 dark:text-green-300 mt-2">
-                              <span className="hidden sm:inline">Qté: {item.quantity} {item.uom}</span>
-                              <span className="sm:hidden">{item.quantity} {item.uom}</span>
+                            </div>
+                            <div className="text-sm font-semibold text-white ml-2">
+                              <span className="hidden sm:inline">Qté: {item.quantity}</span>
+                              <span className="sm:hidden">Qté: {item.quantity}</span>
                             </div>
                           </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => removeFromVirtualPackage(item.item_code, item.bon_de_livraison)}
-                            className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 self-end sm:self-start flex-shrink-0"
-                            title="Retirer du colis"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-white break-words flex-1">
+                              {item.item_name}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeFromVirtualPackage(item.item_code, item.bon_de_livraison)}
+                              className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex-shrink-0"
+                              title="Retirer du colis"
+                            >
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       </Card>
                     ))}
@@ -1200,27 +1663,17 @@ export function PreparationPage({ }: PreparationPageProps) {
                   {/* Résumé et bouton de création */}
                   <div className="border-t border-border pt-4 flex-shrink-0">
                     <div className="bg-gray-50 dark:bg-gray-900/20 rounded-lg p-3 mb-4">
-                      <div className="text-sm text-muted-foreground mb-2">
+                      <div className="text-sm text-muted-foreground mb-3">
                         <span className="hidden sm:inline">Résumé du colis</span>
                         <span className="sm:hidden">Résumé</span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="flex flex-col">
-                          <span className="text-muted-foreground">
-                            <span className="hidden sm:inline">Total articles:</span>
-                            <span className="sm:hidden">Articles:</span>
-                          </span>
-                          <span className="font-medium">{virtualPackage.length}</span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-muted-foreground">
-                            <span className="hidden sm:inline">Total quantité:</span>
-                            <span className="sm:hidden">Quantité:</span>
-                          </span>
-                          <span className="font-medium">
-                            {virtualPackage.reduce((total, item) => total + item.quantity, 0)}
-                          </span>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 text-xs font-medium px-2 py-1">
+                          {virtualPackage.reduce((total, item) => total + item.quantity, 0)} ajouté(s)
+                        </Badge>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 text-xs font-medium px-2 py-1">
+                          {virtualPackage.length} article(s)
+                        </Badge>
                       </div>
                     </div>
 
@@ -1264,6 +1717,52 @@ export function PreparationPage({ }: PreparationPageProps) {
           </Card>
         </div>
       </div>
+
+      {/* Modal pour afficher le QR Code */}
+      {showQRCode && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">QR Code du Colis</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowQRCode(null)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="text-center">
+              {colisData?.colis?.find((c: any) => c.name === showQRCode)?.image_url ? (
+                <div className="space-y-4">
+                  <img 
+                    src={colisData.colis.find((c: any) => c.name === showQRCode).image_url} 
+                    alt="QR Code" 
+                    className="mx-auto max-w-full h-auto"
+                  />
+                  <div className="text-sm text-muted-foreground">
+                    <p className="font-medium">{showQRCode}</p>
+                    <p>Scannez ce QR code pour identifier le colis</p>
+                  </div>
+                  <Button
+                    onClick={() => handlePrintQRCode(colisData.colis.find((c: any) => c.name === showQRCode))}
+                    className="w-full"
+                  >
+                    <Printer className="w-4 h-4 mr-2" />
+                    Imprimer
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                  <p className="text-muted-foreground">Aucun QR code disponible</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

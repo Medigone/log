@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
 import { Steps, type Step } from '@/components/ui/steps';
 import { Settings, Package, Truck, CheckCircle, XCircle, Clock } from 'lucide-react';
 
-type ColisStatus = 'Nouveau' | 'Préparé' | 'Enlevé' | 'Partiellement Livré' | 'Livré' | 'Non Livré' | 'Annulé';
+type ColisStatus = 'Préparé' | 'Enlevé' | 'Partiellement Livré' | 'Livré' | 'Non Livré' | 'Annulé';
 
 interface ColisStatusManagerProps {
   currentStatus: string;
@@ -29,10 +29,6 @@ const statusWorkflow: Record<ColisStatus, {
   next: ColisStatus[], 
   allowedRoles: ('preparateur' | 'livreur' | 'admin')[] 
 }> = {
-  'Nouveau': { 
-    next: ['Préparé', 'Annulé'], 
-    allowedRoles: ['preparateur', 'admin'] 
-  },
   'Préparé': { 
     next: ['Enlevé', 'Annulé'], 
     allowedRoles: ['livreur', 'admin'] 
@@ -54,39 +50,37 @@ const statusWorkflow: Record<ColisStatus, {
     allowedRoles: ['livreur', 'admin'] 
   },
   'Annulé': { 
-    next: ['Nouveau'], 
+    next: ['Préparé'], 
     allowedRoles: ['admin'] 
   },
 };
 
 function getStatusIcon(status: string) {
   switch (status) {
-    case 'Nouveau': return <Clock className="w-4 h-4" />;
     case 'Préparé': return <Package className="w-4 h-4" />;
     case 'Enlevé': return <Truck className="w-4 h-4" />;
     case 'Partiellement Livré': return <Clock className="w-4 h-4" />;
     case 'Livré': return <CheckCircle className="w-4 h-4" />;
     case 'Non Livré': return <XCircle className="w-4 h-4" />;
     case 'Annulé': return <XCircle className="w-4 h-4" />;
-    default: return <Clock className="w-4 h-4" />;
+    default: return <Package className="w-4 h-4" />;
   }
 }
 
 function getStatusColor(status: string) {
   switch (status) {
-    case 'Nouveau': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800';
     case 'Préparé': return 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-400 dark:border-cyan-800';
     case 'Enlevé': return 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800';
     case 'Partiellement Livré': return 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800';
     case 'Livré': return 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800';
     case 'Non Livré': return 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800';
     case 'Annulé': return 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800';
-    default: return 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800';
+    default: return 'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-400 dark:border-cyan-800';
   }
 }
 
 function createStepsFromStatus(currentStatus: string): Step[] {
-  const allStatuses: ColisStatus[] = ['Nouveau', 'Préparé', 'Enlevé', 'Livré'];
+  const allStatuses: ColisStatus[] = ['Préparé', 'Enlevé', 'Livré'];
   const currentIndex = allStatuses.indexOf(currentStatus as ColisStatus);
   
   return allStatuses.map((status, index) => {
@@ -94,7 +88,7 @@ function createStepsFromStatus(currentStatus: string): Step[] {
     
     // Handle special cases first
     if (currentStatus === 'Partiellement Livré') {
-      if (index <= 2) { // Nouveau, Préparé, Enlevé are completed
+      if (index <= 1) { // Préparé, Enlevé are completed
         stepStatus = 'completed';
       } else if (status === 'Livré') { // Livré is current (in progress)
         stepStatus = 'current';
@@ -102,7 +96,7 @@ function createStepsFromStatus(currentStatus: string): Step[] {
         stepStatus = 'upcoming';
       }
     } else if (currentStatus === 'Non Livré' || currentStatus === 'Annulé') {
-      if (index <= 2) { // Up to "Enlevé" are completed
+      if (index <= 1) { // Up to "Enlevé" are completed
         stepStatus = 'completed';
       } else {
         stepStatus = 'upcoming';
@@ -255,18 +249,6 @@ export function ColisStatusManager({
       {/* Quick Actions for Common Workflows */}
       {canChangeStatus && (
         <div className="space-y-2">
-          {/* Preparateur actions */}
-          {userRole === 'preparateur' && currentStatus === 'Nouveau' && (
-            <Button
-              size="sm"
-              onClick={() => onStatusChange('Préparé')}
-              disabled={isLoading}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white"
-            >
-              <Package className="w-4 h-4 mr-2" />
-              Marquer comme préparé
-            </Button>
-          )}
 
           {/* Livreur actions */}
           {userRole === 'livreur' && currentStatus === 'Préparé' && (

@@ -1,10 +1,7 @@
-import React from 'react';
 import ColisDetails from '@/pages/colis/ColisDetails';
-import { PreparationInterface } from '@/components/interfaces/PreparationInterface';
 import { PickupInterface } from '@/components/interfaces/PickupInterface';
 import { DeliveryInterface } from '@/components/interfaces/DeliveryInterface';
 import { PublicTrackingView } from '@/components/interfaces/PublicTrackingView';
-import { type UserRole } from '@/hooks/useUserRole';
 
 interface SmartColisRouterProps {
   colisId: string;
@@ -12,7 +9,6 @@ interface SmartColisRouterProps {
   onBackToLivraison?: () => void;
   colisData: any;
   currentUser: string | null | undefined;
-  userRole: UserRole;
   isLoading?: boolean;
 }
 
@@ -22,7 +18,6 @@ export function SmartColisRouter({
   onBackToLivraison,
   colisData,
   currentUser,
-  userRole,
   isLoading
 }: SmartColisRouterProps) {
   
@@ -51,18 +46,6 @@ export function SmartColisRouter({
 
   // Smart routing based on status only (same interface for mobile and desktop)
   const getOptimalInterface = () => {
-    // Preparation interface for 'Nouveau' status
-    if (status === 'Nouveau') {
-      return (
-        <PreparationInterface
-          colisData={colisData}
-          colisId={colisId}
-          livraisonId={livraisonId}
-          onBackToLivraison={onBackToLivraison}
-        />
-      );
-    }
-    
     // Pickup interface for 'Préparé' status
     if (status === 'Préparé') {
       return (

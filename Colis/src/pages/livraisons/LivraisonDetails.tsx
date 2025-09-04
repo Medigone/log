@@ -208,10 +208,6 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
   const [expandedBons, setExpandedBons] = useState<Set<string>>(new Set());
   // État pour gérer l'affichage de la liste des paiements
   const [showPaiements, setShowPaiements] = useState(false);
-  // État pour gérer l'affichage des articles non emballés
-  const [showUnpackedItems, setShowUnpackedItems] = useState<Record<string, boolean>>({});
-  // État pour stocker les articles non emballés par bon de livraison
-  const [unpackedItemsData, setUnpackedItemsData] = useState<Record<string, any[]>>({});
 
   // Fonction pour basculer l'état d'un bon de livraison
   const toggleBonExpansion = (bonId: string) => {
@@ -226,40 +222,6 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
     });
   };
 
-  // Fonction pour basculer l'affichage des articles non emballés
-  const toggleUnpackedItems = async (bonId: string) => {
-    const isCurrentlyShown = showUnpackedItems[bonId];
-    
-    if (!isCurrentlyShown && !unpackedItemsData[bonId]) {
-      // Récupérer les articles non emballés si pas encore chargés
-      try {
-        const response = await fetch('/api/method/log.delivery_note_hooks.get_unpacked_items', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Frappe-CSRF-Token': (window as any).csrf_token
-          },
-          body: JSON.stringify({
-            delivery_note_name: bonId
-          })
-        });
-        const data = await response.json();
-        if (data.message) {
-          setUnpackedItemsData(prev => ({
-            ...prev,
-            [bonId]: data.message
-          }));
-        }
-      } catch (error) {
-        console.error('Erreur lors de la récupération des articles non emballés:', error);
-      }
-    }
-    
-    setShowUnpackedItems(prev => ({
-      ...prev,
-      [bonId]: !isCurrentlyShown
-    }));
-  };
 
   // Récupération des détails de la livraison
   const { data: livraison, mutate: mutateLivraison, error, isLoading } = useFrappeGetDoc<LivraisonData>(
@@ -878,56 +840,6 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                         </div>
                       </div>
                       
-                      {/* Bouton pour afficher les articles non emballés */}
-                      <div className="pt-2 border-t border-border">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => toggleUnpackedItems(bonLivraison.name)}
-                          className="flex items-center gap-2 text-xs"
-                        >
-                          <AlertCircle className="w-4 h-4" />
-                          {showUnpackedItems[bonLivraison.name] ? 'Masquer' : 'Voir'} les articles non emballés
-                          {showUnpackedItems[bonLivraison.name] ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                      
-                      {/* Affichage des articles non emballés */}
-                      {showUnpackedItems[bonLivraison.name] && unpackedItemsData[bonLivraison.name] && (
-                        <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                          <h4 className="text-sm font-medium text-orange-800 mb-3 flex items-center gap-2">
-                            <AlertCircle className="w-4 h-4" />
-                            Articles non emballés
-                          </h4>
-                          {unpackedItemsData[bonLivraison.name].length > 0 ? (
-                            <div className="space-y-2">
-                              {unpackedItemsData[bonLivraison.name].map((item: any, index: number) => (
-                                <div key={index} className="flex justify-between items-center p-2 bg-white rounded border">
-                                  <div className="flex-1">
-                                    <div className="text-sm font-medium text-gray-900">{item.item_code}</div>
-                                    <div className="text-xs text-gray-600">{item.description}</div>
-                                  </div>
-                                  <div className="text-right">
-                                    <div className="text-sm font-medium text-orange-600">
-                                      {item.remaining_qty} / {item.total_qty}
-                                    </div>
-                                    <div className="text-xs text-gray-500">non emballé / total</div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-sm text-green-600 flex items-center gap-2">
-                              <PackageCheck className="w-4 h-4" />
-                              Tous les articles sont emballés
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
 
                     {/* Liste des colis - Affichage conditionnel avec animation */}
@@ -992,14 +904,12 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                       </span>
                                     </div>
                                     
-                                    {colis.total_art && (
-                                      <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600">
-                                        <Package className="w-3 h-3 text-current flex-shrink-0" />
-                                        <span className="text-xs font-medium">
-                                          {colis.total_art} articles
-                                        </span>
-                                      </div>
-                                    )}
+                                    <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600">
+                                      <Package className="w-3 h-3 text-current flex-shrink-0" />
+                                      <span className="text-xs font-medium">
+                                        {colis.total_art || 0} articles
+                                      </span>
+                                    </div>
                                   </div>
                                 </div>
                               );

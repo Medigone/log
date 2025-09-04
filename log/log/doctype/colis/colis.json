@@ -26,6 +26,9 @@
   "section_break_livraison",
   "photo_livraison",
   "column_break_livraison",
+  "preparation_user",
+  "enlevement_user",
+  "livraison_user",
   "section_break_commentaire",
   "commentaire_livreur"
  ],
@@ -135,7 +138,7 @@
   {
    "fieldname": "section_break_livraison",
    "fieldtype": "Section Break",
-   "label": "Informations de livraison"
+   "label": "Informations"
   },
   {
    "fieldname": "photo_livraison",
@@ -161,13 +164,31 @@
    "fieldtype": "Int",
    "label": "Total Articles",
    "read_only": 1
+  },
+  {
+   "fieldname": "preparation_user",
+   "fieldtype": "Data",
+   "label": "Pr\u00e9paration",
+   "read_only": 1
+  },
+  {
+   "fieldname": "enlevement_user",
+   "fieldtype": "Data",
+   "label": "Enl\u00e9vement",
+   "read_only": 1
+  },
+  {
+   "fieldname": "livraison_user",
+   "fieldtype": "Data",
+   "label": "Livraison",
+   "read_only": 1
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-07-30 17:59:08.208903",
- "modified_by": "admin@medigo.one",
+ "modified": "2025-09-04 23:55:04.732838",
+ "modified_by": "Administrator",
  "module": "Log",
  "name": "Colis",
  "owner": "Administrator",

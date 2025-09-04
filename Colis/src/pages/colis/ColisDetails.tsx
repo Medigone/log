@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -12,30 +12,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
   Rows3,
   IdCard,
   Clock,
   Circle,
   AlertTriangle,
   Clipboard,
+  Truck,
+  CheckCircle,
   Check,
   XCircle,
   Pencil,
   Camera,
   FileText,
+  Package,
 } from "lucide-react";
-import { useFrappeGetDoc, useFrappeUpdateDoc, useFrappeAuth, useFrappeGetDocList } from "frappe-react-sdk";
-import { ColisStatusManager } from '@/components/ColisStatusManager';
-import { useUserRole } from '@/hooks/useUserRole';
+import { useFrappeGetDoc, useFrappeUpdateDoc, useFrappeAuth } from "frappe-react-sdk";
+import { useNavigate } from 'react-router-dom';
 
 /* =========================
    Types
@@ -62,6 +55,9 @@ interface ColisData {
   date?: string;
   bl?: string;
   total_art?: number;
+  preparation_user?: string;
+  enlevement_user?: string;
+  livraison_user?: string;
   articles: Article[];
   photo_livraison?: string;
   signature_client?: string;
@@ -100,26 +96,6 @@ function resolveColisId(data?: ColisData | null) {
   return data.name || data.id || "";
 }
 
-function statusToColor(status?: string): BadgeColor {
-  switch (status) {
-    case "Nouveau":
-      return "blue";
-    case "Préparé":
-      return "cyan";
-    case "Enlevé":
-      return "orange";
-    case "Partiellement Livré":
-      return "yellow";
-    case "Livré":
-      return "green";
-    case "Non Livré":
-      return "red";
-    case "Annulé":
-      return "gray";
-    default:
-      return "gray";
-  }
-}
 
 function articleStatusToColor(status: string): BadgeColor {
   switch (status) {
@@ -202,6 +178,8 @@ function QtyPill({ qty }: { qty: number | string }) {
    Component
    ========================= */
 const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsProps) => {
+  const navigate = useNavigate();
+  const { currentUser } = useFrappeAuth();
   const { data, mutate, error, isLoading } = useFrappeGetDoc<ColisData>(
     "Colis",
     colisId,
@@ -215,6 +193,9 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         "date",
         "bl",
         "total_art",
+        "preparation_user",
+        "enlevement_user",
+        "livraison_user",
         "articles",
         "photo_livraison",
         "signature_client",
@@ -225,8 +206,6 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
   );
 
   const { updateDoc: updateColis } = useFrappeUpdateDoc();
-  const { currentUser } = useFrappeAuth();
-  const userRole = useUserRole(currentUser);
 
   const [localColisData, setLocalColisData] = useState<ColisData | null>(null);
   const [editingArticle, setEditingArticle] = useState<string | null>(null);
@@ -256,8 +235,9 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
       setTempQuantities({});
       setCapturedPhoto(data.photo_livraison || null);
       setCommentText(data.commentaire_livreur || "");
+      
     }
-  }, [data]);
+  }, [data, livraisonId, navigate]);
 
   const saveToBackend = async (updatedData: Partial<ColisData>) => {
     if (!colisId) return;
@@ -415,7 +395,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
       const total = updated.length;
       const nbLiv = updated.filter((x) => x.statut_article === "Livré").length;
       const nbPart = updated.filter((x) => x.statut_article === "Partiellement livré").length;
-      let global = "Nouveau";
+      let global = "Préparé";
       if (nbLiv === total) global = "Livré";
       else if (nbLiv > 0 || nbPart > 0) global = "Partiellement Livré";
       const next = { ...prev, articles: updated, status: global };
@@ -442,7 +422,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
       const total = updated.length;
       const nbLiv = updated.filter((x) => x.statut_article === "Livré").length;
       const nbPart = updated.filter((x) => x.statut_article === "Partiellement livré").length;
-      let global = "Nouveau";
+      let global = "Préparé";
       if (nbLiv === total) global = "Livré";
       else if (nbLiv > 0 || nbPart > 0) global = "Partiellement Livré";
       const next = {
@@ -484,25 +464,26 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
     });
   };
 
-  const handlePartialDelivery = async () => {
-    if (!localColisData) return;
-    
-    try {
-      // Mark status as partially delivered
-      await saveToBackend({ status: 'Partiellement Livré' });
-      setLocalColisData((prev) => prev ? { ...prev, status: 'Partiellement Livré' } : prev);
-    } catch (e) {
-      console.error(e);
-      throw new Error("Erreur lors de la livraison partielle");
-    }
-  };
 
   const handleStatusChange = async (newStatus: string) => {
     if (!colisId) return;
     
     try {
-      await saveToBackend({ status: newStatus });
-      setLocalColisData((prev) => prev ? { ...prev, status: newStatus } : prev);
+      // Préparer les données à sauvegarder
+      const updateData: any = { status: newStatus };
+      
+      // Si c'est un enlèvement, enregistrer l'utilisateur d'enlèvement
+      if (newStatus === 'Enlevé') {
+        updateData.enlevement_user = (currentUser as any)?.full_name || currentUser || 'Utilisateur inconnu';
+      }
+      
+      // Si c'est une livraison, enregistrer l'utilisateur de livraison
+      if (newStatus === 'Livré' || newStatus === 'Partiellement Livré') {
+        updateData.livraison_user = (currentUser as any)?.full_name || currentUser || 'Utilisateur inconnu';
+      }
+      
+      await saveToBackend(updateData);
+      setLocalColisData((prev) => prev ? { ...prev, ...updateData } : prev);
     } catch (e) {
       console.error(e);
       throw new Error("Erreur lors du changement de statut");
@@ -620,18 +601,198 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
           </div>
         </div>
 
-        {/* Status Management */}
+        {/* Progression du colis */}
         <div className="mb-5">
-          <ColisStatusManager
-            currentStatus={localColisData.status || 'Nouveau'}
-            onStatusChange={handleStatusChange}
-            canChangeStatus={true}
-            userRole={userRole}
-            isLoading={isSaving}
-            hasRemainingQuantities={localColisData.articles.some((a) => a.quantite_restante > 0)}
-            onPartialDelivery={handlePartialDelivery}
-          />
+          <div className="bg-card rounded-lg border border-border p-4">
+            <h3 className="text-sm font-medium text-foreground mb-4">Progression du colis</h3>
+            
+            {/* Workflow Steps */}
+            <div className="flex items-center justify-between relative">
+              {/* Step 1: Préparé */}
+              <div className="flex flex-col items-center relative z-10">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  localColisData.status === 'Préparé' || 
+                  localColisData.status === 'Enlevé' || 
+                  localColisData.status === 'Partiellement Livré' || 
+                  localColisData.status === 'Livré'
+                    ? 'bg-green-500 text-white' 
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-500'
+                }`}>
+                  {localColisData.status === 'Préparé' || 
+                   localColisData.status === 'Enlevé' || 
+                   localColisData.status === 'Partiellement Livré' || 
+                   localColisData.status === 'Livré' ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-current" />
+                  )}
+                </div>
+                <span className={`text-xs mt-2 font-medium ${
+                  localColisData.status === 'Préparé' || 
+                  localColisData.status === 'Enlevé' || 
+                  localColisData.status === 'Partiellement Livré' || 
+                  localColisData.status === 'Livré'
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-gray-500'
+                }`}>
+                  Préparé
+                </span>
+              </div>
+              
+              {/* Connector 1 */}
+              <div className={`flex-1 h-0.5 mx-2 ${
+                localColisData.status === 'Enlevé' || 
+                localColisData.status === 'Partiellement Livré' || 
+                localColisData.status === 'Livré'
+                  ? 'bg-green-500' 
+                  : 'bg-gray-300 dark:bg-gray-600'
+              }`} />
+              
+              {/* Step 2: Enlevé */}
+              <div className="flex flex-col items-center relative z-10">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  localColisData.status === 'Enlevé' || 
+                  localColisData.status === 'Partiellement Livré' || 
+                  localColisData.status === 'Livré'
+                    ? 'bg-green-500 text-white' 
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-500'
+                }`}>
+                  {localColisData.status === 'Enlevé' || 
+                   localColisData.status === 'Partiellement Livré' || 
+                   localColisData.status === 'Livré' ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-current" />
+                  )}
+                </div>
+                <span className={`text-xs mt-2 font-medium ${
+                  localColisData.status === 'Enlevé' || 
+                  localColisData.status === 'Partiellement Livré' || 
+                  localColisData.status === 'Livré'
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-gray-500'
+                }`}>
+                  Enlevé
+                </span>
+              </div>
+              
+              {/* Connector 2 */}
+              <div className={`flex-1 h-0.5 mx-2 ${
+                localColisData.status === 'Livré'
+                  ? 'bg-green-500' 
+                  : 'bg-gray-300 dark:bg-gray-600'
+              }`} />
+              
+              {/* Step 3: Livré */}
+              <div className="flex flex-col items-center relative z-10">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                  localColisData.status === 'Livré'
+                    ? 'bg-green-500 text-white' 
+                    : 'bg-gray-300 dark:bg-gray-600 text-gray-500'
+                }`}>
+                  {localColisData.status === 'Livré' ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <div className="w-2 h-2 rounded-full bg-current" />
+                  )}
+                </div>
+                <span className={`text-xs mt-2 font-medium ${
+                  localColisData.status === 'Livré'
+                    ? 'text-green-600 dark:text-green-400' 
+                    : 'text-gray-500'
+                }`}>
+                  Livré
+                </span>
+              </div>
+            </div>
+            
+            {/* Status Actions */}
+            <div className="mt-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium border ${
+                  localColisData.status === 'Livré' 
+                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
+                    : localColisData.status === 'Enlevé'
+                    ? 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800'
+                    : localColisData.status === 'Partiellement Livré'
+                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
+                    : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
+                }`}>
+                  <Package className="w-4 h-4" />
+                  {localColisData.status || 'Préparé'}
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {localColisData.status === 'Livré' ? 'Livraison terminée' : 
+                   localColisData.status === 'Enlevé' ? 'En cours de livraison' :
+                   localColisData.status === 'Partiellement Livré' ? 'Livraison partielle' :
+                   'Prêt pour la livraison'}
+                </span>
+              </div>
+              
+              {/* Actions de livraison */}
+              {localColisData.status === 'Préparé' && (
+                <Button
+                  onClick={() => handleStatusChange('Enlevé')}
+                  disabled={isSaving}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  <Package className="w-4 h-4 mr-2" />
+                  Marquer comme enlevé
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Utilisateurs responsables */}
+        {(localColisData.preparation_user || localColisData.enlevement_user || localColisData.livraison_user) && (
+          <div className="mb-5">
+            <div className="bg-card rounded-lg border border-border p-4">
+              <h3 className="text-sm font-medium text-foreground mb-4">Utilisateurs responsables</h3>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Préparation */}
+                {localColisData.preparation_user && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                      <Package className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Préparation</div>
+                      <div className="text-sm font-medium text-foreground">{localColisData.preparation_user}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Enlèvement */}
+                {localColisData.enlevement_user && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 dark:bg-orange-900/30">
+                      <Truck className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Enlèvement</div>
+                      <div className="text-sm font-medium text-foreground">{localColisData.enlevement_user}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Livraison */}
+                {localColisData.livraison_user && (
+                  <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30">
+                      <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Livraison</div>
+                      <div className="text-sm font-medium text-foreground">{localColisData.livraison_user}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Articles */}
         <div className="bg-card rounded-md border border-border shadow-lg overflow-hidden">
