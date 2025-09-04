@@ -1,1 +1,1 @@
-export { default as PreparationPage } from './PreparationPage';
+export { PreparationPage } from './PreparationPage';

@@ -732,7 +732,7 @@ const LivraisonsList = ({ onLivraisonSelect, onGenerateClick }: LivraisonsListPr
                   <TableHead>Statut</TableHead>
                   <TableHead>Livreur</TableHead>
                   <TableHead>Véhicule</TableHead>
-                  <TableHead>Colis</TableHead>
+                  <TableHead>Articles</TableHead>
                   <TableHead>Montant</TableHead>
                 </TableRow>
               </TableHeader>

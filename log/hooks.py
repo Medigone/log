@@ -154,8 +154,7 @@ doc_events = {
     },
     "Delivery Note": {
         "on_update": [
-            "log.livraison_hooks.update_livraisons_on_delivery_note_change",
-            "log.livraison_hooks.update_livraisons_on_date_change"
+            "log.livraison_hooks.update_livraisons_on_delivery_note_change"
         ],
         "on_trash": "log.livraison_hooks.retirer_bon_de_livraison_supprime"
     },

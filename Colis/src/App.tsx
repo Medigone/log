@@ -17,6 +17,7 @@ import { useUserRole } from "./hooks/useUserRole";
 
 import { LivraisonsList, LivraisonDetails, GenerationLivraisons } from "./pages/livraisons";
 import { PreparationPage } from "./pages/preparation";
+
 import logoSvg from "./assets/IntraPro_fleetmaster.svg";
 
 /* =========================
@@ -165,17 +166,7 @@ function SidebarNavigation() {
           Génération
         </button>
 
-        <button
-          onClick={() => handleNavClick('/preparation')}
-          className={`w-full flex items-center gap-3 px-3 py-2 text-sm transition-colors ${
-            isActive('/preparation')
-              ? 'text-foreground font-medium'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          Préparation
-        </button>
+
       </nav>
 
       {/* User Profile & Logout */}

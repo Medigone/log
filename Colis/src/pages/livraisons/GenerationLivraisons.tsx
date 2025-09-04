@@ -55,13 +55,23 @@ interface GenerationLivraisonsProps {
 
 const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
   const navigate = useNavigate();
-  // LocalStorage key for persistence
-  const STORAGE_KEY = 'deliveryGenerationState';
+  
+  // Fonction pour obtenir la date locale au format YYYY-MM-DD
+  const getLocalDateString = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // État initial pour la date (avant de pouvoir créer la clé de stockage)
+  const [dateLivraison, setDateLivraison] = useState<string>(getLocalDateString());
   
   // Load initial state from localStorage
-  const loadStateFromStorage = () => {
+  const loadStateFromStorage = (storageKey: string) => {
     try {
-      const savedState = localStorage.getItem(STORAGE_KEY);
+      const savedState = localStorage.getItem(storageKey);
       if (savedState) {
         const parsed = JSON.parse(savedState);
         // Validate that the saved state is not too old (optional - 24 hours)
@@ -73,21 +83,28 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
           return parsed;
         } else {
           // State is too old, clear it
-          localStorage.removeItem(STORAGE_KEY);
+          localStorage.removeItem(storageKey);
         }
       }
     } catch (error) {
       console.warn('Failed to load state from localStorage:', error);
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(storageKey);
     }
     return null;
   };
   
-  const savedState = loadStateFromStorage();
+  // LocalStorage key for persistence - include date to separate data
+  const STORAGE_KEY = `deliveryGenerationState_${dateLivraison}`;
   
-  const [dateLivraison, setDateLivraison] = useState<string>(
-    savedState?.dateLivraison || new Date().toISOString().split('T')[0]
-  );
+  // Charger l'état sauvegardé pour la date actuelle
+  const savedState = loadStateFromStorage(STORAGE_KEY);
+  
+  // Mettre à jour dateLivraison avec les données sauvegardées si disponibles
+  useEffect(() => {
+    if (savedState?.dateLivraison && savedState.dateLivraison !== dateLivraison) {
+      setDateLivraison(savedState.dateLivraison);
+    }
+  }, []);
   // Mode simulation forcé par défaut - plus de checkbox
   const modeSimulation = true;
   const [currentData, setCurrentData] = useState<LivraisonData | null>(savedState?.currentData || null);
@@ -119,7 +136,8 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
         isEditingPreview,
         previewAssignments
       };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
+      const currentStorageKey = `deliveryGenerationState_${dateLivraison}`;
+      localStorage.setItem(currentStorageKey, JSON.stringify(stateToSave));
     } catch (error) {
       console.warn('Failed to save state to localStorage:', error);
     }
@@ -128,7 +146,8 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
   // Function to clear saved state
   const clearSavedState = () => {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      const currentStorageKey = `deliveryGenerationState_${dateLivraison}`;
+      localStorage.removeItem(currentStorageKey);
     } catch (error) {
       console.warn('Failed to clear saved state:', error);
     }
@@ -176,8 +195,13 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
   useEffect(() => {
     // Réinitialiser les états lors du changement de date
     setInteractiveAssignments({});
-    setPreviewAssignments({}); // Ajouter la réinitialisation des preview assignments
+    setPreviewAssignments({});
     setIsEditingPreview(false);
+    setCurrentData(null);
+    setShowResults(false);
+    setShowManualInterface(false);
+    setManualAssignments({});
+    setRealTimeCharges({});
   }, [dateLivraison]);
   
   // Effet pour synchroniser les charges en temps réel avec les assignations
@@ -526,8 +550,6 @@ const GenerationLivraisons: React.FC<GenerationLivraisonsProps> = () => {
           // Initialiser les assignations interactives avec les attributions automatiques existantes
           initializeInteractiveAssignments(actualResponse);
         }
-        
-        showAlert('Aperçu généré avec succès', 'success');
       } else {
 
         showAlert('La réponse de l\'API est vide', 'warning');

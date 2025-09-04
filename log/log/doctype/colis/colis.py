@@ -2096,6 +2096,67 @@ def get_delivery_note_items_for_colis(delivery_note_name):
 		}
 
 @frappe.whitelist()
+def get_delivery_notes_for_livraison(livraison_id):
+	"""Récupère tous les bons de livraison d'une Livraison avec leurs articles disponibles pour création de colis
+	
+	Args:
+		livraison_id (str): L'ID de la Livraison
+	
+	Returns:
+		dict: Liste des bons de livraison avec leurs articles
+	"""
+	try:
+		# Vérifier que la Livraison existe
+		if not frappe.db.exists('Livraison', livraison_id):
+			return {
+				'success': False,
+				'message': f'Livraison {livraison_id} introuvable'
+			}
+		
+		# Récupérer la Livraison
+		livraison = frappe.get_doc('Livraison', livraison_id)
+		
+		delivery_notes_data = []
+		
+		# Parcourir tous les bons de livraison de la Livraison
+		for bon_row in livraison.bons_de_livraison:
+			if not bon_row.bon_de_livraison:
+				continue
+				
+			# Récupérer les articles disponibles pour ce bon de livraison
+			articles_data = get_delivery_note_items_for_colis(bon_row.bon_de_livraison)
+			
+			if articles_data.get('success'):
+				delivery_notes_data.append({
+					'bon_de_livraison': bon_row.bon_de_livraison,
+					'customer': bon_row.customer,
+					'custom_date_de_livraison': bon_row.custom_date_de_livraison,
+					'custom_commune': bon_row.custom_commune,
+					'custom_wilaya': bon_row.custom_wilaya,
+					'total_qty': bon_row.total_qty,
+					'grand_total': bon_row.grand_total,
+					'status': bon_row.status,
+					'type': bon_row.type,
+					'items': articles_data.get('items', [])
+				})
+		
+		return {
+			'success': True,
+			'livraison_id': livraison_id,
+			'livraison_name': livraison.name,
+			'delivery_notes': delivery_notes_data,
+			'total_delivery_notes': len(delivery_notes_data)
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur get_delivery_notes_for_livraison: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur lors de la récupération: {str(e)}'
+		}
+
+
+@frappe.whitelist()
 def get_unpacked_delivery_notes(date_from=None, date_to=None, customer=None):
 	"""Récupère les bons de livraison qui ont des articles non encore emballés en colis
 	
