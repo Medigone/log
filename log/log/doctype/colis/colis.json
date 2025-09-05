@@ -24,11 +24,12 @@
   "articles",
   "total_art",
   "section_break_livraison",
-  "photo_livraison",
   "column_break_livraison",
   "preparation_user",
   "enlevement_user",
   "livraison_user",
+  "column_break_rahj",
+  "photo_livraison",
   "section_break_commentaire",
   "commentaire_livreur"
  ],
@@ -182,12 +183,16 @@
    "fieldtype": "Data",
    "label": "Livraison",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_rahj",
+   "fieldtype": "Column Break"
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-09-04 23:55:04.732838",
+ "modified": "2025-09-05 12:50:25.951325",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Colis",

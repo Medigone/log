@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ColisStatusManager } from '@/components/ColisStatusManager';
-import { useUserRole } from '@/hooks/useUserRole';
 import { useFrappeAuth, useFrappeUpdateDoc } from 'frappe-react-sdk';
 import {
   Truck,
@@ -60,26 +58,10 @@ export function PickupInterface({
   onBackToLivraison
 }: PickupInterfaceProps) {
   const { currentUser } = useFrappeAuth();
-  const userRole = useUserRole(currentUser);
   const { updateDoc: updateColis } = useFrappeUpdateDoc();
   const [isSaving, setIsSaving] = useState(false);
   const [verificationComplete, setVerificationComplete] = useState(false);
 
-  const handleStatusChange = async (newStatus: string) => {
-    if (!colisId) return;
-    
-    setIsSaving(true);
-    try {
-      await updateColis("Colis", colisId, { status: newStatus });
-      // Reload page to reflect changes
-      window.location.reload();
-    } catch (e) {
-      console.error(e);
-      throw new Error("Erreur lors du changement de statut");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const confirmPickup = async () => {
     if (!verificationComplete) {
@@ -120,28 +102,27 @@ export function PickupInterface({
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="border-b border-border bg-orange-50 dark:bg-orange-900/20">
+      <div className="border-b border-border">
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap justify-between">
             <div className="inline-flex items-center gap-2 text-muted-foreground text-sm">
-              {livraisonId && onBackToLivraison && (
-                <>
-                  <button
-                    onClick={onBackToLivraison}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30"
-                    title="Retour aux détails de la livraison"
-                  >
-                    <FileText className="w-3 h-3" />
-                    <span className="text-xs font-medium">Livraison {livraisonId}</span>
-                  </button>
-                  <Circle className="w-1 h-1 fill-current" />
-                </>
-              )}
               <span>Enlèvement Colis</span>
             </div>
-            <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-orange-50 text-orange-700 border border-orange-200 dark:bg-orange-900/20 dark:text-orange-400 dark:border-orange-800">
-              <Truck className="w-3 h-3" />
-              <span className="text-xs font-medium">Mode Livreur</span>
+            <div className="flex items-center gap-3">
+              {livraisonId && onBackToLivraison && (
+                <button
+                  onClick={onBackToLivraison}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors cursor-pointer dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-900/30"
+                  title="Retour aux détails de la livraison"
+                >
+                  <FileText className="w-3 h-3" />
+                  <span className="text-xs font-medium">Livraison {livraisonId}</span>
+                </button>
+              )}
+              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                <Truck className="w-3 h-3" />
+                <span className="text-xs font-medium">Mode Livreur</span>
+              </div>
             </div>
           </div>
         </div>
@@ -149,10 +130,16 @@ export function PickupInterface({
 
       {/* Content */}
       <div className="max-w-6xl mx-auto px-4 pt-6 pb-8">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
-          <h1 className="text-2xl font-bold text-foreground">
-            Enlèvement Colis {colisData.custom_numero_sequence || "—"}
+        <div className="mb-3">
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            Enlèvement Colis
           </h1>
+          {colisData.name && (
+            <button className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 transition-colors dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 dark:hover:bg-green-900/30">
+              <Package className="w-3 h-3" />
+              <span className="text-xs font-medium">{colisData.name}</span>
+            </button>
+          )}
         </div>
 
         {/* Meta chips */}
@@ -181,34 +168,7 @@ export function PickupInterface({
           </div>
         </div>
 
-        {/* Status Management */}
-        <div className="mb-5">
-          <ColisStatusManager
-            currentStatus={colisData.status || 'Préparé'}
-            onStatusChange={handleStatusChange}
-            canChangeStatus={true}
-            userRole={userRole}
-            isLoading={isSaving}
-            hasRemainingQuantities={colisData.articles?.some((a: any) => a.quantite_restante > 0)}
-          />
-        </div>
 
-        {/* Pickup Instructions */}
-        <Card className="p-6 mb-6 border border-orange-300 dark:border-orange-600">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-orange-600 text-white">
-              <Truck className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                Colis Prêt pour Enlèvement
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                Le colis a été préparé et est prêt à être enlevé
-              </p>
-            </div>
-          </div>
-        </Card>
 
         {/* Package Contents */}
         <Card className="p-6 mb-6">
@@ -276,14 +236,14 @@ export function PickupInterface({
               <Button
                 onClick={confirmPickup}
                 disabled={!verificationComplete || isSaving}
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 text-lg"
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-4 text-lg"
               >
                 <Truck className="w-5 h-5 mr-2" />
                 {isSaving ? 'Mise à jour...' : 'Confirmer l\'Enlèvement'}
               </Button>
               
               {!verificationComplete && (
-                <div className="text-sm text-yellow-600 dark:text-yellow-400 mt-2 text-center">
+                <div className="text-sm text-amber-600 dark:text-amber-400 mt-2 text-center">
                   ⚠️ Veuillez vérifier le colis avant de confirmer l'enlèvement
                 </div>
               )}

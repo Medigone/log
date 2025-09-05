@@ -896,7 +896,7 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                   </div>
 
                                   {/* Informations du colis */}
-                                  <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
                                     <div className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-gray-50 text-gray-500 border border-gray-200 dark:bg-gray-900/20 dark:text-gray-300 dark:border-gray-600">
                                       <User className="w-3 h-3 text-current flex-shrink-0" />
                                       <span className="text-xs font-medium truncate">
