@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useFrappeAuth, useFrappeUpdateDoc, useFrappePostCall } from 'frappe-react-sdk';
+import { useNavigate } from 'react-router-dom';
 import {
   CheckCircle,
   XCircle,
@@ -73,9 +74,9 @@ export function DeliveryInterface({
   onBackToLivraison
 }: DeliveryInterfaceProps) {
   const { } = useFrappeAuth();
+  const navigate = useNavigate();
   const { updateDoc: updateColis } = useFrappeUpdateDoc();
   const { call: deliverArticleQuantity } = useFrappePostCall('log.log.doctype.colis.colis.deliver_article_quantity_direct');
-  const { call: recalculateStatus } = useFrappePostCall('log.log.doctype.colis.colis.recalculate_colis_status');
   const { call: setStatusLivre } = useFrappePostCall('log.log.doctype.colis.colis.set_status_livre');
   
   // State management
@@ -98,7 +99,6 @@ export function DeliveryInterface({
   const [photoPreview, setPhotoPreview] = useState<string>('');
   const [deliveryErrors, setDeliveryErrors] = useState<string[]>([]);
   const [deliverySuccess, setDeliverySuccess] = useState<boolean>(false);
-  const [currentStatus, setCurrentStatus] = useState<string>(colisData.status || '');
 
   // Fonctions de gestion des quantités
   const updateArticleQuantity = (articleId: string, quantity: number) => {
@@ -126,17 +126,26 @@ export function DeliveryInterface({
     })));
   };
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (e) => {
-        setPhotoPreview(e.target?.result as string);
+        const result = e.target?.result as string;
+        setPhotoPreview(result);
+        
+        // Stocker l'image en base64 dans le champ photo_livraison
+        updateColis("Colis", colisId, {
+          photo_livraison: result
+        }).catch(error => {
+          console.error('Erreur lors de la sauvegarde de la photo:', error);
+        });
       };
       reader.readAsDataURL(file);
     }
   };
+
 
 
   const handleConfirmClick = () => {
@@ -160,13 +169,27 @@ export function DeliveryInterface({
             });
           });
           const { latitude, longitude } = position.coords;
-          currentGpsLocation = `${latitude}, ${longitude}`;
+          // Limiter la précision pour éviter de dépasser 140 caractères
+          const lat = parseFloat(latitude.toFixed(6));
+          const lng = parseFloat(longitude.toFixed(6));
+          currentGpsLocation = `${lat}, ${lng}`;
+          console.log('GPS récupéré:', currentGpsLocation);
         } catch (gpsError) {
           console.warn('Impossible d\'obtenir la position GPS:', gpsError);
         }
       }
 
-      // Mettre à jour chaque article dans la table enfant Articles Colis
+      // D'ABORD : Enregistrer l'utilisateur et la date de livraison
+      try {
+        await setStatusLivre({
+          docname: colisId,
+          confirm: true
+        });
+      } catch (statusError) {
+        console.error('Erreur lors de setStatusLivre:', statusError);
+      }
+
+      // ENSUITE : Mettre à jour chaque article dans la table enfant Articles Colis
       const errors: string[] = [];
       for (const article of articleStates) {
         if (article.quantite_a_livrer > 0) {
@@ -188,47 +211,28 @@ export function DeliveryInterface({
         setDeliveryErrors(errors);
       }
 
-      // Recalculer le statut du colis après la livraison des articles
-      if (errors.length === 0) {
-        try {
-          const statusResult = await recalculateStatus({
-            colis_id: colisId
-          });
-          if (statusResult?.success) {
-            console.log(`Statut mis à jour: ${statusResult.old_status} → ${statusResult.new_status}`);
-            setCurrentStatus(statusResult.new_status);
-          }
-        } catch (statusError) {
-          console.error('Erreur lors du recalcul du statut:', statusError);
+      // Mettre à jour le champ GPS si fourni
+      const updateData: any = {};
+      if (currentGpsLocation) {
+        // Vérifier que le GPS ne dépasse pas 140 caractères
+        if (currentGpsLocation.length <= 140) {
+          updateData.gps = currentGpsLocation;
         }
       }
 
-      // Mettre à jour les champs GPS et photo si fournis
-      const updateData: any = {};
-      if (currentGpsLocation) {
-        updateData.gps = currentGpsLocation;
-      }
-      if (photoFile) {
-        // Ici on pourrait uploader la photo, mais pour l'instant on met juste un placeholder
-        updateData.photo_livraison = 'Photo uploadée';
-      }
-
-      // Mettre à jour le colis avec GPS et photo si nécessaire
+      // Mettre à jour le colis avec GPS si nécessaire
       if (Object.keys(updateData).length > 0) {
         await updateColis("Colis", colisId, updateData);
-      }
-
-      // Utiliser l'API set_status_livre qui gère automatiquement l'utilisateur et la date
-      if (errors.length === 0) {
-        await setStatusLivre({
-          docname: colisId,
-          confirm: true
-        });
       }
 
       // Marquer comme succès si pas d'erreurs
       if (errors.length === 0) {
         setDeliverySuccess(true);
+        
+        // Rediriger vers la page de détails du colis après un court délai
+        setTimeout(() => {
+          navigate(`/colis/${colisId}?from=livraison&livraisonId=${livraisonId}`);
+        }, 1500);
       }
     } catch (error) {
       console.error('Erreur lors de la livraison:', error);
@@ -302,20 +306,20 @@ export function DeliveryInterface({
                 <span className="text-xs font-medium">{colisData.name}</span>
               </button>
             )}
-            {currentStatus && (
+            {colisData.status && (
               <Badge 
                 variant="outline" 
                 className={`text-xs font-medium ${
-                  currentStatus === 'Livré' 
+                  colisData.status === 'Livré' 
                     ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800'
-                    : currentStatus === 'Partiellement Livré'
+                    : colisData.status === 'Partiellement Livré'
                     ? 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-400 dark:border-yellow-800'
-                    : currentStatus === 'Enlevé'
+                    : colisData.status === 'Enlevé'
                     ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800'
                     : 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900/20 dark:text-gray-400 dark:border-gray-800'
                 }`}
               >
-                {currentStatus}
+                {colisData.status}
               </Badge>
             )}
           </div>

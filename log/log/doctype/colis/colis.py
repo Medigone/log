@@ -616,9 +616,9 @@ def set_status_livre(docname, confirm=False):
 	doc = frappe.get_doc("Colis", docname)
 	previous_status = doc.status
 	
-	# Validation de la transition
+	# Validation de la transition - permettre si déjà Livré pour enregistrer l'utilisateur
 	is_valid, error_msg = validate_status_transition(previous_status, 'Livré')
-	if not is_valid:
+	if not is_valid and previous_status != 'Livré':
 		return {
 			'success': False,
 			'message': error_msg
@@ -633,17 +633,23 @@ def set_status_livre(docname, confirm=False):
 	
 	# Enregistrer l'utilisateur de livraison et la date
 	user_doc = frappe.get_doc("User", frappe.session.user)
-	doc.livraison_user = user_doc.full_name or frappe.session.user
-	doc.date_livraison = frappe.utils.now()
+	livraison_user = user_doc.full_name or frappe.session.user
+	date_livraison = frappe.utils.now()
 	
-	doc.status = 'Livré'
+	doc.livraison_user = livraison_user
+	doc.date_livraison = date_livraison
+	
+	# Recalculer le statut basé sur les articles livrés seulement si pas déjà Livré
+	if previous_status != 'Livré':
+		doc.calculate_global_status(use_smart_status=False)  # Utiliser la logique simple
+	
 	doc.save()
 	
 	return {
 		'success': True,
-		'message': f'Statut mis à jour vers "Livré" (ancien statut: "{previous_status}")',
+		'message': f'Utilisateur et date de livraison enregistrés (statut: "{doc.status}")',
 		'previous_status': previous_status,
-		'new_status': 'Livré'
+		'new_status': doc.status
 	}
 
 

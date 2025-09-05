@@ -34,9 +34,9 @@
   "livraison_user",
   "date_livraison",
   "preuves_de_livraison_section",
-  "photo_livraison",
-  "column_break_ylym",
   "gps",
+  "column_break_ylym",
+  "photo_livraison",
   "section_break_commentaire",
   "commentaire_livreur"
  ],
@@ -152,6 +152,7 @@
   {
    "fieldname": "photo_livraison",
    "fieldtype": "Attach Image",
+   "hidden": 1,
    "label": "Photo de livraison"
   },
   {
@@ -237,7 +238,7 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-09-05 14:36:25.595781",
+ "modified": "2025-09-06 00:10:14.578554",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Colis",

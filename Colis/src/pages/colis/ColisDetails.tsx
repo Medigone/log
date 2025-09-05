@@ -26,6 +26,7 @@ import {
   Camera,
   FileText,
   Package,
+  MapPin,
 } from "lucide-react";
 import { useFrappeGetDoc, useFrappeUpdateDoc, useFrappeAuth } from "frappe-react-sdk";
 import { useNavigate } from 'react-router-dom';
@@ -63,6 +64,8 @@ interface ColisData {
   signature_client?: string;
   commentaire_livreur?: string;
   date_derniere_livraison?: string;
+  date_livraison?: string;
+  gps?: string;
 }
 
 interface ColisDetailsProps {
@@ -94,6 +97,30 @@ function formatDate(dateStr?: string) {
 function resolveColisId(data?: ColisData | null) {
   if (!data) return "";
   return data.name || data.id || "";
+}
+
+function formatGpsCoordinates(gps?: string) {
+  if (!gps) return null;
+  
+  try {
+    // Format: "latitude, longitude" ou "latitude,longitude"
+    const coords = gps.split(',').map(coord => coord.trim());
+    if (coords.length === 2) {
+      const lat = parseFloat(coords[0]);
+      const lng = parseFloat(coords[1]);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        return {
+          latitude: lat,
+          longitude: lng,
+          formatted: `${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        };
+      }
+    }
+  } catch (error) {
+    console.warn('Erreur lors du parsing des coordonnées GPS:', error);
+  }
+  
+  return null;
 }
 
 
@@ -201,6 +228,8 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
         "signature_client",
         "commentaire_livreur",
         "date_derniere_livraison",
+        "date_livraison",
+        "gps",
       ],
     }
   );
@@ -224,6 +253,9 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
   // Commentaire
   const [isEditingComment, setIsEditingComment] = useState(false);
   const [commentText, setCommentText] = useState("");
+  
+  // Image preview
+  const [showImagePreview, setShowImagePreview] = useState(false);
 
   useEffect(() => {
     if (data) {
@@ -734,7 +766,8 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                 <Button
                   onClick={() => handleStatusChange('Enlevé')}
                   disabled={isSaving}
-                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                  variant="outline"
+                  className="border-orange-200 text-orange-700 hover:bg-orange-50 dark:border-orange-800 dark:text-orange-400 dark:hover:bg-orange-900/20"
                 >
                   <Package className="w-4 h-4 mr-2" />
                   Marquer comme enlevé
@@ -806,7 +839,8 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                   <Button
                     onClick={markAllArticlesAsDelivered}
                     disabled={isSaving}
-                    className="bg-green-600 hover:bg-green-700 text-white"
+                    variant="outline"
+                    className="border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20"
                   >
                     <Check className="w-4 h-4 mr-2" />
                     Marquer tout livré
@@ -857,7 +891,8 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                           <Button
                             size="sm"
                             onClick={() => markAllAsDelivered(key)}
-                            className="bg-green-600 hover:bg-green-700 text-white text-xs px-2 py-1"
+                            variant="outline"
+                            className="border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20 text-xs px-2 py-1"
                           >
                             ✓
                           </Button>
@@ -1116,7 +1151,8 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                 <Button
                   onClick={markAllArticlesAsDelivered}
                   disabled={isSaving}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                  variant="outline"
+                  className="border-green-200 text-green-700 hover:bg-green-50 dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/20 px-4 py-2 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Check className="w-4 h-4 mr-2" />
                   Marquer comme livré
@@ -1172,26 +1208,40 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                   </div>
                 ) : capturedPhoto ? (
                   <div className="w-full">
-                    <img
-                      src={capturedPhoto}
-                      alt="Photo de livraison"
-                      className="w-full h-48 object-cover rounded-md border"
-                    />
+                    <div 
+                      className="w-full h-48 object-cover rounded-md border cursor-pointer hover:opacity-90 transition-opacity"
+                      onClick={() => setShowImagePreview(true)}
+                    >
+                      <img
+                        src={capturedPhoto}
+                        alt="Photo de livraison"
+                        className="w-full h-full object-cover rounded-md"
+                      />
+                    </div>
                     <div className="flex gap-2 mt-2 justify-center">
                       <Button
                         size="sm"
+                        onClick={() => setShowImagePreview(true)}
+                        variant="outline"
+                        className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                      >
+                        <Camera className="w-4 h-4 mr-2" />
+                        Agrandir
+                      </Button>
+                      <Button
+                        size="sm"
                         onClick={startCamera}
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                        variant="outline"
+                        className="border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                       >
                         <Camera className="w-4 h-4 mr-2" />
                         Nouvelle photo
                       </Button>
-
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={deletePhoto}
-                        className="border-red-500 text-red-500 hover:bg-red-50"
+                        className="border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
                       >
                         Supprimer
                       </Button>
@@ -1220,6 +1270,71 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
               </div>
             </div>
 
+            {/* Géolocalisation */}
+            <div className="mt-6">
+              <h3 className="text-base font-medium mb-2 text-foreground">
+                Géolocalisation
+              </h3>
+              
+              {(() => {
+                const gpsData = formatGpsCoordinates(localColisData.gps);
+                return gpsData ? (
+                  <div className="bg-muted border border-border rounded-md p-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30">
+                        <MapPin className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-medium text-foreground">Position de livraison</div>
+                        <div className="text-xs text-muted-foreground">Coordonnées GPS enregistrées</div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Coordonnées:</span>
+                        <span className="text-sm text-foreground">{gpsData.formatted}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Date et heure:</span>
+                        <span className="text-sm text-foreground">
+                          {localColisData.date_livraison 
+                            ? new Date(localColisData.date_livraison).toLocaleString("fr-FR", {
+                                day: "2-digit",
+                                month: "2-digit", 
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit"
+                              })
+                            : "—"
+                          }
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <a
+                        href={`https://www.google.com/maps?q=${gpsData.latitude},${gpsData.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                      >
+                        <MapPin className="w-4 h-4" />
+                        Voir sur Google Maps
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-muted border border-border rounded-md p-4 text-center">
+                    <MapPin className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <div className="text-sm text-muted-foreground">
+                      Aucune géolocalisation enregistrée
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             {/* Commentaire */}
             <div className="mt-6">
               <h3 className="text-base font-medium mb-2 text-foreground">
@@ -1243,17 +1358,18 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                         setCommentText(localColisData?.commentaire_livreur || "");
                         setIsEditingComment(false);
                       }}
-                      className="border-gray-500 text-gray-500 hover:bg-gray-100"
+                      className="border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
                     >
                       Annuler
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
                       onClick={async () => {
                         await saveToBackend({ commentaire_livreur: commentText });
                         setIsEditingComment(false);
                       }}
-                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20"
                     >
                       <Check className="w-4 h-4 mr-2" />
                       Enregistrer
@@ -1278,7 +1394,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                       size="sm"
                       variant="outline"
                       onClick={() => setIsEditingComment(true)}
-                      className="border-primary text-primary hover:bg-primary/10"
+                      className="border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/20"
                     >
                       <Pencil className="w-4 h-4 mr-2" />
                       Modifier
@@ -1290,6 +1406,46 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
           </div>
         </div>
       </div>
+
+      {/* Modal de preview d'image */}
+      {showImagePreview && capturedPhoto && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setShowImagePreview(false)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] w-full mx-4">
+            <img
+              src={capturedPhoto}
+              alt="Photo de livraison - Vue agrandie"
+              className="w-full h-full object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              onClick={() => setShowImagePreview(false)}
+              className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+            <div className="absolute bottom-4 left-4 right-4 flex justify-center gap-2">
+              <Button
+                onClick={startCamera}
+                variant="outline"
+                className="bg-white/90 hover:bg-white text-gray-700 border-gray-200 dark:bg-gray-800/90 dark:hover:bg-gray-800 dark:text-gray-300 dark:border-gray-600"
+              >
+                <Camera className="w-4 h-4 mr-2" />
+                Nouvelle photo
+              </Button>
+              <Button
+                onClick={deletePhoto}
+                variant="outline"
+                className="bg-white/90 hover:bg-white text-red-700 border-red-200 dark:bg-gray-800/90 dark:hover:bg-gray-800 dark:text-red-400 dark:border-red-800"
+              >
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
