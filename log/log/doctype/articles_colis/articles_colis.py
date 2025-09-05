@@ -29,6 +29,7 @@ class ArticlesColis(Document):
 		else:
 			self.statut_article = "Partiellement livré"
 	
+	@frappe.whitelist()
 	def deliver_quantity(self, quantity_to_deliver, update_date=True):
 		"""Livrer une quantité spécifique"""
 		if quantity_to_deliver <= 0:

@@ -26,10 +26,17 @@
   "section_break_livraison",
   "column_break_livraison",
   "preparation_user",
-  "enlevement_user",
-  "livraison_user",
+  "date_preparation",
   "column_break_rahj",
+  "enlevement_user",
+  "date_enlevement",
+  "column_break_cpqz",
+  "livraison_user",
+  "date_livraison",
+  "preuves_de_livraison_section",
   "photo_livraison",
+  "column_break_ylym",
+  "gps",
   "section_break_commentaire",
   "commentaire_livreur"
  ],
@@ -102,7 +109,8 @@
    "fieldname": "articles",
    "fieldtype": "Table",
    "label": "Articles",
-   "options": "Articles Colis"
+   "options": "Articles Colis",
+   "read_only": 1
   },
   {
    "fieldname": "html",
@@ -187,12 +195,49 @@
   {
    "fieldname": "column_break_rahj",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "preuves_de_livraison_section",
+   "fieldtype": "Section Break",
+   "label": "Preuves de Livraison"
+  },
+  {
+   "fieldname": "column_break_ylym",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "gps",
+   "fieldtype": "Data",
+   "label": "Localisation GPS",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_preparation",
+   "fieldtype": "Datetime",
+   "label": "Date Pr\u00e9paration",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_enlevement",
+   "fieldtype": "Datetime",
+   "label": "Date Enl\u00e9vement",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_cpqz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_livraison",
+   "fieldtype": "Datetime",
+   "label": "Date Livraison",
+   "read_only": 1
   }
  ],
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-09-05 12:50:25.951325",
+ "modified": "2025-09-05 14:36:25.595781",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Colis",

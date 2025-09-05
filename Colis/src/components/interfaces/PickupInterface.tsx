@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { useFrappeAuth, useFrappeUpdateDoc } from 'frappe-react-sdk';
+import { Badge } from '@/components/ui/badge';
+import { useFrappeAuth, useFrappePostCall } from 'frappe-react-sdk';
 import {
   Truck,
   Package,
@@ -9,7 +10,6 @@ import {
   IdCard,
   Clock,
   Rows3,
-  Circle,
   CheckCircle,
 } from 'lucide-react';
 
@@ -57,30 +57,60 @@ export function PickupInterface({
   livraisonId,
   onBackToLivraison
 }: PickupInterfaceProps) {
-  const { currentUser } = useFrappeAuth();
-  const { updateDoc: updateColis } = useFrappeUpdateDoc();
+  const { } = useFrappeAuth();
+  const { call: setStatusEnleve } = useFrappePostCall('log.log.doctype.colis.colis.set_status_enleve');
   const [isSaving, setIsSaving] = useState(false);
   const [verificationComplete, setVerificationComplete] = useState(false);
+  const [articleVerifications, setArticleVerifications] = useState<{[key: string]: boolean}>({});
 
+  // Fonction pour basculer la vérification d'un article
+  const toggleArticleVerification = (articleId: string) => {
+    setArticleVerifications(prev => {
+      const newVerifications = {
+        ...prev,
+        [articleId]: !prev[articleId]
+      };
+      
+      // Vérifier si tous les articles sont maintenant vérifiés
+      const allVerified = colisData.articles?.every((article: any) => 
+        newVerifications[article.id || article.name || `article-${colisData.articles.indexOf(article)}`]
+      );
+      
+      // Cocher automatiquement la vérification générale si tous les articles sont vérifiés
+      // Décocher automatiquement si un article est décoché
+      setVerificationComplete(allVerified);
+      
+      return newVerifications;
+    });
+  };
+
+  // Vérifier si tous les articles sont vérifiés
+  const allArticlesVerified = () => {
+    if (!colisData.articles || colisData.articles.length === 0) return false;
+    return colisData.articles.every((article: any) => 
+      articleVerifications[article.id || article.name || `article-${colisData.articles.indexOf(article)}`]
+    );
+  };
 
   const confirmPickup = async () => {
-    if (!verificationComplete) {
-      alert("Veuillez vérifier le colis avant de confirmer l'enlèvement");
+    if (!verificationComplete || !allArticlesVerified()) {
+      alert("Veuillez vérifier le colis et tous les articles avant de confirmer l'enlèvement");
       return;
     }
     
     setIsSaving(true);
     try {
-      // Mettre à jour le statut et l'utilisateur d'enlèvement
-      await updateColis("Colis", colisId, { 
-        status: 'Enlevé',
-        enlevement_user: (currentUser as any)?.full_name || currentUser || 'Utilisateur inconnu'
+      // Utiliser l'API backend pour mettre à jour le statut avec l'utilisateur et la date
+      await setStatusEnleve({
+        docname: colisId,
+        confirm: true
       });
+      
       // Reload page to reflect changes
       window.location.reload();
     } catch (e) {
       console.error(e);
-      throw new Error("Erreur lors de la confirmation de l'enlèvement");
+      alert("Erreur lors de la confirmation de l'enlèvement");
     } finally {
       setIsSaving(false);
     }
@@ -176,30 +206,110 @@ export function PickupInterface({
             Contenu du Colis ({colisData.articles?.length || 0} articles)
           </h3>
           
-          <div className="space-y-3">
-            {colisData.articles?.map((article: any, index: number) => (
-              <div
-                key={article.id || article.name || `article-${index}`}
-                className="flex items-center gap-4 p-4 rounded-lg border bg-card"
-              >
-                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">
-                  <Package className="w-4 h-4" />
-                </div>
-                
-                <div className="flex-1">
-                  <div className="font-medium text-foreground">
-                    {article.article}
+          {/* Version desktop */}
+          <div className="hidden sm:block space-y-3">
+            {colisData.articles?.map((article: any, index: number) => {
+              const articleId = article.id || article.name || `article-${index}`;
+              const isVerified = articleVerifications[articleId];
+              
+              return (
+                <div
+                  key={articleId}
+                  className={`flex items-center gap-4 p-4 rounded-lg border bg-card transition-colors ${
+                    isVerified ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-900/10' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400">
+                    <Package className="w-4 h-4" />
                   </div>
-                  <div className="text-sm text-muted-foreground">
-                    Quantité: {article.quantite_totale}
+                  
+                  <div className="flex-1 flex items-center gap-3">
+                    <div className="font-medium text-foreground">
+                      {article.article}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {article.item_name || article.article}
+                    </div>
+                    <Badge variant="outline" className="text-xs">
+                      Quantité: {article.quantite_totale}
+                    </Badge>
                   </div>
-                </div>
 
-                <div className="px-3 py-1 rounded-md text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                  Préparé
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => toggleArticleVerification(articleId)}
+                      className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all ${
+                        isVerified
+                          ? 'bg-green-600 border-green-600 text-white'
+                          : 'border-gray-300 hover:border-green-400'
+                      }`}
+                    >
+                      {isVerified && <CheckCircle className="w-4 h-4" />}
+                    </button>
+                    
+                    <div className="px-3 py-1 rounded-md text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      Préparé
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+
+          {/* Version mobile */}
+          <div className="sm:hidden space-y-3">
+            {colisData.articles?.map((article: any, index: number) => {
+              const articleId = article.id || article.name || `article-${index}`;
+              const isVerified = articleVerifications[articleId];
+              
+              return (
+                <Card 
+                  key={articleId}
+                  className={`p-3 border border-border/50 bg-card/30 hover:shadow-md transition-all duration-200 ${
+                    isVerified ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-900/10' : ''
+                  }`}
+                >
+                  <div className="space-y-3">
+                    {/* En-tête de l'article */}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-foreground truncate">
+                          {article.article}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 break-words">
+                          {article.item_name || article.article}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 text-xs">
+                          Quantité: {article.quantite_totale}
+                        </Badge>
+                        <div className="px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                          Préparé
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm text-muted-foreground">
+                        Vérifier l'article
+                      </div>
+                      <button
+                        onClick={() => toggleArticleVerification(articleId)}
+                        className={`flex items-center justify-center w-8 h-8 rounded-full border-2 transition-all ${
+                          isVerified
+                            ? 'bg-green-600 border-green-600 text-white'
+                            : 'border-gray-300 hover:border-green-400'
+                        }`}
+                      >
+                        {isVerified && <CheckCircle className="w-5 h-5" />}
+                      </button>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         </Card>
 
@@ -212,7 +322,23 @@ export function PickupInterface({
           <div className="space-y-4">
             <div className="flex items-start gap-3">
               <button
-                onClick={() => setVerificationComplete(!verificationComplete)}
+                onClick={() => {
+                  const newVerificationComplete = !verificationComplete;
+                  setVerificationComplete(newVerificationComplete);
+                  
+                  if (newVerificationComplete) {
+                    // Si on coche la vérification générale, cocher tous les articles
+                    const allArticlesVerified: {[key: string]: boolean} = {};
+                    colisData.articles?.forEach((article: any, index: number) => {
+                      const articleId = article.id || article.name || `article-${index}`;
+                      allArticlesVerified[articleId] = true;
+                    });
+                    setArticleVerifications(allArticlesVerified);
+                  } else {
+                    // Si on décoche la vérification générale, décocher tous les articles
+                    setArticleVerifications({});
+                  }
+                }}
                 className={`flex items-center justify-center w-6 h-6 rounded-full border-2 transition-all mt-1 ${
                   verificationComplete
                     ? 'bg-green-600 border-green-600 text-white'
@@ -235,16 +361,16 @@ export function PickupInterface({
             <div className="pt-4 border-t border-border">
               <Button
                 onClick={confirmPickup}
-                disabled={!verificationComplete || isSaving}
-                className="w-full bg-green-600 hover:bg-green-700 text-white py-4 text-lg"
+                disabled={!verificationComplete || !allArticlesVerified() || isSaving}
+                className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 text-sm"
               >
-                <Truck className="w-5 h-5 mr-2" />
+                <Truck className="w-4 h-4 mr-2" />
                 {isSaving ? 'Mise à jour...' : 'Confirmer l\'Enlèvement'}
               </Button>
               
-              {!verificationComplete && (
+              {(!verificationComplete || !allArticlesVerified()) && (
                 <div className="text-sm text-amber-600 dark:text-amber-400 mt-2 text-center">
-                  ⚠️ Veuillez vérifier le colis avant de confirmer l'enlèvement
+                  ⚠️ Veuillez vérifier le colis et tous les articles avant de confirmer l'enlèvement
                 </div>
               )}
             </div>

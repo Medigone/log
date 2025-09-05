@@ -586,6 +586,11 @@ def set_status_enleve(docname, confirm=False):
 			'message': f'Êtes-vous sûr de vouloir marquer ce colis comme "Enlevé" ?'
 		}
 	
+	# Enregistrer l'utilisateur d'enlèvement et la date
+	user_doc = frappe.get_doc("User", frappe.session.user)
+	doc.enlevement_user = user_doc.full_name or frappe.session.user
+	doc.date_enlevement = frappe.utils.now()
+	
 	doc.status = 'Enlevé'
 	doc.save()
 	
@@ -625,6 +630,11 @@ def set_status_livre(docname, confirm=False):
 			'require_confirmation': True,
 			'message': f'Êtes-vous sûr de vouloir marquer ce colis comme "Livré" ?'
 		}
+	
+	# Enregistrer l'utilisateur de livraison et la date
+	user_doc = frappe.get_doc("User", frappe.session.user)
+	doc.livraison_user = user_doc.full_name or frappe.session.user
+	doc.date_livraison = frappe.utils.now()
 	
 	doc.status = 'Livré'
 	doc.save()
@@ -1981,9 +1991,10 @@ def create_colis_from_delivery_note(delivery_note_name, articles_data=None):
 		colis.date = frappe.utils.today()
 		colis.status = "Préparé"
 		
-		# Enregistrer l'utilisateur de préparation
+		# Enregistrer l'utilisateur de préparation et la date
 		user_doc = frappe.get_doc("User", frappe.session.user)
 		colis.preparation_user = user_doc.full_name or frappe.session.user
+		colis.date_preparation = frappe.utils.now()
 		
 		# Si des articles spécifiques sont fournis, les utiliser
 		if articles_data:
@@ -2228,6 +2239,68 @@ def get_unpacked_delivery_notes(date_from=None, date_to=None, customer=None):
 		return {
 			"success": False,
 			"message": f"Erreur lors de la récupération: {str(e)}"
+		}
+
+
+@frappe.whitelist()
+def recalculate_colis_status(colis_id):
+	"""Recalcule le statut d'un colis après livraison d'articles
+	
+	Args:
+		colis_id (str): ID du colis
+	
+	Returns:
+		dict: Nouveau statut du colis
+	"""
+	try:
+		colis_doc = frappe.get_doc("Colis", colis_id)
+		old_status = colis_doc.status
+		
+		# Recalculer le statut global
+		colis_doc.calculate_global_status()
+		colis_doc.save()
+		
+		return {
+			'success': True,
+			'old_status': old_status,
+			'new_status': colis_doc.status,
+			'message': f'Statut mis à jour de "{old_status}" vers "{colis_doc.status}"'
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur recalculate_colis_status: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur: {str(e)}'
+		}
+
+
+@frappe.whitelist()
+def deliver_article_quantity_direct(article_docname, quantity_to_deliver, update_date=True):
+	"""Livre une quantité spécifique d'un article directement via son nom de document
+	
+	Args:
+		article_docname (str): Le nom du document Articles Colis
+		quantity_to_deliver (int): La quantité à livrer
+		update_date (bool): Mettre à jour la date de livraison
+	
+	Returns:
+		dict: Résultat de l'opération
+	"""
+	try:
+		# Récupérer le document Articles Colis
+		article_doc = frappe.get_doc("Articles Colis", article_docname)
+		
+		# Utiliser la méthode de livraison de l'article
+		result = article_doc.deliver_quantity(quantity_to_deliver, update_date)
+		
+		return result
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur deliver_article_quantity_direct: {str(e)}")
+		return {
+			'success': False,
+			'message': f'Erreur: {str(e)}'
 		}
 
 

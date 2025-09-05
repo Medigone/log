@@ -70,6 +70,21 @@ function formatDate(dateStr?: string) {
   }
 }
 
+function formatDateTime(dateStr?: string) {
+  if (!dateStr) return "—";
+  try {
+    return new Date(dateStr).toLocaleString("fr-FR", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "—";
+  }
+}
+
 function formatAmount(amount: number | undefined) {
   if (!amount) return "0,00 DZD";
   return new Intl.NumberFormat('fr-FR', {
@@ -311,7 +326,13 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
       'date_creation',
       'bl',
       'articles',
-      'total_art'
+      'total_art',
+      'preparation_user',
+      'date_preparation',
+      'enlevement_user',
+      'date_enlevement',
+      'livraison_user',
+      'date_livraison'
     ],
     filters: livraisonBonsLivraison.length > 0 ? [['bl', 'in', livraisonBonsLivraison.map(bon => bon.bon_de_livraison)]] : [],
     limit: 1000
@@ -880,13 +901,31 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                         <Package className="w-3 h-3" />
                                         <span className="text-xs font-medium">{colis.name}</span>
                                       </button>
-                                      {/* Statut sous l'ID en badge */}
-                                       <div>
-                                         <StatusBadge
-                                           text={translateStatus(colis.status)}
-                                           tone={statusToColor(colis.status)}
-                                         />
-                                       </div>
+                                      {/* Statut et date/heure */}
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <StatusBadge
+                                          text={translateStatus(colis.status)}
+                                          tone={statusToColor(colis.status)}
+                                        />
+                                        {/* Date de préparation */}
+                                        {colis.date_preparation && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {formatDateTime(colis.date_preparation)}
+                                          </div>
+                                        )}
+                                        {/* Date d'enlèvement */}
+                                        {colis.date_enlevement && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {formatDateTime(colis.date_enlevement)}
+                                          </div>
+                                        )}
+                                        {/* Date de livraison */}
+                                        {colis.date_livraison && (
+                                          <div className="text-xs text-muted-foreground">
+                                            {formatDateTime(colis.date_livraison)}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
                                     
                                     {/* Numéro de séquence */}
@@ -911,6 +950,32 @@ const LivraisonDetails = ({ livraisonId, onBack, onColisSelect }: LivraisonDetai
                                       </span>
                                     </div>
                                   </div>
+
+                                  {/* Informations de workflow - Utilisateurs seulement */}
+                                  {(colis.preparation_user || colis.enlevement_user || colis.livraison_user) && (
+                                    <div className="mt-3 pt-3 border-t border-border">
+                                      <div className="space-y-2">
+                                        {colis.preparation_user && (
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="text-muted-foreground">Préparé par:</span>
+                                            <span className="font-medium text-foreground">{colis.preparation_user}</span>
+                                          </div>
+                                        )}
+                                        {colis.enlevement_user && (
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="text-muted-foreground">Enlevé par:</span>
+                                            <span className="font-medium text-foreground">{colis.enlevement_user}</span>
+                                          </div>
+                                        )}
+                                        {colis.livraison_user && (
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="text-muted-foreground">Livré par:</span>
+                                            <span className="font-medium text-foreground">{colis.livraison_user}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
