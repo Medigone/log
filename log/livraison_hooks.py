@@ -99,6 +99,307 @@ def ajouter_bon_de_livraison_aux_livraisons(bon_de_livraison_name, date_livraiso
 			frappe.log_error(f"Erreur lors de l'ajout du bon {bon_de_livraison_name} à la livraison {livraison.name}: {str(e)}")
 
 
+def validate_delivery_note_deletion(doc, method):
+	"""Empêche la suppression d'un bon de livraison avec des colis critiques"""
+	
+	# Statuts qui bloquent la suppression
+	BLOCKING_STATUSES = ["Livré", "Partiellement Livré", "Enlevé", "Non Livré"]
+	
+	# Vérifier les colis liés avec statuts bloquants
+	colis_critiques = frappe.get_all("Colis", 
+		filters={
+			"bl": doc.name,
+			"status": ["in", BLOCKING_STATUSES],
+			"docstatus": ["<", 2]
+		},
+		fields=["name", "status"]
+	)
+	
+	if colis_critiques:
+		# Grouper par statut pour un message plus clair
+		status_groups = {}
+		for colis in colis_critiques:
+			status = colis.status
+			if status not in status_groups:
+				status_groups[status] = []
+			status_groups[status].append(colis.name)
+		
+		# Construire le message d'erreur
+		error_parts = []
+		for status, colis_list in status_groups.items():
+			count = len(colis_list)
+			colis_display = ', '.join(colis_list[:3])
+			if count > 3:
+				colis_display += f" (et {count - 3} autres)"
+			error_parts.append(f"{count} colis '{status}': {colis_display}")
+		
+		frappe.throw(
+			_(f"❌ Impossible de supprimer ce bon de livraison.\n\n"
+			  f"Des colis sont en cours de traitement :\n"
+			  f"• {chr(10).join(['• ' + part for part in error_parts])}\n\n"
+			  f"💡 Vous ne pouvez supprimer que les bons avec des colis ayant les statuts : "
+			  f"'Nouveau', 'Préparé' ou 'Annulé'")
+		)
+
+@frappe.whitelist()
+def test_delivery_note_deletion_validation(delivery_note_name):
+	"""Fonction utilitaire pour tester la validation de suppression
+	
+	Args:
+		delivery_note_name (str): Nom du bon de livraison à tester
+	
+	Returns:
+		dict: Résultat du test avec détails des colis
+	"""
+	try:
+		# Récupérer le bon de livraison
+		if not frappe.db.exists("Delivery Note", delivery_note_name):
+			return {
+				"success": False,
+				"message": f"Bon de livraison {delivery_note_name} introuvable"
+			}
+		
+		doc = frappe.get_doc("Delivery Note", delivery_note_name)
+		
+		# Récupérer tous les colis liés
+		all_colis = frappe.get_all("Colis",
+			filters={
+				"bl": doc.name,
+				"docstatus": ["<", 2]
+			},
+			fields=["name", "status"]
+		)
+		
+		if not all_colis:
+			return {
+				"success": True,
+				"can_delete": True,
+				"message": f"✅ Aucun colis lié. Suppression autorisée.",
+				"colis_count": 0,
+				"colis_details": []
+			}
+		
+		# Grouper par statut
+		BLOCKING_STATUSES = ["Livré", "Partiellement Livré", "Enlevé", "Non Livré"]
+		ALLOWED_STATUSES = ["Nouveau", "Préparé", "Annulé"]
+		
+		status_groups = {}
+		blocking_colis = []
+		allowed_colis = []
+		
+		for colis in all_colis:
+			status = colis.status
+			if status not in status_groups:
+				status_groups[status] = []
+			status_groups[status].append(colis.name)
+			
+			if status in BLOCKING_STATUSES:
+				blocking_colis.append(colis)
+			elif status in ALLOWED_STATUSES:
+				allowed_colis.append(colis)
+		
+		can_delete = len(blocking_colis) == 0
+		
+		# Construire le message
+		if can_delete:
+			message = f"✅ Suppression autorisée. Tous les colis ont des statuts non critiques."
+		else:
+			error_parts = []
+			for status, colis_list in status_groups.items():
+				if status in BLOCKING_STATUSES:
+					count = len(colis_list)
+					colis_display = ', '.join(colis_list[:3])
+					if count > 3:
+						colis_display += f" (et {count - 3} autres)"
+					error_parts.append(f"{count} colis '{status}': {colis_display}")
+			
+			message = f"❌ Suppression bloquée par {len(blocking_colis)} colis critiques :\n• " + "\n• ".join(error_parts)
+		
+		return {
+			"success": True,
+			"can_delete": can_delete,
+			"message": message,
+			"colis_count": len(all_colis),
+			"blocking_colis_count": len(blocking_colis),
+			"allowed_colis_count": len(allowed_colis),
+			"status_summary": {status: len(colis_list) for status, colis_list in status_groups.items()},
+			"colis_details": [{"name": c.name, "status": c.status} for c in all_colis]
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur lors du test de validation pour {delivery_note_name}: {str(e)}", 
+						"Test validation suppression")
+		return {
+			"success": False,
+			"message": f"Erreur lors du test : {str(e)}"
+		}
+
+def validate_livraison_deletion(doc, method):
+	"""Empêche la suppression d'une livraison avec des colis critiques"""
+	
+	# Statuts qui bloquent la suppression
+	BLOCKING_STATUSES = ["Livré", "Partiellement Livré", "Enlevé", "Non Livré"]
+	
+	# Récupérer tous les colis liés à cette livraison
+	colis_lies = []
+	for colis_row in doc.colis or []:
+		if colis_row.colis:
+			colis_lies.append(colis_row.colis)
+	
+	if not colis_lies:
+		# Aucun colis lié, suppression autorisée
+		return
+	
+	# Vérifier les statuts des colis liés
+	colis_critiques = frappe.get_all("Colis", 
+		filters={
+			"name": ["in", colis_lies],
+			"status": ["in", BLOCKING_STATUSES],
+			"docstatus": ["<", 2]
+		},
+		fields=["name", "status", "bl"]
+	)
+	
+	if colis_critiques:
+		# Grouper par statut pour un message plus clair
+		status_groups = {}
+		bon_livraison_set = set()
+		
+		for colis in colis_critiques:
+			status = colis.status
+			if status not in status_groups:
+				status_groups[status] = []
+			status_groups[status].append(colis.name)
+			if colis.bl:
+				bon_livraison_set.add(colis.bl)
+		
+		# Construire le message d'erreur
+		error_parts = []
+		for status, colis_list in status_groups.items():
+			count = len(colis_list)
+			colis_display = ', '.join(colis_list[:3])
+			if count > 3:
+				colis_display += f" (et {count - 3} autres)"
+			error_parts.append(f"{count} colis '{status}': {colis_display}")
+		
+		# Information sur les bons de livraison concernés
+		bl_info = f"\nBons de livraison concernés: {', '.join(list(bon_livraison_set)[:5])}" if bon_livraison_set else ""
+		if len(bon_livraison_set) > 5:
+			bl_info += f" (et {len(bon_livraison_set) - 5} autres)"
+		
+		frappe.throw(
+			_(f"❌ Impossible de supprimer cette livraison.\n\n"
+			  f"Des colis sont en cours de traitement :\n"
+			  f"• {chr(10).join(['• ' + part for part in error_parts])}{bl_info}\n\n"
+			  f"💡 Vous ne pouvez supprimer que les livraisons avec des colis ayant les statuts : "
+			  f"'Nouveau', 'Préparé' ou 'Annulé'")
+		)
+
+@frappe.whitelist()
+def test_livraison_deletion_validation(livraison_name):
+	"""Fonction utilitaire pour tester la validation de suppression d'une livraison
+	
+	Args:
+		livraison_name (str): Nom de la livraison à tester
+	
+	Returns:
+		dict: Résultat du test avec détails des colis
+	"""
+	try:
+		# Récupérer la livraison
+		if not frappe.db.exists("Livraison", livraison_name):
+			return {
+				"success": False,
+				"message": f"Livraison {livraison_name} introuvable"
+			}
+		
+		doc = frappe.get_doc("Livraison", livraison_name)
+		
+		# Récupérer tous les colis liés à cette livraison
+		colis_lies = []
+		for colis_row in doc.colis or []:
+			if colis_row.colis:
+				colis_lies.append(colis_row.colis)
+		
+		if not colis_lies:
+			return {
+				"success": True,
+				"can_delete": True,
+				"message": f"✅ Aucun colis lié. Suppression autorisée.",
+				"colis_count": 0,
+				"colis_details": []
+			}
+		
+		# Récupérer les détails de tous les colis
+		all_colis = frappe.get_all("Colis",
+			filters={
+				"name": ["in", colis_lies],
+				"docstatus": ["<", 2]
+			},
+			fields=["name", "status", "bl"]
+		)
+		
+		# Grouper par statut
+		BLOCKING_STATUSES = ["Livré", "Partiellement Livré", "Enlevé", "Non Livré"]
+		ALLOWED_STATUSES = ["Nouveau", "Préparé", "Annulé"]
+		
+		status_groups = {}
+		blocking_colis = []
+		allowed_colis = []
+		bon_livraison_set = set()
+		
+		for colis in all_colis:
+			status = colis.status
+			if status not in status_groups:
+				status_groups[status] = []
+			status_groups[status].append(colis.name)
+			
+			if colis.bl:
+				bon_livraison_set.add(colis.bl)
+			
+			if status in BLOCKING_STATUSES:
+				blocking_colis.append(colis)
+			elif status in ALLOWED_STATUSES:
+				allowed_colis.append(colis)
+		
+		can_delete = len(blocking_colis) == 0
+		
+		# Construire le message
+		if can_delete:
+			message = f"✅ Suppression autorisée. Tous les colis ont des statuts non critiques."
+		else:
+			error_parts = []
+			for status, colis_list in status_groups.items():
+				if status in BLOCKING_STATUSES:
+					count = len(colis_list)
+					colis_display = ', '.join(colis_list[:3])
+					if count > 3:
+						colis_display += f" (et {count - 3} autres)"
+					error_parts.append(f"{count} colis '{status}': {colis_display}")
+			
+			message = f"❌ Suppression bloquée par {len(blocking_colis)} colis critiques :\n• " + "\n• ".join(error_parts)
+		
+		return {
+			"success": True,
+			"can_delete": can_delete,
+			"message": message,
+			"colis_count": len(all_colis),
+			"blocking_colis_count": len(blocking_colis),
+			"allowed_colis_count": len(allowed_colis),
+			"bon_livraison_count": len(bon_livraison_set),
+			"bon_livraison_list": list(bon_livraison_set),
+			"status_summary": {status: len(colis_list) for status, colis_list in status_groups.items()},
+			"colis_details": [{"name": c.name, "status": c.status, "bl": c.bl} for c in all_colis]
+		}
+		
+	except Exception as e:
+		frappe.log_error(f"Erreur lors du test de validation pour la livraison {livraison_name}: {str(e)}", 
+						"Test validation suppression livraison")
+		return {
+			"success": False,
+			"message": f"Erreur lors du test : {str(e)}"
+		}
+
 def retirer_bon_de_livraison_supprime(doc, method):
 	"""Retire un bon de livraison supprimé de toutes les livraisons."""
 	# Récupérer la date de livraison du bon supprimé

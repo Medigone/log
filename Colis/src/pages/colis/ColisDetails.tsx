@@ -826,7 +826,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                     "Action",
                     "Total",
                     "Livré",
-                    "Restant",
+                    ...(canDeliver() ? [] : ["Restant"]),
                     "Statut",
                     "Mise à jour",
                   ].map((h) => (
@@ -915,17 +915,19 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="p-3">
-                        <span
-                          className={`${
-                            a.quantite_restante !== 0
-                              ? "text-red-500"
-                              : "text-foreground"
-                          }`}
-                        >
-                          {a.quantite_restante}
-                        </span>
-                      </TableCell>
+                      {!canDeliver() && (
+                        <TableCell className="p-3">
+                          <span
+                            className={`${
+                              a.quantite_restante !== 0
+                                ? "text-red-500"
+                                : "text-foreground"
+                            }`}
+                          >
+                            {a.quantite_restante}
+                          </span>
+                        </TableCell>
+                      )}
                       <TableCell className="p-3">
                         <StatusBadge
                           text={a.statut_article}
@@ -976,7 +978,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                       />
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3 mt-3">
+                    <div className={`grid ${canDeliver() ? 'grid-cols-2' : 'grid-cols-3'} gap-3 mt-3`}>
                       <div className="text-center bg-muted border border-border rounded-md p-2">
                         <div className="text-xs text-muted-foreground">
                           Total
@@ -996,20 +998,22 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                           {a.quantite_livree > 0 && <Check className="w-3 h-3 text-green-500" />}
                         </div>
                       </div>
-                      <div className="text-center bg-red-900/20 border border-border rounded-md p-2">
-                        <div className="text-xs text-muted-foreground">
-                          Restant
+                      {!canDeliver() && (
+                        <div className="text-center bg-red-900/20 border border-border rounded-md p-2">
+                          <div className="text-xs text-muted-foreground">
+                            Restant
+                          </div>
+                          <div
+                            className={`${
+                              a.quantite_restante !== 0
+                                ? "text-red-500"
+                                : "text-foreground"
+                            }`}
+                          >
+                            {a.quantite_restante}
+                          </div>
                         </div>
-                        <div
-                          className={`${
-                            a.quantite_restante !== 0
-                              ? "text-red-500"
-                              : "text-foreground"
-                          }`}
-                        >
-                          {a.quantite_restante}
-                        </div>
-                      </div>
+                      )}
                     </div>
 
                     {editingArticle === key ? (
@@ -1089,7 +1093,7 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
           </div>
           <Separator />
           <div className="px-4 py-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className={`grid grid-cols-1 ${canDeliver() ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-6`}>
               <div className="grid gap-1">
                 <div className="text-sm text-muted-foreground">Articles</div>
                 <div className="text-lg font-bold text-foreground">
@@ -1102,12 +1106,14 @@ const ColisDetails = ({ colisId, livraisonId, onBackToLivraison }: ColisDetailsP
                   {localColisData.articles.reduce((s, x) => s + (x.quantite_livree || 0), 0)}
                 </div>
               </div>
-              <div className="grid gap-1">
-                <div className="text-sm text-muted-foreground">Total restant</div>
-                <div className="text-lg font-bold text-foreground">
-                  {localColisData.articles.reduce((s, x) => s + (x.quantite_restante || 0), 0)}
+              {!canDeliver() && (
+                <div className="grid gap-1">
+                  <div className="text-sm text-muted-foreground">Total restant</div>
+                  <div className="text-lg font-bold text-foreground">
+                    {localColisData.articles.reduce((s, x) => s + (x.quantite_restante || 0), 0)}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Actions globales */}

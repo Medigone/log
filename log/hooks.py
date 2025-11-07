@@ -156,11 +156,13 @@ doc_events = {
         "on_update": [
             "log.livraison_hooks.update_livraisons_on_delivery_note_change"
         ],
+        "before_delete": "log.livraison_hooks.validate_delivery_note_deletion",
         "on_trash": "log.livraison_hooks.retirer_bon_de_livraison_supprime"
     },
     "Livraison": {
         "after_insert": "log.livraison_hooks.after_insert_livraison",
         "validate": "log.livraison_hooks.validate_livraison",
+        "before_delete": "log.livraison_hooks.validate_livraison_deletion",
         "on_update": [
             "log.livraison_hooks.update_livraison_on_date_change",
             "log.livraison_hooks.update_delivery_notes_on_livraison_change"
