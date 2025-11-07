@@ -1389,7 +1389,7 @@
    "name": "Customer-custom_forme_juridique",
    "no_copy": 0,
    "non_negative": 0,
-   "options": "EI\nEURL\nSARL\nSPA\nSPAS\nETS\nSNC\nGR\nEPE",
+   "options": "EI\nEURL\nSARL\nPersonne Physique\nNon Pr\u00e9cis\u00e9",
    "owner": "Administrator",
    "permlevel": 0,
    "placeholder": null,
