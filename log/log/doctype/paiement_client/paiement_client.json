@@ -13,7 +13,6 @@
   "client",
   "nom_client",
   "column_break_client",
-  "livraison",
   "bon_livraison",
   "section_break_uakz",
   "moyen_paiement",
@@ -36,13 +35,6 @@
   {
    "fieldname": "column_break_azqa",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "livraison",
-   "fieldtype": "Link",
-   "label": "Livraison",
-   "options": "Livraison",
-   "read_only": 1
   },
   {
    "fieldname": "section_break_client",

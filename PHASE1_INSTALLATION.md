@@ -2,25 +2,33 @@
 
 ## Vue d'ensemble
 
-Cette application gère la logistique des livraisons via l'interface Desk standard de Frappe.
+Cette application gère la logistique des livraisons via l'interface Desk standard de Frappe. Les livraisons sont gérées directement via le DocType standard `Delivery Note` d'ERPNext avec des champs personnalisés pour les informations de livraison.
 
 ## Composants principaux
 
 ### DocTypes
 
-- **Livraison** : Gestion des livraisons avec bons de livraison associés
 - **Livreur** : Gestion des livreurs
 - **Vehicule** : Gestion des véhicules
 - **Depot Distribution** : Gestion des dépôts
 - **Parametres Livraison** : Configuration globale du système (Single DocType)
 - **Commune** : Communes avec coordonnées GPS (optionnel)
 - **Wilaya** : Wilayas
+- **Paiement Client** : Gestion des paiements clients
+
+### Champs personnalisés sur Delivery Note
+
+- `custom_livreur` : Livreur assigné
+- `custom_nom_livreur` : Nom du livreur (auto-rempli)
+- `custom_véhicule` : Véhicule utilisé
+- `custom_date_de_livraison` : Date de livraison prévue
+- `custom_commune` : Commune de livraison
+- `custom_wilaya` : Wilaya de livraison
 
 ### Fonctionnalités
 
-- Création et gestion des livraisons via le Desk Frappe
-- Association automatique des bons de livraison (Delivery Note) aux livraisons
-- Calcul automatique des totaux (articles, montants, paiements)
+- Création et gestion des livraisons via les Delivery Notes
+- Assignation des livreurs et véhicules directement sur le bon de livraison
 - Gestion des paiements clients
 
 ## Instructions d'installation
@@ -53,17 +61,17 @@ bench --site [nom_du_site] migrate
 
 ## Utilisation
 
-### Création d'une livraison
+### Gestion des livraisons
 
-1. Aller dans **Livraison** > **Nouveau**
-2. Sélectionner le livreur et la date de livraison
-3. Les bons de livraison correspondant à la date seront chargés automatiquement
-4. Sauvegarder
+1. Créer un **Delivery Note** via le processus ERPNext standard
+2. Renseigner le livreur dans le champ `custom_livreur`
+3. Le nom du livreur et le véhicule seront automatiquement remplis
+4. Indiquer la date de livraison prévue dans `custom_date_de_livraison`
 
 ### Gestion des paiements
 
 1. Utiliser le DocType **Paiement Client** pour enregistrer les paiements
-2. Les totaux de la livraison seront automatiquement mis à jour
+2. Sélectionner le client et le bon de livraison concerné
 
 ## Vérifications post-installation
 

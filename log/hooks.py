@@ -139,36 +139,15 @@ after_install = "log.install.after_install"
 
 doc_events = {
     "Customer": {
-            "before_save": [
-                "log.log.customer_hooks.uppercase_customer_name",
-            ]
-        },
-    "Delivery Note": {
-        "on_update": [
-            "log.livraison_hooks.update_livraisons_on_delivery_note_change"
-        ],
-        "on_trash": "log.livraison_hooks.retirer_bon_de_livraison_supprime"
-    },
-    "Livraison": {
-        "after_insert": "log.livraison_hooks.after_insert_livraison",
-        "validate": "log.livraison_hooks.validate_livraison",
-        "on_update": [
-            "log.livraison_hooks.update_livraison_on_date_change",
-            "log.livraison_hooks.update_delivery_notes_on_livraison_change"
+        "before_save": [
+            "log.log.customer_hooks.uppercase_customer_name",
         ]
     },
-    "Paiement Client": {
-        "validate": "log.paiement_hooks.validate_paiement_client",
-        "after_insert": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
-        "on_update": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
-        "on_trash": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
-        "after_delete": "log.paiement_hooks.update_livraison_totals_on_paiement_change"
-    },
     "Transferts Marchandise": {
-		"validate": "log.transferts_marchandise_hooks.validate_transferts_marchandise",
-		"on_submit": "log.transferts_marchandise_hooks.on_submit_transferts_marchandise",
-		"on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
-	}
+        "validate": "log.transferts_marchandise_hooks.validate_transferts_marchandise",
+        "on_submit": "log.transferts_marchandise_hooks.on_submit_transferts_marchandise",
+        "on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
+    }
 }
 
 # Scheduled Tasks
