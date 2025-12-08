@@ -16,17 +16,14 @@
   "batch_id",
   "section_break_ecye",
   "bons_de_livraison",
-  "section_break_jbkb",
-  "colis",
   "section_break_dzfh",
   "nombre_bons_de_livraison",
-  "total_colis",
   "total_articles",
   "column_break_egre",
   "total_montant_a_encaisser",
   "total_paiements",
   "solde_restant",
-  "\u00e9tapes_de_livraison_tab",
+  "étapes_de_livraison_tab",
   "rt"
  ],
  "fields": [
@@ -35,7 +32,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Statut",
-   "options": "Nouveau\nPr\u00e9par\u00e9\nPartiellement Pr\u00e9par\u00e9\nEnlev\u00e9\nPartiellement Enlev\u00e9\nPartiellement Livr\u00e9\nLivr\u00e9\nAnnul\u00e9"
+   "options": "Nouveau\nEn cours\nLivré\nAnnulé"
   },
   {
    "fieldname": "date_liv",
@@ -73,7 +70,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "V\u00e9hicule",
+   "label": "Véhicule",
    "options": "Vehicule"
   },
   {
@@ -85,25 +82,13 @@
    "fieldtype": "Data",
    "label": "ID Batch",
    "read_only": 1,
-   "description": "Identifiant unique pour l'idempotence des r\u00e9partitions"
+   "description": "Identifiant unique pour l'idempotence des répartitions"
   },
   {
    "fieldname": "bons_de_livraison",
    "fieldtype": "Table",
    "label": "Bons de Livraison",
    "options": "Livraison Bon de Livraison"
-  },
-  {
-   "fieldname": "colis",
-   "fieldtype": "Table",
-   "label": "Liste des Colis",
-   "options": "Livraison Colis"
-  },
-  {
-   "fieldname": "total_colis",
-   "fieldtype": "Int",
-   "label": "Total Colis",
-   "read_only": 1
   },
   {
    "fieldname": "nombre_bons_de_livraison",
@@ -114,7 +99,7 @@
   {
    "fieldname": "total_montant_a_encaisser",
    "fieldtype": "Currency",
-   "label": "Total Montant \u00e0 Encaisser",
+   "label": "Total Montant à Encaisser",
    "precision": "2",
    "read_only": 1
   },
@@ -133,9 +118,9 @@
    "read_only": 1
   },
   {
-   "fieldname": "\u00e9tapes_de_livraison_tab",
+   "fieldname": "étapes_de_livraison_tab",
    "fieldtype": "Tab Break",
-   "label": "\u00c9tapes de Livraison"
+   "label": "Étapes de Livraison"
   },
   {
    "fieldname": "rt",
@@ -155,10 +140,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "section_break_jbkb",
-   "fieldtype": "Section Break"
-  },
-  {
    "fieldname": "total_articles",
    "fieldtype": "Int",
    "label": "Total Articles",
@@ -167,8 +148,8 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-11 23:53:08.882242",
- "modified_by": "admin@medigo.one",
+ "modified": "2025-12-08 12:00:00.000000",
+ "modified_by": "Administrator",
  "module": "Log",
  "name": "Livraison",
  "owner": "Administrator",
@@ -196,31 +177,15 @@
   },
   {
    "color": "Blue",
-   "title": "Pr\u00e9par\u00e9"
-  },
-  {
-   "color": "Light Blue",
-   "title": "Partiellement Pr\u00e9par\u00e9"
-  },
-  {
-   "color": "Yellow",
-   "title": "Enlev\u00e9"
-  },
-  {
-   "color": "Yellow",
-   "title": "Partiellement Enlev\u00e9"
-  },
-  {
-   "color": "Orange",
-   "title": "Partiellement Livr\u00e9"
+   "title": "En cours"
   },
   {
    "color": "Green",
-   "title": "Livr\u00e9"
+   "title": "Livré"
   },
   {
    "color": "Red",
-   "title": "Annul\u00e9"
+   "title": "Annulé"
   }
  ]
 }

@@ -17,7 +17,7 @@ class DeliveryNoteLite:
 	bon_de_livraison: str
 	commune: str
 	customer: str
-	nb_colis: int
+	nb_articles: int
 	total_qty: float
 	grand_total: float
 
@@ -416,11 +416,7 @@ def synchroniser_livraisons_existantes(date_livraison):
 		FROM `tabDelivery Note` dn
 		WHERE dn.custom_date_de_livraison = %s
 		AND dn.docstatus = 0
-		AND EXISTS (
-			SELECT 1 FROM `tabColis` c 
-			WHERE c.bl = dn.name 
-			AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-		)
+		AND dn.total_qty > 0
 	""", (date_livraison,), as_dict=True)
 	
 	# 3. Analyser les changements
@@ -965,13 +961,7 @@ def repartir_livraisons_automatique(date_livraison, mode="auto", simulate=False,
 							"grand_total": bon.grand_total
 						})
 					
-					# Sauvegarder d'abord pour avoir l'ID
-					livraison.save()
-					
-					# Synchroniser manuellement les colis maintenant que les hooks sont désactivés
-					livraison.sync_colis_from_bons_de_livraison()
-					
-					# Sauvegarder à nouveau pour s'assurer que tout est persistant
+					# Sauvegarder la livraison
 					livraison.save()
 					
 					livraisons_creees.append(livraison.name)
@@ -1179,17 +1169,12 @@ def diagnostiquer_distribution_bons(date_livraison):
 			dn.name as bon_de_livraison,
 			dn.custom_commune as commune,
 			dn.customer,
-			dn.custom_nombre_colis,
 			dn.total_qty,
 			dn.grand_total
 		FROM `tabDelivery Note` dn
 		WHERE dn.custom_date_de_livraison = %s
 		AND dn.docstatus = 0
-		AND EXISTS (
-			SELECT 1 FROM `tabColis` c 
-			WHERE c.bl = dn.name 
-			AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-		)
+		AND dn.total_qty > 0
 	""", (date_livraison,), as_dict=True)
 	
 	# 2) Compter les livreurs actifs
@@ -1271,7 +1256,7 @@ def distribuer_automatiquement_v2(date_livraison: str, mode_simulation: bool = F
 	# Calculer le total de colis par commune et trier
 	communes_triees = []
 	for commune, bons in communes_groupees.items():
-		total_colis = sum(bon.get("nb_colis", 0) for bon in bons)
+		total_articles = sum(bon.get("nb_articles", 0) for bon in bons)
 		communes_triees.append((commune, bons, total_colis))
 	
 	# Trier par nombre de colis décroissant (FFD)
@@ -1396,15 +1381,11 @@ def obtenir_bons_eligibles_distribution(date_livraison: str) -> List[Dict]:
 			dn.customer,
 			dn.total_qty,
 			dn.grand_total,
-			dn.custom_nombre_colis as nb_colis
+			dn.total_qty as nb_articles
 		FROM `tabDelivery Note` dn
 		WHERE dn.custom_date_de_livraison = %s
 		AND dn.docstatus = 0
-		AND EXISTS (
-			SELECT 1 FROM `tabColis` c 
-			WHERE c.bl = dn.name 
-			AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-		)
+		AND dn.total_qty > 0
 	""", (date_livraison,), as_dict=True)
 
 
@@ -1432,7 +1413,7 @@ def creer_livraison_atomique(livreur_id: str, date_livraison: str, bons: List[De
 		livraison.batch_id = str(uuid.uuid4())
 		
 		# Calculer les totaux
-		total_colis = sum(bon.nb_colis for bon in bons)
+		total_colis = sum(bon.nb_articles for bon in bons)
 		total_qty = sum(bon.total_qty for bon in bons)
 		total_amount = sum(bon.grand_total for bon in bons)
 		
@@ -1448,25 +1429,12 @@ def creer_livraison_atomique(livreur_id: str, date_livraison: str, bons: List[De
 			})
 		
 		# Définir les totaux calculés
-		livraison.total_colis = total_colis
+		livraison.total_articles = total_articles
 		livraison.total_qty = total_qty
 		livraison.total_amount = total_amount
 		
 		# Sauvegarder
 		livraison.save()
-		
-		# Synchroniser les colis si la méthode existe
-		if hasattr(livraison, 'sync_colis_from_bons_de_livraison'):
-			livraison.sync_colis_from_bons_de_livraison()
-			livraison.save()
-		
-		# Revalider le nombre de colis après synchronisation
-		colis_count = frappe.db.count("Colis", {"livraison": livraison.name})
-		if colis_count != total_colis:
-			frappe.log_error(f"Incohérence nb_colis: attendu {total_colis}, trouvé {colis_count}")
-			# Mettre à jour avec le compte réel
-			livraison.total_colis = colis_count
-			livraison.save()
 		
 		return livraison
 		
@@ -1486,11 +1454,7 @@ def valider_bons_eligibles(noms_bons: List[str]) -> List[str]:
 		FROM `tabDelivery Note` 
 		WHERE name IN %(noms)s 
 		AND docstatus = 0
-		AND EXISTS (
-			SELECT 1 FROM `tabColis` c 
-			WHERE c.bl = `tabDelivery Note`.name 
-			AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-		)
+		AND total_qty > 0
 	""", {"noms": noms_bons}, as_dict=False)
 	
 	return [bon[0] for bon in bons_valides]
@@ -1508,9 +1472,6 @@ def valider_distribution_v2(date_livraison):
 		resultats_validation = []
 		
 		for livraison in livraisons:
-			# Compter les colis réels
-			colis_reels = frappe.db.count("Colis", {"livraison": livraison.name})
-			
 			# Compter les bons de livraison
 			bons_count = frappe.db.count("Livraison Bon de Livraison", {"parent": livraison.name})
 			
@@ -1518,10 +1479,9 @@ def valider_distribution_v2(date_livraison):
 				"livraison": livraison.name,
 				"livreur": livraison.livreur,
 				"status": livraison.status,
-				"colis_declares": livraison.total_colis or 0,
-				"colis_reels": colis_reels,
 				"nb_bons": bons_count,
-				"coherent": (livraison.total_colis or 0) == colis_reels
+				"total_articles": livraison.total_articles or 0,
+				"coherent": bons_count > 0
 			})
 		
 		return {
@@ -1730,11 +1690,7 @@ def forcer_synchronisation_livraisons(date_livraison):
 		FROM `tabDelivery Note` dn
 		WHERE dn.custom_date_de_livraison = %s
 		AND dn.docstatus = 0
-		AND EXISTS (
-			SELECT 1 FROM `tabColis` c 
-			WHERE c.bl = dn.name 
-			AND c.status IN ('Nouveau', 'Préparé', 'En attente')
-		)
+		AND dn.total_qty > 0
 	""", (date_livraison,), as_dict=True)
 	
 	# 2. Récupérer toutes les livraisons existantes pour cette date
@@ -1771,8 +1727,7 @@ def forcer_synchronisation_livraisons(date_livraison):
 					"grand_total": bon.grand_total
 				})
 			
-			# Synchroniser les colis et recalculer les totaux
-			livraison_doc.sync_colis_from_bons_de_livraison()
+			# Recalculer les totaux
 			livraison_doc.calculate_totals()
 			livraison_doc.save()
 			

@@ -9,16 +9,14 @@ def execute():
 	# Index pour Livreur
 	frappe.db.add_index("Livreur", ["active", "type_couverture"])
 	frappe.db.add_index("Livreur", ["specialisation"])
-	frappe.db.add_index("Livreur", ["charge_actuelle", "capacite_max_colis"])
+	frappe.db.add_index("Livreur", ["charge_actuelle", "capacite_max_articles"])
 	
 	# Index pour Commune
 	frappe.db.add_index("Commune", ["wilaya"])
 	frappe.db.add_index("Commune", ["distance_depot"])
 	frappe.db.add_index("Commune", ["latitude", "longitude"])
 	
-	# Index pour Livraison Colis
-	frappe.db.add_index("Livraison Colis", ["date_livraison", "statut"])
-	frappe.db.add_index("Livraison Colis", ["commune"])
+	# Les index pour Livraison Colis sont supprimés car le DocType n'existe plus
 	
 	# Index pour Livraison
 	frappe.db.add_index("Livraison", ["batch_id"])

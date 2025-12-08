@@ -37,27 +37,30 @@ def validate_paiement_client(doc, method):
 		if livraison_doc.status == "Annulé":
 			frappe.throw(_("Impossible d'effectuer un paiement pour une livraison annulée."), exc=ValidationError)
 		
-		# Validate client has colis in this livraison
+		# Validate client has delivery notes in this livraison
 		if doc.client:
-			client_has_colis = _check_client_has_colis_in_livraison(doc)
-			if not client_has_colis:
-				frappe.throw(_("Le client sélectionné n'a aucun colis dans cette livraison."), exc=ValidationError)
+			client_has_bons = _check_client_has_bons_in_livraison(doc)
+			if not client_has_bons:
+				frappe.throw(_("Le client sélectionné n'a aucun bon de livraison dans cette livraison."), exc=ValidationError)
 
-def _check_client_has_colis_in_livraison(doc):
-	"""Check if the selected client has any colis in the selected livraison."""
+def _check_client_has_bons_in_livraison(doc):
+	"""Check if the selected client has any delivery notes in the selected livraison."""
 	if not doc.livraison or not doc.client:
 		return False
 	
-	# Get all colis for this livraison and client
-	colis_list = frappe.get_all("Colis", 
-		filters={
-			"bl": ["in", _get_delivery_notes_from_livraison(doc)],
-			"client": doc.client
-		},
-		fields=["name"]
-	)
+	# Get all delivery notes from the livraison
+	delivery_notes = _get_delivery_notes_from_livraison(doc)
 	
-	return len(colis_list) > 0
+	if not delivery_notes:
+		return False
+	
+	# Check if any delivery note belongs to this client
+	for dn_name in delivery_notes:
+		customer = frappe.db.get_value("Delivery Note", dn_name, "customer")
+		if customer == doc.client:
+			return True
+	
+	return False
 
 def _get_delivery_notes_from_livraison(doc):
 	"""Get all delivery notes from the selected livraison."""

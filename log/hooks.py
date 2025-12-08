@@ -143,26 +143,15 @@ doc_events = {
                 "log.log.customer_hooks.uppercase_customer_name",
             ]
         },
-    "Articles Colis": {
-        "validate": "log.articles_colis_hooks.validate_articles_colis"
-    },
-    "Colis": {
-        "validate": "log.delivery_note_hooks.validate_colis_quantities",
-        "on_trash": "log.delivery_note_hooks.on_trash_colis",
-        "after_delete": "log.delivery_note_hooks.after_delete_colis",
-        "on_update": "log.livraison_hooks.update_livraison_status_on_colis_change"
-    },
     "Delivery Note": {
         "on_update": [
             "log.livraison_hooks.update_livraisons_on_delivery_note_change"
         ],
-        "before_delete": "log.livraison_hooks.validate_delivery_note_deletion",
         "on_trash": "log.livraison_hooks.retirer_bon_de_livraison_supprime"
     },
     "Livraison": {
         "after_insert": "log.livraison_hooks.after_insert_livraison",
         "validate": "log.livraison_hooks.validate_livraison",
-        "before_delete": "log.livraison_hooks.validate_livraison_deletion",
         "on_update": [
             "log.livraison_hooks.update_livraison_on_date_change",
             "log.livraison_hooks.update_delivery_notes_on_livraison_change"
@@ -289,4 +278,3 @@ fixtures = [
     # "Workspace",
     # "Role Profile",
 ]
-website_route_rules = [{'from_route': '/Colis/<path:app_path>', 'to_route': 'Colis'},]

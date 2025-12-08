@@ -49,10 +49,7 @@ class Livraison(Document):
 		self.calculate_totals()
 
 	def calculate_totals(self):
-		"""Calculate total colis, nombre bons de livraison, total articles, total amount to collect, total payments and remaining balance."""
-		# Calculate total colis
-		self.total_colis = len(self.colis) if self.colis else 0
-		
+		"""Calculate nombre bons de livraison, total articles, total amount to collect, total payments and remaining balance."""
 		# Calculate nombre bons de livraison
 		self.nombre_bons_de_livraison = len(self.bons_de_livraison) if self.bons_de_livraison else 0
 		
@@ -83,93 +80,6 @@ class Livraison(Document):
 		
 		# Calculate remaining balance
 		self.solde_restant = self.total_montant_a_encaisser - self.total_paiements
-	
-
-	
-	def sync_colis_from_preparations(self):
-		"""Synchronize colis from preparations linked to delivery notes and remove orphaned colis."""
-		# Récupérer la liste des bons de livraison actuels
-		bons_de_livraison_list = [row.bon_de_livraison for row in self.bons_de_livraison if row.bon_de_livraison] if self.bons_de_livraison else []
-		
-		# Supprimer les colis qui ne sont plus liés à aucun bon de livraison présent
-		colis_to_remove = []
-		for colis_row in self.colis or []:
-			if colis_row.bon_de_livraison and colis_row.bon_de_livraison not in bons_de_livraison_list:
-				colis_to_remove.append(colis_row)
-		
-		# Supprimer les colis orphelins
-		for colis_row in colis_to_remove:
-			self.remove(colis_row)
-		
-		if not bons_de_livraison_list:
-			return
-		
-		# Récupérer les colis déjà existants pour éviter les doublons
-		colis_existants = [row.colis for row in self.colis if row.colis]
-		
-		# Récupérer tous les colis liés aux préparations des bons de livraison
-		colis_lies = frappe.get_all("Colis",
-			filters={
-				"preparation": ["is", "set"],
-				"bl": ["in", bons_de_livraison_list],
-				"docstatus": ["<", 2]  # Exclure les documents supprimés
-			},
-			fields=["name", "custom_numero_sequence", "client", "bl", "status"]
-		)
-		
-		# Ajouter les nouveaux colis
-		for colis in colis_lies:
-			if colis.name not in colis_existants:
-				# Ajouter le colis à la table enfant
-				self.append("colis", {
-					"colis": colis.name,
-					"numero_sequence": colis.custom_numero_sequence,
-					"client": colis.client,
-					"bon_de_livraison": colis.bl,
-					"status": colis.status
-				})
-	
-	def sync_colis_from_bons_de_livraison(self):
-		"""Synchronize colis directly from delivery notes without preparations."""
-		# Récupérer la liste des bons de livraison actuels
-		bons_de_livraison_list = [row.bon_de_livraison for row in self.bons_de_livraison if row.bon_de_livraison] if self.bons_de_livraison else []
-		
-		# Supprimer les colis qui ne sont plus liés à aucun bon de livraison présent
-		colis_to_remove = []
-		for colis_row in self.colis or []:
-			if colis_row.bon_de_livraison and colis_row.bon_de_livraison not in bons_de_livraison_list:
-				colis_to_remove.append(colis_row)
-		
-		# Supprimer les colis orphelins
-		for colis_row in colis_to_remove:
-			self.remove(colis_row)
-		
-		if not bons_de_livraison_list:
-			return
-		
-		# Récupérer les colis déjà existants pour éviter les doublons
-		colis_existants = [row.colis for row in self.colis if row.colis]
-		
-		# Récupérer tous les colis liés directement aux bons de livraison (sans préparation)
-		colis_lies = frappe.get_all("Colis",
-			filters={
-				"bl": ["in", bons_de_livraison_list],
-				"docstatus": ["<", 2]  # Exclure les documents supprimés
-			},
-			fields=["name", "custom_numero_sequence", "client", "bl", "status"]
-		)
-		
-		# Ajouter les nouveaux colis
-		for colis in colis_lies:
-			if colis.name not in colis_existants:
-				# Ajouter le colis à la table enfant
-				self.append("colis", {
-					"colis": colis.name,
-					"numero_sequence": colis.custom_numero_sequence,
-					"client": colis.client,
-					"bon_de_livraison": colis.bl,
-					"status": colis.status
-				})
 	
 	def auto_load_delivery_notes_by_date(self):
 		"""Automatically load delivery notes that match the livraison date and are not already assigned."""
@@ -210,16 +120,11 @@ class Livraison(Document):
 				"status": dn.status,
 				"type": dn.custom_type
 			})
-		
-		# Auto-sync colis after loading delivery notes
-		self.sync_colis_from_bons_de_livraison()
-	
 
 	@frappe.whitelist()
 	def load_delivery_notes(self):
-		"""Load delivery notes and their colis for this livraison."""
-		# This method can be called from frontend to populate delivery notes and colis
-		# Implementation depends on how delivery notes are associated with livraison
+		"""Load delivery notes for this livraison."""
+		# This method can be called from frontend to populate delivery notes
 		pass
 	
 	@frappe.whitelist()
@@ -227,9 +132,9 @@ class Livraison(Document):
 		"""Get summary of amounts by client for this livraison."""
 		client_summary = {}
 		
-		# Calculate amounts to collect by client
-		for colis_row in self.colis or []:
-			client = colis_row.client
+		# Calculate amounts to collect by client from bons de livraison
+		for bon_row in self.bons_de_livraison or []:
+			client = bon_row.customer
 			if client:
 				if client not in client_summary:
 					client_summary[client] = {
@@ -237,16 +142,20 @@ class Livraison(Document):
 						"montant_a_encaisser": 0,
 						"montant_paye": 0,
 						"solde": 0,
-						"colis_count": 0
+						"bons_count": 0
 					}
-				client_summary[client]["montant_a_encaisser"] += colis_row.montant_a_encaisser or 0
-				client_summary[client]["colis_count"] += 1
+				client_summary[client]["montant_a_encaisser"] += bon_row.grand_total or 0
+				client_summary[client]["bons_count"] += 1
 		
-		# Calculate payments by client
-		for paiement_row in self.paiements or []:
-			client = paiement_row.client
+		# Calculate payments by client from Paiement Client
+		paiements = frappe.get_all("Paiement Client",
+			filters={"livraison": self.name},
+			fields=["client", "montant"]
+		)
+		for paiement in paiements:
+			client = paiement.client
 			if client and client in client_summary:
-				client_summary[client]["montant_paye"] += paiement_row.montant or 0
+				client_summary[client]["montant_paye"] += paiement.montant or 0
 		
 		# Calculate balance for each client
 		for client in client_summary:
