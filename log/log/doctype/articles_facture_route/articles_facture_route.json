@@ -1,0 +1,103 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-12-08 14:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_code",
+  "item_name",
+  "qty",
+  "uom",
+  "rate",
+  "amount_ht",
+  "tva_rate",
+  "amount_tva",
+  "amount_ttc"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Code Article",
+   "options": "Item",
+   "read_only": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Désignation",
+   "read_only": 1
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantité",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Unité",
+   "options": "UOM",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rate",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Prix Unitaire",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_ht",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Montant HT",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tva_rate",
+   "fieldtype": "Float",
+   "label": "TVA %",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_tva",
+   "fieldtype": "Currency",
+   "label": "Montant TVA",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "amount_ttc",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Montant TTC",
+   "precision": "2",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-12-08 14:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Articles Facture Route",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
+

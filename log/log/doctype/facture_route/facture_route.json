@@ -1,0 +1,274 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-12-08 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_info",
+  "date",
+  "n_facture",
+  "column_break_info",
+  "livreur",
+  "nom_livreur",
+  "section_break_client",
+  "customer",
+  "customer_name",
+  "customer_group",
+  "column_break_client2",
+  "custom_commune",
+  "custom_wilaya",
+  "section_break_bl",
+  "bons_de_livraison",
+  "section_break_articles",
+  "articles",
+  "section_break_totaux",
+  "total_quantite",
+  "total_articles",
+  "column_break_totaux",
+  "total_ht",
+  "total_tva",
+  "column_break_totaux2",
+  "total_ttc",
+  "in_words",
+  "informations_administratives_tab",
+  "section_break_uxdk",
+  "custom_nrc",
+  "custom_nif",
+  "column_break_deaz",
+  "custom_nis",
+  "custom_ai"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_info",
+   "fieldtype": "Section Break"
+  },
+  {
+   "default": "Today",
+   "fieldname": "date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_info",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "livreur",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Livreur",
+   "options": "Livreur"
+  },
+  {
+   "fetch_from": "livreur.nom",
+   "fieldname": "nom_livreur",
+   "fieldtype": "Data",
+   "label": "Nom Livreur",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_client",
+   "fieldtype": "Section Break",
+   "label": "Client"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Client",
+   "options": "Customer"
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Nom du Client",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customer.customer_group",
+   "fieldname": "customer_group",
+   "fieldtype": "Link",
+   "label": "Groupe Client",
+   "options": "Customer Group",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customer.custom_n\u00ba_rc",
+   "fieldname": "custom_nrc",
+   "fieldtype": "Data",
+   "label": "N\u00b0 RC",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customer.custom_n\u00ba_nif",
+   "fieldname": "custom_nif",
+   "fieldtype": "Data",
+   "label": "N\u00b0 NIF",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customer.custom_n\u00ba_nis",
+   "fieldname": "custom_nis",
+   "fieldtype": "Data",
+   "label": "N\u00b0 NIS",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customer.custom_n\u00ba_ai",
+   "fieldname": "custom_ai",
+   "fieldtype": "Data",
+   "label": "N\u00b0 AI",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_client2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "custom_commune",
+   "fieldtype": "Data",
+   "label": "Commune",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "customer.custom_wilaya",
+   "fieldname": "custom_wilaya",
+   "fieldtype": "Link",
+   "label": "Wilaya",
+   "options": "Wilaya",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_break_bl",
+   "fieldtype": "Section Break",
+   "label": "Bons de Livraison"
+  },
+  {
+   "fieldname": "bons_de_livraison",
+   "fieldtype": "Table",
+   "label": "Bons de Livraison",
+   "options": "Facture Route BL",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_articles",
+   "fieldtype": "Section Break",
+   "label": "Articles"
+  },
+  {
+   "fieldname": "articles",
+   "fieldtype": "Table",
+   "label": "Articles",
+   "options": "Articles Facture Route",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_totaux",
+   "fieldtype": "Section Break",
+   "label": "Totaux"
+  },
+  {
+   "fieldname": "total_quantite",
+   "fieldtype": "Float",
+   "label": "Quantit\u00e9 Totale",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_articles",
+   "fieldtype": "Int",
+   "label": "Nombre d'Articles",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totaux",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_ht",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Total HT",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_tva",
+   "fieldtype": "Currency",
+   "label": "Total TVA",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_totaux2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_ttc",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Total TTC",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "in_words",
+   "fieldtype": "Small Text",
+   "label": "Montant en toutes lettres",
+   "read_only": 1
+  },
+  {
+   "fieldname": "n_facture",
+   "fieldtype": "Data",
+   "label": "N\u00b0 Facture"
+  },
+  {
+   "fieldname": "section_break_uxdk",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_deaz",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "informations_administratives_tab",
+   "fieldtype": "Tab Break",
+   "label": "Informations Administratives"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-12-08 14:07:48.128636",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Facture Route",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
