@@ -174,12 +174,9 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-scheduler_events = {
-	"daily": [
-		"log.utils.geolocation.geocoder_communes",
-		"log.utils.geolocation.calculer_distances_depot"
-	]
-}
+# scheduler_events = {
+# 	"daily": []
+# }
 
 # Testing
 # -------

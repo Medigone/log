@@ -14,18 +14,6 @@
   "vehicule",
   "section_break_qaod",
   "active",
-  "section_break_capacite",
-  "capacite_max_articles",
-  "column_break_charge",
-  "section_break_couverture",
-  "type_couverture",
-  "column_break_specialisation",
-  "specialisation",
-  "column_break_priorite",
-  "priorite_attribution",
-  "section_break_zones",
-  "wilayas_autorisees",
-  "communes_autorisees",
   "documents_tab",
   "permis",
   "valable"
@@ -99,82 +87,11 @@
    "fieldtype": "Check",
    "in_standard_filter": 1,
    "label": "Activ\u00e9"
-  },
-  {
-   "fieldname": "section_break_capacite",
-   "fieldtype": "Section Break",
-   "label": "Capacit\u00e9 Articles"
-  },
-  {
-   "default": "100",
-   "fieldname": "capacite_max_articles",
-   "fieldtype": "Int",
-   "in_list_view": 1,
-   "label": "Capacit\u00e9 maximale (articles)",
-   "non_negative": 1,
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_charge",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "section_break_couverture",
-   "fieldtype": "Section Break",
-   "label": "Couverture et Sp\u00e9cialisation"
-  },
-  {
-   "default": "Locale",
-   "fieldname": "type_couverture",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Type de couverture",
-   "options": "Locale\nR\u00e9gionale\nNationale",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_specialisation",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "specialisation",
-   "fieldtype": "Select",
-   "label": "Sp\u00e9cialisation",
-   "options": "Standard\nExpress\nLongue distance\nFragile"
-  },
-  {
-   "fieldname": "column_break_priorite",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "5",
-   "description": "1 = Priorit\u00e9 maximale, 10 = Priorit\u00e9 minimale",
-   "fieldname": "priorite_attribution",
-   "fieldtype": "Int",
-   "label": "Priorit\u00e9 d'attribution (1-10)"
-  },
-  {
-   "fieldname": "section_break_zones",
-   "fieldtype": "Section Break",
-   "label": "Zones de couverture"
-  },
-  {
-   "fieldname": "wilayas_autorisees",
-   "fieldtype": "Table",
-   "label": "Wilayas autoris\u00e9es",
-   "options": "Livreur Wilaya"
-  },
-  {
-   "fieldname": "communes_autorisees",
-   "fieldtype": "Table",
-   "label": "Communes autoris\u00e9es",
-   "options": "Livreur Commune"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-08-28 22:35:43.430149",
+ "modified": "2025-12-08 11:17:25.814712",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Livreur",

@@ -7,9 +7,7 @@ def execute():
 	"""Ajoute les index de performance pour optimiser les requêtes de répartition."""
 	
 	# Index pour Livreur
-	frappe.db.add_index("Livreur", ["active", "type_couverture"])
-	frappe.db.add_index("Livreur", ["specialisation"])
-	frappe.db.add_index("Livreur", ["charge_actuelle", "capacite_max_articles"])
+	frappe.db.add_index("Livreur", ["active"])
 	
 	# Index pour Commune
 	frappe.db.add_index("Commune", ["wilaya"])
@@ -22,10 +20,8 @@ def execute():
 	frappe.db.add_index("Livraison", ["batch_id"])
 	frappe.db.add_index("Livraison", ["date_liv", "livreur"])
 	
-	# Index pour Child Tables
-	frappe.db.add_index("Livreur Wilaya", ["wilaya"])
-	frappe.db.add_index("Livreur Commune", ["commune"])
-	frappe.db.add_index("Vehicule Wilaya", ["wilaya"])
+	# Les index pour les tables enfants Livreur Wilaya, Livreur Commune et Vehicule Wilaya
+	# ont été supprimés car ces DocTypes ne sont plus utilisés après simplification
 	
 	# Index pour Depot Distribution
 	frappe.db.add_index("Depot Distribution", ["is_default"])

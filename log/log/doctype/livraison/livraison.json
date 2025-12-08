@@ -22,9 +22,7 @@
   "column_break_egre",
   "total_montant_a_encaisser",
   "total_paiements",
-  "solde_restant",
-  "étapes_de_livraison_tab",
-  "rt"
+  "solde_restant"
  ],
  "fields": [
   {
@@ -32,7 +30,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Statut",
-   "options": "Nouveau\nEn cours\nLivré\nAnnulé"
+   "options": "Nouveau\nEn cours\nLivr\u00e9\nAnnul\u00e9"
   },
   {
    "fieldname": "date_liv",
@@ -70,7 +68,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Véhicule",
+   "label": "V\u00e9hicule",
    "options": "Vehicule"
   },
   {
@@ -78,11 +76,11 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "Identifiant unique pour l'idempotence des r\u00e9partitions",
    "fieldname": "batch_id",
    "fieldtype": "Data",
    "label": "ID Batch",
-   "read_only": 1,
-   "description": "Identifiant unique pour l'idempotence des répartitions"
+   "read_only": 1
   },
   {
    "fieldname": "bons_de_livraison",
@@ -99,7 +97,7 @@
   {
    "fieldname": "total_montant_a_encaisser",
    "fieldtype": "Currency",
-   "label": "Total Montant à Encaisser",
+   "label": "Total Montant \u00e0 Encaisser",
    "precision": "2",
    "read_only": 1
   },
@@ -116,16 +114,6 @@
    "label": "Solde Restant",
    "precision": "2",
    "read_only": 1
-  },
-  {
-   "fieldname": "étapes_de_livraison_tab",
-   "fieldtype": "Tab Break",
-   "label": "Étapes de Livraison"
-  },
-  {
-   "fieldname": "rt",
-   "fieldtype": "Text Editor",
-   "label": "Routing"
   },
   {
    "fieldname": "section_break_ecye",
@@ -148,7 +136,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-12-08 12:00:00.000000",
+ "modified": "2025-12-08 11:02:54.292071",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Livraison",
@@ -181,11 +169,11 @@
   },
   {
    "color": "Green",
-   "title": "Livré"
+   "title": "Livr\u00e9"
   },
   {
    "color": "Red",
-   "title": "Annulé"
+   "title": "Annul\u00e9"
   }
  ]
 }
