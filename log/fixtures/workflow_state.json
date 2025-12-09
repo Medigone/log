@@ -1,0 +1,83 @@
+[
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "question-sign",
+  "modified": "2025-07-23 20:59:18.133400",
+  "name": "Pending",
+  "style": "",
+  "workflow_state_name": "Pending"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "ok-sign",
+  "modified": "2025-07-23 20:59:18.135820",
+  "name": "Approved",
+  "style": "Success",
+  "workflow_state_name": "Approved"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "remove",
+  "modified": "2025-07-23 20:59:18.137661",
+  "name": "Rejected",
+  "style": "Danger",
+  "workflow_state_name": "Rejected"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-file-o",
+  "modified": "2025-12-09 12:00:00",
+  "name": "Nouveau",
+  "style": "Primary",
+  "workflow_state_name": "Nouveau"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-cogs",
+  "modified": "2025-12-09 12:00:00",
+  "name": "Préparé",
+  "style": "Warning",
+  "workflow_state_name": "Préparé"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-truck",
+  "modified": "2025-12-09 12:00:00",
+  "name": "Enlevé",
+  "style": "Info",
+  "workflow_state_name": "Enlevé"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-check",
+  "modified": "2025-12-09 12:00:00",
+  "name": "Livré",
+  "style": "Success",
+  "workflow_state_name": "Livré"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-times-circle",
+  "modified": "2025-12-09 12:00:00",
+  "name": "Non Livré",
+  "style": "Danger",
+  "workflow_state_name": "Non Livré"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-ban",
+  "modified": "2025-12-09 12:00:00",
+  "name": "Annulé",
+  "style": "Inverse",
+  "workflow_state_name": "Annulé"
+ }
+]

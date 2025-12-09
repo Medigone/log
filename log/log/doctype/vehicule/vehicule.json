@@ -10,9 +10,11 @@
   "nom",
   "chauffeur",
   "type_carb",
+  "company",
   "column_break_nhgp",
   "immatriculation",
   "nom_chauffeur",
+  "warehouse",
   "section_break_mleo",
   "active",
   "suivi_et_entretien_tab",
@@ -160,6 +162,14 @@
    "read_only": 1
   },
   {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "label": "Entrepôt",
+   "options": "Warehouse",
+   "read_only": 1,
+   "description": "Entrepôt créé automatiquement pour ce véhicule"
+  },
+  {
    "fieldname": "section_break_mleo",
    "fieldtype": "Section Break"
   },
@@ -175,6 +185,13 @@
    "fieldtype": "Select",
    "label": "Type de carburant",
    "options": "Diesel\nEssence\nGPL"
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Société",
+   "options": "Company",
+   "reqd": 1
   },
   {
    "default": "0.0",
@@ -199,7 +216,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-12-08 11:15:37.394043",
+ "modified": "2025-12-09 10:00:00.000000",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Vehicule",

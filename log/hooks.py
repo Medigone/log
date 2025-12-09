@@ -43,7 +43,9 @@ app_license = "mit"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+    "Delivery Note": "public/js/delivery_note.js"
+}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -147,6 +149,10 @@ doc_events = {
         "validate": "log.transferts_marchandise_hooks.validate_transferts_marchandise",
         "on_submit": "log.transferts_marchandise_hooks.on_submit_transferts_marchandise",
         "on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
+    },
+    "Delivery Note": {
+        "validate": "log.log.delivery_note_hooks.validate_delivery_note",
+        "on_update": "log.log.delivery_note_hooks.on_update_delivery_note"
     }
 }
 
@@ -234,23 +240,8 @@ doc_events = {
 # }
 
 fixtures = [
-    #     {
-    #     "doctype": "Role",
-    #     "filters": [["is_custom", "=", 1]]  # Export uniquement les rôles custom
-    # },
-    # {
-    #     "doctype": "Custom DocPerm",
-    #     "filters": []  # Export uniquement les permissions personnalisées
-    # },
-    # "Server Script",
+    "Workflow State",
+    "Workflow",
     # "Client Script",
-    # "Custom HTML Block",
-    # "Workflow",
-    # "Workflow State",
-    # "Workflow Transition",
-    # "Workflow Action",
-    # "Workflow Action Master",
-    # "Workflow Document State",
     # "Workspace",
-    # "Role Profile",
 ]
