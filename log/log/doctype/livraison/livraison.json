@@ -1,0 +1,207 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-03-18 22:19:20.386563",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "status",
+  "section_break_zbae",
+  "date_liv",
+  "vehicule",
+  "column_break_wsgq",
+  "livreur",
+  "nom_livreur",
+  "column_break_batch",
+  "batch_id",
+  "section_break_ecye",
+  "bons_de_livraison",
+  "section_break_dzfh",
+  "nombre_bons_de_livraison",
+  "total_articles",
+  "column_break_egre",
+  "total_montant_a_encaisser",
+  "total_paiements",
+  "solde_restant",
+  "étapes_de_livraison_tab",
+  "rt"
+ ],
+ "fields": [
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Statut",
+   "options": "Nouveau\nPréparé\nPartiellement Préparé\nEnlevé\nPartiellement Enlevé\nPartiellement Livré\nLivré\nAnnulé"
+  },
+  {
+   "fieldname": "date_liv",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Date"
+  },
+  {
+   "fieldname": "section_break_zbae",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "livreur",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Livreur",
+   "options": "Livreur"
+  },
+  {
+   "fieldname": "column_break_wsgq",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "livreur.nom",
+   "fieldname": "nom_livreur",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nom Livreur",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "livreur.vehicule",
+   "fieldname": "vehicule",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Véhicule",
+   "options": "Vehicule"
+  },
+  {
+   "fieldname": "column_break_batch",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch_id",
+   "fieldtype": "Data",
+   "label": "ID Batch",
+   "read_only": 1,
+   "description": "Identifiant unique pour l'idempotence des répartitions"
+  },
+  {
+   "fieldname": "bons_de_livraison",
+   "fieldtype": "Table",
+   "label": "Bons de Livraison",
+   "options": "Livraison Bon de Livraison"
+  },
+  {
+   "fieldname": "nombre_bons_de_livraison",
+   "fieldtype": "Int",
+   "label": "Nombre Bons de livraison",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_montant_a_encaisser",
+   "fieldtype": "Currency",
+   "label": "Total Montant à Encaisser",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_paiements",
+   "fieldtype": "Currency",
+   "label": "Total Paiements",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "solde_restant",
+   "fieldtype": "Currency",
+   "label": "Solde Restant",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "étapes_de_livraison_tab",
+   "fieldtype": "Tab Break",
+   "label": "Étapes de Livraison"
+  },
+  {
+   "fieldname": "rt",
+   "fieldtype": "Text Editor",
+   "label": "Routing"
+  },
+  {
+   "fieldname": "section_break_ecye",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "section_break_dzfh",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_egre",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_articles",
+   "fieldtype": "Int",
+   "label": "Total Articles",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-08-11 23:53:08.882242",
+ "modified_by": "admin@medigo.one",
+ "module": "Log",
+ "name": "Livraison",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Gray",
+   "title": "Nouveau"
+  },
+  {
+   "color": "Blue",
+   "title": "Préparé"
+  },
+  {
+   "color": "Light Blue",
+   "title": "Partiellement Préparé"
+  },
+  {
+   "color": "Yellow",
+   "title": "Enlevé"
+  },
+  {
+   "color": "Yellow",
+   "title": "Partiellement Enlevé"
+  },
+  {
+   "color": "Orange",
+   "title": "Partiellement Livré"
+  },
+  {
+   "color": "Green",
+   "title": "Livré"
+  },
+  {
+   "color": "Red",
+   "title": "Annulé"
+  }
+ ]
+}

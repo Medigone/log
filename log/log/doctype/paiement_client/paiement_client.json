@@ -13,6 +13,7 @@
   "client",
   "nom_client",
   "column_break_client",
+  "livraison",
   "bon_livraison",
   "section_break_uakz",
   "moyen_paiement",
@@ -132,11 +133,16 @@
    "mandatory_depends_on": "eval:(doc.moyen_paiement==\"Ch\u00e8que\")"
   },
   {
+   "fieldname": "livraison",
+   "fieldtype": "Link",
+   "label": "Livraison",
+   "options": "Livraison"
+  },
+  {
    "fieldname": "bon_livraison",
    "fieldtype": "Link",
    "label": "Bon de livraison",
-   "options": "Delivery Note",
-   "read_only": 1
+   "options": "Delivery Note"
   }
  ],
  "image_field": "recu",

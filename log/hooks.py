@@ -44,7 +44,8 @@ app_license = "mit"
 
 # include js in doctype views
 doctype_js = {
-    "Delivery Note": "public/js/delivery_note.js"
+    "Delivery Note": "public/js/delivery_note.js",
+    "Sales Order": "public/js/sales_order.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -151,9 +152,39 @@ doc_events = {
         "on_cancel": "log.transferts_marchandise_hooks.on_cancel_transferts_marchandise"
     },
     "Delivery Note": {
-        "validate": "log.log.delivery_note_hooks.validate_delivery_note",
-        "on_update": "log.log.delivery_note_hooks.on_update_delivery_note"
-    }
+        "validate": [
+            "log.log.delivery_note_hooks.validate_delivery_note",
+            "log.pick_list_ops.validate_delivery_note_requires_pick_list",
+        ],
+        "after_insert": [
+            "log.pick_list_ops.after_insert_delivery_note",
+            "log.delivery_note_ops.ensure_qr_code",
+        ],
+        "on_update": [
+            "log.log.delivery_note_hooks.on_update_delivery_note",
+            "log.livraison_hooks.update_livraisons_on_delivery_note_change",
+            "log.delivery_note_ops.ensure_qr_code",
+        ],
+        "on_trash": "log.livraison_hooks.remove_deleted_delivery_note",
+    },
+    "Pick List": {
+        "on_cancel": "log.pick_list_ops.on_cancel_pick_list",
+    },
+    "Livraison": {
+        "after_insert": "log.livraison_hooks.after_insert_livraison",
+        "validate": "log.livraison_hooks.validate_livraison",
+        "on_update": [
+            "log.livraison_hooks.update_livraison_on_date_change",
+            "log.livraison_hooks.update_delivery_notes_on_livraison_change",
+        ],
+    },
+    "Paiement Client": {
+        "validate": "log.paiement_hooks.validate_paiement_client",
+        "after_insert": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "on_update": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "on_trash": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "after_delete": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+    },
 }
 
 # Scheduled Tasks
@@ -171,9 +202,9 @@ doc_events = {
 # Overriding Methods
 # ------------------------------
 #
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "log.event.get_events"
-# }
+override_whitelisted_methods = {
+    "erpnext.selling.doctype.sales_order.sales_order.make_delivery_note": "log.pick_list_ops.block_make_delivery_note",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
@@ -239,9 +270,15 @@ doc_events = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+website_route_rules = [
+    {"from_route": "/Colis/<path:app_path>", "to_route": "Colis"},
+]
+
 fixtures = [
     "Workflow State",
     "Workflow",
-    # "Client Script",
-    # "Workspace",
+]
+
+after_migrate = [
+    "log.patches.v1_0.migrate_colis_to_delivery_note.run_after_migrate",
 ]

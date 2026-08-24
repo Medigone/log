@@ -3,8 +3,24 @@
 
 frappe.ui.form.on("Delivery Note", {
 	refresh(frm) {
-		// Mémoriser le véhicule actuel au chargement pour détecter les changements
 		frm._previous_vehicule = frm.doc.custom_véhicule;
+		if (!frm.is_new()) {
+			frm.add_custom_button(__("QR"), () => {
+				frappe.call({
+					method: "log.delivery_note_ops.generate_qr_code",
+					args: { docname: frm.doc.name, force: 1 },
+					callback: (r) => {
+						if (r.message && r.message.file_url) {
+							frm.reload_doc();
+							frappe.msgprint({
+								title: __("QR du bon de livraison"),
+								message: `<img src="${r.message.file_url}" style="max-width:240px" />`,
+							});
+						}
+					},
+				});
+			});
+		}
 	},
 
 	onload(frm) {

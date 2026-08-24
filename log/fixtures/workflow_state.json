@@ -79,5 +79,14 @@
   "name": "Annulé",
   "style": "Inverse",
   "workflow_state_name": "Annulé"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Workflow State",
+  "icon": "fa fa-adjust",
+  "modified": "2026-08-24 17:00:00",
+  "name": "Partiellement Livré",
+  "style": "Warning",
+  "workflow_state_name": "Partiellement Livré"
  }
 ]
