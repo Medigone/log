@@ -5,6 +5,20 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "etat_planification",
+  "planificateur",
+  "date_publication",
+  "depart_prevu",
+  "fin_prevue",
+  "date_depart",
+  "date_fin",
+  "revision",
+  "revision_publiee",
+  "revision_acceptee",
+  "accepte_par",
+  "date_acceptation",
+  "a_revalider",
+  "motif_reouverture",
   "status",
   "section_break_zbae",
   "date_liv",
@@ -27,6 +41,103 @@
   "rt"
  ],
  "fields": [
+  {
+   "default": "Brouillon",
+   "fieldname": "etat_planification",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "État de planification",
+   "options": "Brouillon\nPubliée\nEn cours\nTerminée\nAnnulée",
+   "reqd": 1
+  },
+  {
+   "fieldname": "planificateur",
+   "fieldtype": "Link",
+   "label": "Planificateur",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_publication",
+   "fieldtype": "Datetime",
+   "label": "Date de publication",
+   "read_only": 1
+  },
+  {
+   "fieldname": "depart_prevu",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Départ prévu"
+  },
+  {
+   "fieldname": "fin_prevue",
+   "fieldtype": "Datetime",
+   "label": "Fin prévue"
+  },
+  {
+   "fieldname": "date_depart",
+   "fieldtype": "Datetime",
+   "label": "Date de départ",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_fin",
+   "fieldtype": "Datetime",
+   "label": "Date de fin",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "revision",
+   "fieldtype": "Int",
+   "label": "Révision",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "revision_publiee",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Révision publiée",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "revision_acceptee",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Révision acceptée",
+   "read_only": 1
+  },
+  {
+   "fieldname": "accepte_par",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Acceptée par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_acceptation",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Date d'acceptation",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "a_revalider",
+   "fieldtype": "Check",
+   "label": "À revalider",
+   "read_only": 1
+  },
+  {
+   "fieldname": "motif_reouverture",
+   "fieldtype": "Small Text",
+   "label": "Motif de remise en brouillon",
+   "read_only": 1
+  },
   {
    "fieldname": "status",
    "fieldtype": "Select",
@@ -154,6 +265,33 @@
  "name": "Livraison",
  "owner": "Administrator",
  "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Planificateur",
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "role": "Livreur"
+  },
   {
    "create": 1,
    "delete": 1,

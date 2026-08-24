@@ -1,0 +1,45 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:HIST-PLAN-{#####}",
+ "creation": "2026-08-25 00:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "bon_de_livraison", "commande_client", "action", "date_evenement", "utilisateur",
+  "section_avant", "tournee_avant", "date_avant", "livreur_avant", "vehicule_avant",
+  "section_apres", "tournee_apres", "date_apres", "livreur_apres", "vehicule_apres",
+  "revision_tournee", "motif", "details_json"
+ ],
+ "fields": [
+  {"fieldname":"bon_de_livraison","fieldtype":"Link","in_list_view":1,"label":"Bon de livraison","options":"Delivery Note","reqd":1},
+  {"fieldname":"commande_client","fieldtype":"Link","label":"Commande client","options":"Sales Order"},
+  {"fieldname":"action","fieldtype":"Select","in_list_view":1,"label":"Action","options":"Planification\nRéaffectation\nRetrait\nRepublication\nAcceptation\nInvalidation\nRepréparation\nException\nRésolution","reqd":1},
+  {"fieldname":"date_evenement","fieldtype":"Datetime","in_list_view":1,"label":"Date de l'événement","read_only":1,"reqd":1},
+  {"fieldname":"utilisateur","fieldtype":"Link","label":"Utilisateur","options":"User","read_only":1,"reqd":1},
+  {"fieldname":"section_avant","fieldtype":"Section Break","label":"Avant"},
+  {"fieldname":"tournee_avant","fieldtype":"Link","label":"Tournée avant","options":"Livraison"},
+  {"fieldname":"date_avant","fieldtype":"Date","label":"Date avant"},
+  {"fieldname":"livreur_avant","fieldtype":"Link","label":"Livreur avant","options":"Livreur"},
+  {"fieldname":"vehicule_avant","fieldtype":"Link","label":"Véhicule avant","options":"Vehicule"},
+  {"fieldname":"section_apres","fieldtype":"Section Break","label":"Après"},
+  {"fieldname":"tournee_apres","fieldtype":"Link","label":"Tournée après","options":"Livraison"},
+  {"fieldname":"date_apres","fieldtype":"Date","label":"Date après"},
+  {"fieldname":"livreur_apres","fieldtype":"Link","label":"Livreur après","options":"Livreur"},
+  {"fieldname":"vehicule_apres","fieldtype":"Link","label":"Véhicule après","options":"Vehicule"},
+  {"fieldname":"revision_tournee","fieldtype":"Int","label":"Révision de tournée"},
+  {"fieldname":"motif","fieldtype":"Small Text","label":"Motif"},
+  {"fieldname":"details_json","fieldtype":"JSON","hidden":1,"label":"Détails"}
+ ],
+ "index_web_pages_for_search": 0,
+ "module": "Log",
+ "name": "Historique Planification BL",
+ "permissions": [
+  {"export":1,"read":1,"report":1,"role":"Responsable"},
+  {"export":1,"read":1,"report":1,"role":"Planificateur"},
+  {"export":1,"read":1,"report":1,"role":"System Manager"}
+ ],
+ "sort_field": "date_evenement",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

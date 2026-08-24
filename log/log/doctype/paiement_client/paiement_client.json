@@ -21,7 +21,8 @@
   "column_break_hvsb",
   "recu",
   "photo_cheque",
-  "date_encaissement"
+  "date_encaissement",
+  "request_id"
  ],
  "fields": [
   {
@@ -113,8 +114,7 @@
    "depends_on": "eval:(doc.moyen_paiement==\"Esp\u00e8ce\")",
    "fieldname": "recu",
    "fieldtype": "Attach Image",
-   "label": "Re\u00e7u de paiement",
-   "mandatory_depends_on": "eval:(doc.moyen_paiement==\"Esp\u00e8ce\")"
+   "label": "Re\u00e7u de paiement"
   },
   {
    "allow_in_quick_entry": 1,
@@ -143,6 +143,14 @@
    "fieldtype": "Link",
    "label": "Bon de livraison",
    "options": "Delivery Note"
+  },
+  {
+   "fieldname": "request_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Identifiant de requête",
+   "read_only": 1,
+   "unique": 1
   }
  ],
  "image_field": "recu",
@@ -154,6 +162,24 @@
  "name": "Paiement Client",
  "owner": "Administrator",
  "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Livreur"
+  },
   {
    "create": 1,
    "delete": 1,

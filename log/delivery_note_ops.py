@@ -8,6 +8,8 @@ import frappe
 from frappe import _
 from frappe.utils import flt, get_url, now_datetime
 
+from log.api.distribution_rules import public_tracking_payload
+
 STATUS_FIELD = "custom_statut"
 QR_FIELD = "custom_qr_image"
 
@@ -132,6 +134,8 @@ def serialize_delivery_note(doc):
 		"image": doc.get(QR_FIELD),
 		"custom_qr_image": doc.get(QR_FIELD),
 		"photo_livraison": doc.get("custom_photo_livraison"),
+		"signature_livraison": doc.get("custom_signature_livraison"),
+		"nom_signataire": doc.get("custom_nom_signataire"),
 		"gps": doc.get("custom_gps"),
 		"commentaire_livreur": doc.get("custom_commentaire_livreur"),
 		"custom_commune": doc.get("custom_commune"),
@@ -210,7 +214,7 @@ def generate_qr_code(docname, force=False):
 	except ImportError:
 		frappe.throw(_("Le module qrcode n'est pas installé."))
 
-	frontend_url = f"{get_url()}/Colis?bl={doc.name}"
+	frontend_url = f"{get_url()}/distribution?bl={doc.name}"
 	qr = qrcode.QRCode(version=4, error_correction=qrcode.constants.ERROR_CORRECT_M, box_size=6, border=2)
 	qr.add_data(frontend_url)
 	qr.make(fit=True)
@@ -426,7 +430,41 @@ def _resolve_public_id(identifier):
 @frappe.whitelist(allow_guest=True)
 def get_public_bl_data(bl_id=None, colis_id=None):
 	docname = _resolve_public_id(bl_id or colis_id)
-	return serialize_delivery_note(frappe.get_doc("Delivery Note", docname))
+	doc = frappe.get_doc("Delivery Note", docname)
+	status = _get_status(doc)
+	return public_tracking_payload(
+		doc.name,
+		status,
+		[
+			{
+				"key": "prepared",
+				"label": _("Préparé"),
+				"completed": status in {"Préparé", "Enlevé", "Partiellement Livré", "Livré", "Non Livré"},
+				"completed_at": str(doc.get("custom_date_preparation") or "") or None,
+			},
+			{
+				"key": "picked_up",
+				"label": _("Enlevé"),
+				"completed": status in {"Enlevé", "Partiellement Livré", "Livré", "Non Livré"},
+				"completed_at": str(doc.get("custom_date_enlevement") or "") or None,
+			},
+			{
+				"key": "delivered",
+				"label": _("Livraison"),
+				"completed": status in {"Partiellement Livré", "Livré", "Non Livré"},
+				"completed_at": str(doc.get("custom_date_livraison") or "") or None,
+			},
+		],
+		[
+			{
+				"item_code": item.item_code,
+				"item_name": item.item_name,
+				"quantity": flt(item.qty),
+				"delivered_quantity": flt(item.get("custom_quantite_livree") or 0),
+			}
+			for item in doc.items or []
+		],
+	)
 
 
 @frappe.whitelist(allow_guest=True)

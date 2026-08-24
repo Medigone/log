@@ -1,0 +1,30 @@
+[
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Préparateur",
+  "role_name": "Préparateur"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Planificateur",
+  "role_name": "Planificateur"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Livreur",
+  "role_name": "Livreur"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Responsable",
+  "role_name": "Responsable"
+ }
+]

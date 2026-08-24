@@ -22,6 +22,15 @@ LOG_SO_TO_DN_FIELDS = (
 )
 
 CLOSED_SO_STATUSES = ("Closed", "On Hold", "Completed", "Cancelled")
+PREPARATION_ROLES = {"Préparateur", "Responsable", "System Manager"}
+
+
+def _require_preparation_role():
+	roles = set(frappe.get_roles(frappe.session.user))
+	if frappe.session.user == "Administrator":
+		return
+	if frappe.session.user == "Guest" or not roles & PREPARATION_ROLES:
+		frappe.throw(_("Vous n'avez pas accès à la préparation."), frappe.PermissionError)
 
 
 def _parse_list(value):
@@ -75,6 +84,7 @@ def serialize_pick_list(doc):
 	for loc in doc.get("locations") or []:
 		row = {
 			"name": loc.name,
+			"pick_list": doc.name,
 			"item_code": loc.item_code,
 			"item_name": loc.item_name,
 			"warehouse": loc.warehouse,
@@ -130,6 +140,29 @@ def serialize_pick_list(doc):
 	}
 
 
+def serialize_pick_session(docs):
+	serialized = [serialize_pick_list(doc) for doc in docs]
+	grouped_map = defaultdict(lambda: {"qty": 0, "stock_qty": 0, "picked_qty": 0, "locations": []})
+	for pick_list in serialized:
+		for location in pick_list["locations"]:
+			key = (location.get("item_code") or "", location.get("warehouse") or "")
+			bucket = grouped_map[key]
+			bucket["item_code"] = location.get("item_code")
+			bucket["item_name"] = location.get("item_name")
+			bucket["warehouse"] = location.get("warehouse")
+			bucket["uom"] = location.get("stock_uom") or location.get("uom")
+			bucket["qty"] += flt(location.get("qty"))
+			bucket["stock_qty"] += flt(location.get("stock_qty"))
+			bucket["picked_qty"] += flt(location.get("picked_qty"))
+			bucket["locations"].append(location)
+	return {
+		"name": "SESSION-" + "-".join(item["name"] for item in serialized),
+		"pick_lists": serialized,
+		"sales_orders": list(dict.fromkeys(so for item in serialized for so in item["sales_orders"])),
+		"grouped": list(grouped_map.values()),
+	}
+
+
 def _get_delivery_note_names(pick_list_name):
 	rows = frappe.get_all(
 		"Delivery Note Item",
@@ -165,6 +198,7 @@ def _is_from_pick_list(doc):
 @frappe.whitelist()
 def get_sales_orders_to_pick(search=None, limit=100):
 	"""Commandes soumises encore à prélever."""
+	_require_preparation_role()
 	limit = min(cint_or_default(limit, 100), 200)
 	filters = {
 		"docstatus": 1,
@@ -215,6 +249,23 @@ def get_sales_orders_to_pick(search=None, limit=100):
 	return orders
 
 
+@frappe.whitelist()
+def get_recent_pick_lists(limit=25):
+	"""Retourne les dernières sessions et leurs BL pour la vue de préparation."""
+	_require_preparation_role()
+	rows = frappe.get_all(
+		"Pick List",
+		filters={"purpose": "Delivery", "docstatus": ["<", 2]},
+		fields=["name", "docstatus", "status", "modified"],
+		order_by="modified desc",
+		limit=min(cint_or_default(limit, 25), 100),
+	)
+	for row in rows:
+		row["sales_order_count"] = len(serialize_pick_list(frappe.get_doc("Pick List", row.name))["sales_orders"])
+		row["delivery_notes"] = _get_delivery_note_names(row.name)
+	return rows
+
+
 def cint_or_default(value, default):
 	try:
 		return int(value)
@@ -224,7 +275,8 @@ def cint_or_default(value, default):
 
 @frappe.whitelist()
 def create_pick_list_from_sales_orders(sales_orders):
-	"""Crée (ou réutilise) une Pick List Delivery pour une ou plusieurs commandes."""
+	"""Crée une Pick List par commande et retourne une session groupée pour l'interface."""
+	_require_preparation_role()
 	sales_orders = _parse_list(sales_orders)
 	if not sales_orders:
 		frappe.throw(_("Sélectionnez au moins une commande."))
@@ -233,43 +285,51 @@ def create_pick_list_from_sales_orders(sales_orders):
 	for name in sales_orders:
 		_sales_order_pickable(name)
 
-	existing = _draft_pick_lists_for_orders(sales_orders)
-	selected = set(sales_orders)
-	if len(existing) == 1 and selected <= existing[0]["sales_orders"]:
-		return serialize_pick_list(frappe.get_doc("Pick List", existing[0]["name"]))
-	if existing:
-		names = ", ".join(pl["name"] for pl in existing)
-		frappe.throw(
-			_("Certaines commandes ont déjà une Pick List brouillon ({0}). Ouvrez-la ou annulez-la.").format(
-				names
-			)
-		)
-
 	from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
 
-	target = None
+	docs = []
 	for so_name in sales_orders:
-		target = create_pick_list(so_name, target)
-
-	if not target or not target.get("locations"):
-		frappe.throw(_("Aucune ligne à prélever pour les commandes sélectionnées."))
-
-	target.purpose = "Delivery"
-	if len({frappe.db.get_value("Sales Order", n, "customer") for n in sales_orders}) > 1:
-		target.customer = None
-	target.pick_manually = 0
-	target.insert(ignore_permissions=True)
-	return serialize_pick_list(target)
+		existing = _draft_pick_lists_for_orders([so_name])
+		if existing:
+			orders = existing[0]["sales_orders"]
+			if orders != {so_name}:
+				frappe.throw(
+					_("La commande {0} appartient à une ancienne Pick List groupée {1}.").format(
+						so_name, existing[0]["name"]
+					)
+				)
+			docs.append(frappe.get_doc("Pick List", existing[0]["name"]))
+			continue
+		target = create_pick_list(so_name)
+		if not target or not target.get("locations"):
+			frappe.throw(_("Aucune ligne à prélever pour la commande {0}.").format(so_name))
+		target.purpose = "Delivery"
+		target.pick_manually = 0
+		target.insert(ignore_permissions=True)
+		docs.append(target)
+	return serialize_pick_session(docs)
 
 
 @frappe.whitelist()
 def get_pick_list(pick_list):
+	_require_preparation_role()
 	return serialize_pick_list(frappe.get_doc("Pick List", pick_list))
+
+
+@frappe.whitelist()
+def get_pick_session(pick_lists):
+	"""Recharge une session visuelle composée de Pick Lists unitaires."""
+	_require_preparation_role()
+	names = list(dict.fromkeys(_parse_list(pick_lists)))
+	if not names:
+		frappe.throw(_("La session de préparation est vide."))
+	return serialize_pick_session([frappe.get_doc("Pick List", name) for name in names])
 
 
 @frappe.whitelist()
 def update_picked_qty(pick_list, locations):
 	"""Enregistre les quantités prélevées sur une Pick List brouillon."""
+	_require_preparation_role()
 	locations = _parse_list(locations)
 	doc = frappe.get_doc("Pick List", pick_list)
 	if doc.docstatus != 0:
@@ -286,6 +346,8 @@ def update_picked_qty(pick_list, locations):
 		picked = flt(picked)
 		if picked < 0:
 			frappe.throw(_("Quantité prélevée invalide pour {0}.").format(row.item_code))
+		if picked > flt(row.stock_qty):
+			frappe.throw(_("La quantité prélevée dépasse la quantité demandée pour {0}.").format(row.item_code))
 		row.picked_qty = picked
 
 	doc.pick_manually = 1
@@ -303,6 +365,7 @@ def _create_delivery_notes(pick_list_name):
 @frappe.whitelist()
 def submit_pick_list_and_create_dns(pick_list):
 	"""Soumet la Pick List puis crée les bons de livraison natifs."""
+	_require_preparation_role()
 	doc = frappe.get_doc("Pick List", pick_list)
 	if doc.purpose != "Delivery":
 		frappe.throw(_("Seules les Pick Lists de type Delivery peuvent créer un bon de livraison."))
@@ -311,7 +374,7 @@ def submit_pick_list_and_create_dns(pick_list):
 
 	if doc.docstatus == 0:
 		for loc in doc.locations:
-			if not flt(loc.picked_qty):
+			if loc.picked_qty is None:
 				loc.picked_qty = flt(loc.stock_qty)
 		doc.pick_manually = 1
 		doc.flags.ignore_permissions = True

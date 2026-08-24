@@ -3,10 +3,22 @@
 
 import frappe
 
+
+DISTRIBUTION_ROLES = ("Préparateur", "Planificateur", "Livreur", "Responsable")
+
+
+def ensure_distribution_roles():
+	for role_name in DISTRIBUTION_ROLES:
+		if not frappe.db.exists("Role", role_name):
+			frappe.get_doc({"doctype": "Role", "role_name": role_name, "desk_access": 1}).insert(
+				ignore_permissions=True
+			)
+
 def after_install():
-    """Hook exécuté après l'installation de l'app Log"""
-    frappe.msgprint("Installation de l'app Log terminée avec succès.")
+	"""Hook exécuté après l'installation de l'app Log"""
+	ensure_distribution_roles()
+	frappe.msgprint("Installation de l'app Log terminée avec succès.")
 
 def before_install():
-    """Hook exécuté avant l'installation de l'app Log"""
-    frappe.msgprint("Début de l'installation de l'app Log...")
+	"""Hook exécuté avant l'installation de l'app Log"""
+	frappe.msgprint("Début de l'installation de l'app Log...")

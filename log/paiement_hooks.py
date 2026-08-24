@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.exceptions import ValidationError
+from frappe.utils import flt
 
 
 def update_livraison_totals_on_paiement_change(doc, method=None):
@@ -29,6 +30,24 @@ def validate_paiement_client(doc, method=None):
 
 		if doc.client and not _client_has_bl_in_livraison(doc):
 			frappe.throw(_("Le client sélectionné n'a aucun bon de livraison dans cette tournée."))
+
+	if doc.moyen_paiement == "Chèque" and (not doc.photo_cheque or not doc.date_encaissement):
+		frappe.throw(_("La photo du chèque et sa date d'encaissement sont obligatoires."))
+
+	if doc.bon_livraison:
+		grand_total = flt(frappe.db.get_value("Delivery Note", doc.bon_livraison, "grand_total"))
+		paid = flt(
+			frappe.db.sql(
+				"""
+				SELECT COALESCE(SUM(montant), 0)
+				FROM `tabPaiement Client`
+				WHERE bon_livraison = %s AND name != %s
+				""",
+				(doc.bon_livraison, doc.name or "NEW"),
+			)[0][0]
+		)
+		if paid + flt(doc.montant) > grand_total:
+			frappe.throw(_("Le paiement dépasse le solde restant du bon de livraison."))
 
 
 def _client_has_bl_in_livraison(doc):

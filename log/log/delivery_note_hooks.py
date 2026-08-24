@@ -243,6 +243,11 @@ def validate_delivery_note(doc, method=None):
 	Validation du Delivery Note avant sauvegarde.
 	Vérifie que le véhicule sélectionné a un entrepôt associé.
 	"""
+	previous = doc.get_doc_before_save()
+	if previous and previous.get("custom_statut") == "Livré" and not getattr(
+		frappe.flags, "in_distribution_completion", False
+	):
+		frappe.throw(_("Ce bon de livraison est livré et ne peut plus être modifié."))
 	if doc.get("custom_véhicule"):
 		vehicle_warehouse = frappe.db.get_value("Vehicule", doc.custom_véhicule, "warehouse")
 		if not vehicle_warehouse:
@@ -251,4 +256,3 @@ def validate_delivery_note(doc, method=None):
 				indicator="orange",
 				alert=True
 			)
-

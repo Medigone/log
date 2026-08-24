@@ -1,13 +1,15 @@
 {
   "name": "log",
   "version": "1.0.0",
-  "description": "Logistique",
+  "description": "IntraPro Distribution",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "cd Colis && yarn install",
-    "dev": "cd Colis && yarn dev",
-    "build": "cd Colis && yarn build"
+    "test": "cd Distribution && yarn test",
+    "lint": "cd Distribution && yarn lint",
+    "typecheck": "cd Distribution && yarn typecheck",
+    "postinstall": "cd Distribution && yarn install",
+    "dev": "cd Distribution && yarn dev",
+    "build": "cd Distribution && yarn build"
   },
   "keywords": [],
   "author": "",

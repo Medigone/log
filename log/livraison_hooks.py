@@ -6,13 +6,6 @@ from frappe import _
 
 
 def update_livraisons_on_delivery_note_change(doc, method=None):
-	if not doc.get("__islocal") and doc.has_value_changed("custom_date_de_livraison"):
-		old_date = doc.get_doc_before_save().custom_date_de_livraison if doc.get_doc_before_save() else None
-		if old_date:
-			remove_delivery_note_from_livraisons(doc.name, old_date)
-		if doc.custom_date_de_livraison:
-			add_delivery_note_to_livraisons(doc.name, doc.custom_date_de_livraison)
-
 	if not doc.get("__islocal") and doc.has_value_changed("custom_statut"):
 		update_livraison_status_from_delivery_note(doc.name)
 
@@ -143,10 +136,6 @@ def after_insert_livraison(doc, method=None):
 
 
 def validate_livraison(doc, method=None):
-	if doc.batch_id:
-		return
-	if doc.date_liv and (not doc.bons_de_livraison or doc.has_value_changed("date_liv")):
-		doc.auto_load_delivery_notes_by_date()
 	doc.calculate_totals()
 
 

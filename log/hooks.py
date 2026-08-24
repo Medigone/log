@@ -1,7 +1,7 @@
 app_name = "log"
-app_title = "Log"
+app_title = "IntraPro Distribution"
 app_publisher = "IntraPro"
-app_description = "Logistique"
+app_description = "Préparation, planification et livraison"
 app_email = "admin@medigo.one"
 app_license = "mit"
 
@@ -11,15 +11,14 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
-# add_to_apps_screen = [
-# 	{
-# 		"name": "log",
-# 		"logo": "/assets/log/logo.png",
-# 		"title": "Log",
-# 		"route": "/log",
-# 		"has_permission": "log.api.permission.has_app_permission"
-# 	}
-# ]
+add_to_apps_screen = [
+    {
+        "name": "log",
+        "logo": "/assets/log/images/distribution-favicon.svg",
+        "title": "IntraPro Distribution",
+        "route": "/distribution",
+    }
+]
 
 # Includes in <head>
 # ------------------
@@ -120,13 +119,15 @@ after_install = "log.install.after_install"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
-# has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+permission_query_conditions = {
+    "Livraison": "log.distribution_permissions.livraison_query_conditions",
+    "Paiement Client": "log.distribution_permissions.paiement_query_conditions",
+}
+
+has_permission = {
+    "Livraison": "log.distribution_permissions.livraison_has_permission",
+    "Paiement Client": "log.distribution_permissions.paiement_has_permission",
+}
 
 # DocType Class
 # ---------------
@@ -163,6 +164,7 @@ doc_events = {
         "on_update": [
             "log.log.delivery_note_hooks.on_update_delivery_note",
             "log.livraison_hooks.update_livraisons_on_delivery_note_change",
+            "log.order_change_ops.invalidate_delivery_note_distribution",
             "log.delivery_note_ops.ensure_qr_code",
         ],
         "on_trash": "log.livraison_hooks.remove_deleted_delivery_note",
@@ -171,12 +173,11 @@ doc_events = {
         "on_cancel": "log.pick_list_ops.on_cancel_pick_list",
     },
     "Livraison": {
-        "after_insert": "log.livraison_hooks.after_insert_livraison",
         "validate": "log.livraison_hooks.validate_livraison",
-        "on_update": [
-            "log.livraison_hooks.update_livraison_on_date_change",
-            "log.livraison_hooks.update_delivery_notes_on_livraison_change",
-        ],
+    },
+    "Sales Order": {
+        "on_update_after_submit": "log.order_change_ops.invalidate_order_distribution",
+        "on_cancel": "log.order_change_ops.invalidate_order_distribution",
     },
     "Paiement Client": {
         "validate": "log.paiement_hooks.validate_paiement_client",
@@ -270,13 +271,21 @@ override_whitelisted_methods = {
 # 	"Logging DocType Name": 30  # days to retain logs
 # }
 
+website_redirects = [
+    {"source": r"/favicon\.ico", "target": "/assets/log/images/distribution-favicon.svg"},
+]
+
 website_route_rules = [
-    {"from_route": "/Colis/<path:app_path>", "to_route": "Colis"},
+    {"from_route": "/distribution/<path:app_path>", "to_route": "distribution"},
 ]
 
 fixtures = [
     "Workflow State",
     "Workflow",
+    {
+        "dt": "Role",
+        "filters": [["name", "in", ["Préparateur", "Planificateur", "Livreur", "Responsable"]]],
+    },
 ]
 
 after_migrate = [

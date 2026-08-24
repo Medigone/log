@@ -3,7 +3,7 @@ name = "log"
 authors = [
     { name = "IntraPro", email = "admin@medigo.one"}
 ]
-description = "Logistique"
+description = "IntraPro Distribution"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]
