@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -15,6 +15,7 @@ import {
   Printer,
   QrCode,
   RotateCcw,
+  ScanBarcode,
   Search,
 } from "lucide-react";
 import { apiErrorMessage } from "@/shared/api/distribution";
@@ -23,9 +24,12 @@ import {
   usePreparationMutations,
   usePreparationQueue,
   useRecentPickLists,
+  applyBarcodeScan,
   getPickGroupLocations,
   type DeliveryNoteResult,
+  type SalesOrderRow,
 } from "@/shared/api/preparation";
+import { ReturnControlPanel } from "@/features/preparation/ReturnControlPanel";
 
 function priority(date?: string) {
   if (!date) return { label: "Date à confirmer", className: "bg-slate-100 text-slate-600" };
@@ -44,6 +48,14 @@ function localIsoDate(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function formatQty(value: number) {
+  return new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 3 }).format(value);
+}
+
+function stockShortages(order: SalesOrderRow) {
+  return order.stock_shortages || [];
 }
 
 function isoDateWithOffset(days: number) {
@@ -127,6 +139,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
 
   const allSelected = filtered.length > 0 && filtered.every((row) => selected.has(row.name));
   const activeFilterCount = [dateScope !== "all", dateFrom, dateTo, wilaya, commune].filter(Boolean).length;
+  const insufficientOrders = selectedOrders.filter((order) => stockShortages(order).length > 0);
 
   useEffect(() => {
     if (!confirming) return;
@@ -175,7 +188,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
 
   const handleCreate = async () => {
     const names = selectedOrders.map((order) => order.name);
-    if (!names.length) return;
+    if (!names.length || insufficientOrders.length) return;
     setErrorMessage("");
     try {
       const session = await createPickList(names);
@@ -341,6 +354,9 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {stockShortages(row).length > 0 && (
+                  <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100">Stock insuffisant</Badge>
+                )}
                 <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${priority(row.delivery_date).className}`}>{priority(row.delivery_date).label}</span>
                 {row.draft_pick_list ? (
                   <Button
@@ -377,37 +393,52 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
             onMouseDown={(event) => event.stopPropagation()}
           >
             <div className="flex items-start gap-3">
-              <div className="rounded-xl bg-blue-50 p-2 text-blue-700">
-                <ClipboardList className="h-5 w-5" />
+              <div className={`rounded-xl p-2 ${insufficientOrders.length ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>
+                {insufficientOrders.length ? <AlertTriangle className="h-5 w-5" /> : <ClipboardList className="h-5 w-5" />}
               </div>
               <div>
                 <h2 id="confirm-pick-list-title" className="text-lg font-bold text-slate-950">
-                  Confirmer la création
+                  {insufficientOrders.length ? "Stock insuffisant" : "Confirmer la création"}
                 </h2>
                 <p id="confirm-pick-list-description" className="mt-1 text-sm text-slate-600">
-                  {selectedOrders.length} {selectedOrders.length > 1 ? "listes de prélèvement seront créées" : "liste de prélèvement sera créée"}, une par commande sélectionnée.
+                  {insufficientOrders.length
+                    ? "Réapprovisionnez l’entrepôt avant de créer la liste. ERPNext ne peut pas prélever un article sans stock disponible."
+                    : `${selectedOrders.length} ${selectedOrders.length > 1 ? "listes de prélèvement seront créées" : "liste de prélèvement sera créée"}, une par commande sélectionnée.`}
                 </p>
               </div>
             </div>
 
             <div className="mt-5 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
-              {selectedOrders.map((order) => (
-                <div key={order.name} className="flex items-center justify-between gap-3 text-sm">
-                  <strong className="text-slate-900">{order.name}</strong>
-                  <span className="truncate text-slate-500">{order.customer_name || order.customer || "Client non renseigné"}</span>
-                </div>
-              ))}
+              {selectedOrders.map((order) => {
+                const shortages = stockShortages(order);
+                return (
+                  <div key={order.name} className="space-y-1">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <strong className="text-slate-900">{order.name}</strong>
+                      <span className="truncate text-slate-500">{order.customer_name || order.customer || "Client non renseigné"}</span>
+                    </div>
+                    {shortages.map((shortage) => (
+                      <p key={`${order.name}-${shortage.item_code}`} className="text-xs text-red-700">
+                        {shortage.item_name || shortage.item_code} : {formatQty(shortage.required)} demandé, {formatQty(shortage.available)} disponible
+                        {shortage.warehouse ? ` · ${shortage.warehouse}` : ""}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
 
             <p className="mt-4 text-xs text-slate-500">
-              Les listes seront créées en brouillon et pourront être contrôlées avant la génération des bons de livraison.
+              {insufficientOrders.length
+                ? "Désélectionnez les commandes en rupture ou réceptionnez le stock, puis réessayez."
+                : "Les listes seront créées en brouillon et pourront être contrôlées avant la génération des bons de livraison."}
             </p>
 
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setConfirming(false)} disabled={creating}>
                 Annuler
               </Button>
-              <Button ref={confirmButtonRef} type="button" onClick={handleCreate} disabled={creating}>
+              <Button ref={confirmButtonRef} type="button" onClick={handleCreate} disabled={creating || insufficientOrders.length > 0}>
                 <ClipboardList className="mr-2 h-4 w-4" />
                 {creating ? "Création…" : "Confirmer la création"}
               </Button>
@@ -433,23 +464,52 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const [createdNotes, setCreatedNotes] = useState<DeliveryNoteResult[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [reviewing, setReviewing] = useState(false);
+  const [confirmingBl, setConfirmingBl] = useState(false);
+  const [scanValue, setScanValue] = useState("");
+  const [scanMessage, setScanMessage] = useState("");
+  const [scanError, setScanError] = useState("");
+  const [lastScannedKey, setLastScannedKey] = useState("");
+  const scanInputRef = useRef<HTMLInputElement>(null);
+  const confirmBlButtonRef = useRef<HTMLButtonElement>(null);
+  const groupRefs = useRef<Record<string, HTMLElement | null>>({});
+  const pickedRef = useRef<Record<string, number>>({});
 
   const { data, mutate, error, isLoading } = usePickSession(pickListNames);
-  const { updateQuantities, submitPickList, saving, submitting } = usePreparationMutations();
+  const { updateQuantities, submitPickList, scanPickItem, saving, submitting, scanning } = usePreparationMutations();
 
   const session = data?.message;
   const pickLists = session?.pick_lists || [];
+  const draftOpen = pickLists.some((item) => item.docstatus === 0);
 
   useEffect(() => {
     if (!session?.pick_lists) return;
     const next: Record<string, number> = {};
     session.pick_lists.flatMap((pickList) => pickList.locations || []).forEach((loc) => {
-      next[loc.name] = loc.picked_qty ?? loc.stock_qty ?? loc.qty ?? 0;
+      next[loc.name] = loc.picked_qty ?? 0;
     });
+    pickedRef.current = next;
     setPicked(next);
   }, [session]);
 
   const grouped = session?.grouped || [];
+  const blCount = session?.sales_orders?.length || pickLists.length;
+  const varianceGroups = grouped.filter((group) => {
+    const pickedTotal = getPickGroupLocations(group).reduce(
+      (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
+      0,
+    );
+    return pickedTotal !== group.stock_qty;
+  });
+
+  useEffect(() => {
+    if (!confirmingBl) return;
+    confirmBlButtonRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !submitting && !saving) setConfirmingBl(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [confirmingBl, saving, submitting]);
 
   const persistQty = async () => {
     for (const pickList of pickLists.filter((item) => item.docstatus === 0)) {
@@ -467,6 +527,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     pickLists.flatMap((pickList) => pickList.locations || []).forEach((loc) => {
       next[loc.name] = loc.stock_qty || loc.qty || 0;
     });
+    pickedRef.current = next;
     setPicked(next);
   };
 
@@ -481,9 +542,44 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       }
       setCreatedNotes(notes);
       setReviewing(false);
+      setConfirmingBl(false);
       mutate();
     } catch (mutationError) {
+      setConfirmingBl(false);
       setErrorMessage(apiErrorMessage(mutationError));
+    }
+  };
+
+  const handleScan = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = scanValue.trim();
+    if (!value || reviewing || scanning || !draftOpen) return;
+    setScanMessage("");
+    setScanError("");
+    try {
+      const result = await scanPickItem(value, pickListNames);
+      const locations = pickLists.flatMap((pickList) => pickList.locations || []);
+      const applied = applyBarcodeScan(locations, pickedRef.current, result.item_code, result.increment || 1);
+      if (!applied.ok) {
+        setScanError(
+          applied.reason === "already_complete"
+            ? `Quantité demandée déjà atteinte pour ${result.item_name || result.item_code}.`
+            : "Cet article n'est pas dans la session de préparation.",
+        );
+        return;
+      }
+      const next = { ...pickedRef.current, [applied.locationName]: applied.nextQty };
+      pickedRef.current = next;
+      setPicked(next);
+      const groupKey = `${applied.itemCode}-${applied.warehouse || ""}`;
+      setLastScannedKey(groupKey);
+      setScanMessage(`${result.item_name || result.item_code} · +${result.increment || 1}`);
+      groupRefs.current[groupKey]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } catch (scanException) {
+      setScanError(apiErrorMessage(scanException));
+    } finally {
+      setScanValue("");
+      scanInputRef.current?.focus();
     }
   };
 
@@ -497,7 +593,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
           </Button>
           <h1 className="text-2xl font-semibold">Session de préparation</h1>
           <p className="text-muted-foreground text-sm">
-            Confirmez les quantités prélevées, puis créez les bons de livraison.
+            Scannez les articles pour compter les quantités, puis créez les bons de livraison.
           </p>
         </div>
         {session && <Badge>{pickLists.every((item) => item.docstatus === 1) ? "Soumise" : `${pickLists.length} ${pickLists.length > 1 ? "listes de prélèvement" : "liste de prélèvement"}`}</Badge>}
@@ -513,6 +609,16 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
           <AlertDescription className="text-emerald-800">
             <strong>Liste de prélèvement créée avec succès.</strong>
             <span>{pickListNames.join(", ")}</span>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {createdNotes.length > 0 && (
+        <Alert role="status" className="border-emerald-200 bg-emerald-50 text-emerald-900">
+          <CheckCircle className="text-emerald-700" />
+          <AlertDescription className="text-emerald-800">
+            <strong>Bons de livraison créés avec succès.</strong>
+            <span> {createdNotes.map((note) => note.name).join(", ")}</span>
           </AlertDescription>
         </Alert>
       )}
@@ -542,12 +648,41 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
           )}
         </CardHeader>
         <CardContent className="space-y-4">
+          {!reviewing && draftOpen && (
+            <form onSubmit={handleScan} className="sticky top-0 z-10 space-y-2 rounded-lg border border-blue-200 bg-blue-50/80 p-3 backdrop-blur">
+              <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                <ScanBarcode className="h-4 w-4" />
+                Code-barres article
+              </label>
+              <Input
+                id="pick-scan-barcode"
+                ref={scanInputRef}
+                value={scanValue}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                autoFocus
+                disabled={scanning || submitting || saving}
+                placeholder="Scanner puis Entrée"
+                onChange={(event) => setScanValue(event.target.value)}
+              />
+              <p className={`text-xs ${scanError ? "text-red-700" : "text-slate-600"}`} aria-live="polite">
+                {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack) jusqu’à la quantité demandée."}
+              </p>
+            </form>
+          )}
           {isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
           {!isLoading && grouped.length === 0 && (
             <p className="text-sm text-muted-foreground">Aucune ligne dans cette liste de prélèvement.</p>
           )}
           {!reviewing && grouped.map((group) => (
-            <div key={`${group.item_code}-${group.warehouse}`} className="rounded-lg border p-3 space-y-2">
+            <div
+              key={`${group.item_code}-${group.warehouse}`}
+              ref={(node) => {
+                groupRefs.current[`${group.item_code}-${group.warehouse || ""}`] = node;
+              }}
+              className={`rounded-lg border p-3 space-y-2 ${lastScannedKey === `${group.item_code}-${group.warehouse || ""}` ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300" : ""}`}
+            >
               <div>
                 <div className="font-medium text-sm">
                   {group.item_code} · {group.item_name}
@@ -572,7 +707,11 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
                       disabled={pickLists.find((item) => item.name === loc.pick_list)?.docstatus !== 0}
                       value={picked[loc.name] ?? loc.picked_qty ?? 0}
                       onChange={(e) =>
-                        setPicked((prev) => ({ ...prev, [loc.name]: Number(e.target.value) }))
+                        setPicked((prev) => {
+                          const next = { ...prev, [loc.name]: Number(e.target.value) };
+                          pickedRef.current = next;
+                          return next;
+                        })
                       }
                     />
                   </div>
@@ -580,9 +719,106 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               ))}
             </div>
           ))}
-          {reviewing && <div className="space-y-4"><div className="rounded-xl border border-amber-200 bg-amber-50 p-4"><div className="flex gap-3"><AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" /><div><h3 className="font-bold text-amber-900">Vérifiez les écarts avant création des BL</h3><p className="mt-1 text-sm text-amber-800">Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.</p></div></div></div>{grouped.map((group) => { const pickedTotal = getPickGroupLocations(group).reduce((sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0), 0); const difference = pickedTotal - group.stock_qty; return <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[1fr_auto_auto_auto]"><div><p className="text-sm font-bold text-slate-900">{group.item_code} · {group.item_name}</p><p className="text-xs text-slate-500">{group.warehouse || "Emplacement non défini"}</p></div><p className="text-sm"><span className="block text-xs text-slate-500">Demandé</span><strong>{group.stock_qty}</strong></p><p className="text-sm"><span className="block text-xs text-slate-500">Prélevé</span><strong>{pickedTotal}</strong></p><p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}><span className="block text-xs">Écart</span><strong>{difference > 0 ? "+" : ""}{difference}</strong></p></div>; })}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button><Button onClick={handleSubmit} disabled={submitting || saving}><CheckCircle />Confirmer et créer les BL</Button></div></div>}
+          {reviewing && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+                  <div>
+                    <h3 className="font-bold text-amber-900">Vérifiez les écarts avant création des BL</h3>
+                    <p className="mt-1 text-sm text-amber-800">
+                      Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              {grouped.map((group) => {
+                const pickedTotal = getPickGroupLocations(group).reduce(
+                  (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
+                  0,
+                );
+                const difference = pickedTotal - group.stock_qty;
+                return (
+                  <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[1fr_auto_auto_auto]">
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{group.item_code} · {group.item_name}</p>
+                      <p className="text-xs text-slate-500">{group.warehouse || "Emplacement non défini"}</p>
+                    </div>
+                    <p className="text-sm"><span className="block text-xs text-slate-500">Demandé</span><strong>{group.stock_qty}</strong></p>
+                    <p className="text-sm"><span className="block text-xs text-slate-500">Prélevé</span><strong>{pickedTotal}</strong></p>
+                    <p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                      <span className="block text-xs">Écart</span>
+                      <strong>{difference > 0 ? "+" : ""}{difference}</strong>
+                    </p>
+                  </div>
+                );
+              })}
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button>
+                <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving}>
+                  <CheckCircle />
+                  Confirmer et créer les BL
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {confirmingBl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
+          onMouseDown={() => !submitting && !saving && setConfirmingBl(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-delivery-notes-title"
+            aria-describedby="confirm-delivery-notes-description"
+            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`rounded-xl p-2 ${varianceGroups.length ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
+                {varianceGroups.length ? <AlertTriangle className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+              </div>
+              <div>
+                <h2 id="confirm-delivery-notes-title" className="text-lg font-bold text-slate-950">
+                  Confirmer la création des BL
+                </h2>
+                <p id="confirm-delivery-notes-description" className="mt-1 text-sm text-slate-600">
+                  {blCount > 1
+                    ? `${blCount} bons de livraison seront créés, un par commande de la session.`
+                    : "Un bon de livraison sera créé pour la commande de cette session."}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+              <p><strong>{pickLists.length}</strong> {pickLists.length > 1 ? "listes de prélèvement seront soumises" : "liste de prélèvement sera soumise"}.</p>
+              {varianceGroups.length > 0 && (
+                <p className="text-amber-800">
+                  {varianceGroups.length} article{varianceGroups.length > 1 ? "s" : ""} avec écart : les BL partiront des quantités prélevées, pas des quantités demandées.
+                </p>
+              )}
+            </div>
+
+            <p className="mt-4 text-xs text-slate-500">
+              Cette action enregistre les quantités, soumet les listes et crée les BL. Elle ne peut pas être annulée.
+            </p>
+
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button type="button" variant="outline" onClick={() => setConfirmingBl(false)} disabled={submitting || saving}>
+                Annuler
+              </Button>
+              <Button ref={confirmBlButtonRef} type="button" onClick={handleSubmit} disabled={submitting || saving}>
+                <Package className="mr-2 h-4 w-4" />
+                {submitting || saving ? "Création…" : "Créer les BL"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {createdNotes.length > 0 && (
         <Card>
@@ -636,11 +872,14 @@ export function PreparationPage() {
   }
 
   return (
-    <SalesOrderPicker
-      onOpenPickLists={(names, created = false) => {
-        setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
-      }}
-    />
+    <div className="space-y-6">
+      <ReturnControlPanel />
+      <SalesOrderPicker
+        onOpenPickLists={(names, created = false) => {
+          setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
+        }}
+      />
+    </div>
   );
 }
 

@@ -9,7 +9,7 @@ from frappe.utils import cint, flt, get_datetime, getdate
 
 from log.api.distribution_rules import can_transition_route, capacity_error, intervals_overlap
 
-ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours")
+ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours", "Retour dépôt", "Contrôle caisse")
 
 
 class Livraison(Document):
@@ -84,14 +84,15 @@ class Livraison(Document):
 			frappe.throw("Un bon de livraison ne peut apparaître qu'une fois dans une tournée.")
 		if state in ACTIVE_ROUTE_STATES:
 			for delivery_note in rows:
+				state_placeholders = ", ".join(["%s"] * len(ACTIVE_ROUTE_STATES))
 				conflict = frappe.db.sql(
-					"""
+					f"""
 					SELECT l.name
 					FROM `tabLivraison Bon de Livraison` child
 					JOIN `tabLivraison` l ON l.name = child.parent
 					WHERE child.bon_de_livraison = %s
 					  AND l.name != %s
-					  AND l.etat_planification IN (%s, %s, %s)
+					  AND l.etat_planification IN ({state_placeholders})
 					  AND l.docstatus < 2
 					LIMIT 1
 					""",

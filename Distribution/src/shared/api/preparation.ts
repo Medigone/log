@@ -2,6 +2,14 @@ import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 
 interface FrappeMessage<T> { message: T }
 
+export interface StockShortage {
+  item_code: string;
+  item_name?: string;
+  warehouse?: string;
+  required: number;
+  available: number;
+}
+
 export interface SalesOrderRow {
   name: string;
   customer?: string;
@@ -15,6 +23,7 @@ export interface SalesOrderRow {
   custom_commune_nom?: string;
   custom_wilaya?: string;
   draft_pick_list?: string;
+  stock_shortages?: StockShortage[];
 }
 
 export interface PickLocation {
@@ -46,6 +55,43 @@ export function getPickGroupLocations(group: PickGroup): PickLocation[] {
   if (Array.isArray(group.locations)) return group.locations;
   if (Array.isArray(group.rows)) return group.rows;
   return [];
+}
+
+export interface PickScanResult {
+  item_code: string;
+  item_name?: string;
+  uom?: string;
+  increment: number;
+  barcode?: string;
+}
+
+export type BarcodeScanApply =
+  | { ok: true; locationName: string; itemCode: string; warehouse?: string; nextQty: number }
+  | { ok: false; reason: "not_in_session" | "already_complete" };
+
+export function applyBarcodeScan(
+  locations: PickLocation[],
+  picked: Record<string, number>,
+  itemCode: string,
+  increment: number,
+): BarcodeScanApply {
+  const matches = locations.filter((location) => location.item_code === itemCode);
+  if (!matches.length) return { ok: false, reason: "not_in_session" };
+  const step = increment > 0 ? increment : 1;
+  for (const location of matches) {
+    const current = picked[location.name] ?? location.picked_qty ?? 0;
+    const remaining = location.stock_qty - current;
+    if (remaining > 0) {
+      return {
+        ok: true,
+        locationName: location.name,
+        itemCode,
+        warehouse: location.warehouse,
+        nextQty: current + Math.min(step, remaining),
+      };
+    }
+  }
+  return { ok: false, reason: "already_complete" };
 }
 
 export interface PickListData {
@@ -125,13 +171,19 @@ export function usePreparationMutations() {
   const submit = useFrappePostCall<FrappeMessage<{ delivery_notes: DeliveryNoteResult[] }>>(
     "log.pick_list_ops.submit_pick_list_and_create_dns",
   );
+  const scan = useFrappePostCall<FrappeMessage<PickScanResult>>(
+    "log.pick_list_ops.scan_pick_item",
+  );
   return {
     createPickList: async (salesOrders: string[]) => (await create.call({ sales_orders: salesOrders })).message,
     updateQuantities: async (pickList: string, locations: Array<{ name: string; picked_qty: number }>) =>
       (await update.call({ pick_list: pickList, locations })).message,
     submitPickList: async (pickList: string) => (await submit.call({ pick_list: pickList })).message,
+    scanPickItem: async (searchValue: string, pickLists: string[]) =>
+      (await scan.call({ search_value: searchValue, pick_lists: pickLists })).message,
     creating: create.loading,
     saving: update.loading,
     submitting: submit.loading,
+    scanning: scan.loading,
   };
 }

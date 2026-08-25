@@ -22,6 +22,16 @@
   "recu",
   "photo_cheque",
   "date_encaissement",
+  "numero_cheque",
+  "section_controle_caisse",
+  "statut_controle",
+  "facture_source",
+  "montant_compte",
+  "payment_entry",
+  "caissier",
+  "date_controle",
+  "motif_ecart",
+  "affectations",
   "request_id"
  ],
  "fields": [
@@ -133,6 +143,73 @@
    "mandatory_depends_on": "eval:(doc.moyen_paiement==\"Ch\u00e8que\")"
   },
   {
+   "depends_on": "eval:(doc.moyen_paiement==\"Chèque\")",
+   "fieldname": "numero_cheque",
+   "fieldtype": "Data",
+   "label": "Numéro du chèque"
+  },
+  {
+   "fieldname": "section_controle_caisse",
+   "fieldtype": "Section Break",
+   "label": "Contrôle de caisse"
+  },
+  {
+   "default": "Déclaré",
+   "fieldname": "statut_controle",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Statut du contrôle",
+   "options": "Déclaré\nÀ contrôler\nValidé\nÉcart\nAnnulé",
+   "read_only": 1
+  },
+  {
+   "fieldname": "facture_source",
+   "fieldtype": "Link",
+   "label": "Facture issue du BL",
+   "options": "Sales Invoice",
+   "read_only": 1
+  },
+  {
+   "fieldname": "montant_compte",
+   "fieldtype": "Currency",
+   "label": "Montant compté",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_entry",
+   "fieldtype": "Link",
+   "label": "Écriture de paiement",
+   "options": "Payment Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "caissier",
+   "fieldtype": "Link",
+   "label": "Caissier",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_controle",
+   "fieldtype": "Datetime",
+   "label": "Date du contrôle",
+   "read_only": 1
+  },
+  {
+   "fieldname": "motif_ecart",
+   "fieldtype": "Small Text",
+   "label": "Motif de l'écart",
+   "read_only": 1
+  },
+  {
+   "fieldname": "affectations",
+   "fieldtype": "Table",
+   "label": "Affectations aux factures",
+   "options": "Affectation Encaissement",
+   "read_only": 1
+  },
+  {
    "fieldname": "livraison",
    "fieldtype": "Link",
    "label": "Livraison",
@@ -190,6 +267,13 @@
    "report": 1,
    "role": "System Manager",
    "share": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Caissier",
    "write": 1
   }
  ],

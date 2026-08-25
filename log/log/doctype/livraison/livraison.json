@@ -38,6 +38,33 @@
   "total_montant_a_encaisser",
   "total_paiements",
   "solde_restant",
+  "section_stock_distribution",
+  "statut_chargement",
+  "stock_entry_chargement",
+  "date_chargement",
+  "charge_par",
+  "column_stock_distribution",
+  "stock_entry_retour",
+  "date_declaration_retour",
+  "retour_declare_par",
+  "date_confirmation_retour",
+  "retour_confirme_par",
+  "total_quantite_chargee",
+  "total_quantite_livree",
+  "total_quantite_restante",
+  "total_quantite_retournee",
+  "lignes_chargement",
+  "section_caisse_distribution",
+  "statut_caisse",
+  "total_encaisse_declare",
+  "total_encaisse_compte",
+  "total_encaisse_valide",
+  "controle_caisse_par",
+  "date_controle_caisse",
+  "motif_ecart_caisse",
+  "last_start_request_id",
+  "last_return_request_id",
+  "last_return_confirmation_request_id",
   "routing_geometry",
   "routing_distance_m",
   "routing_duration_s",
@@ -55,7 +82,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "État de planification",
-   "options": "Brouillon\nPubliée\nEn cours\nTerminée\nAnnulée",
+   "options": "Brouillon\nPubliée\nEn cours\nRetour dépôt\nContrôle caisse\nTerminée\nAnnulée",
    "reqd": 1
   },
   {
@@ -243,6 +270,184 @@
    "read_only": 1
   },
   {
+   "fieldname": "section_stock_distribution",
+   "fieldtype": "Section Break",
+   "label": "Chargement et retour véhicule"
+  },
+  {
+   "default": "À charger",
+   "fieldname": "statut_chargement",
+   "fieldtype": "Select",
+   "label": "Statut du chargement",
+   "options": "À charger\nChargé\nRetour requis\nRetour déclaré\nRetourné\nException",
+   "read_only": 1
+  },
+  {
+   "fieldname": "stock_entry_chargement",
+   "fieldtype": "Link",
+   "label": "Transfert de chargement",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_chargement",
+   "fieldtype": "Datetime",
+   "label": "Chargé le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "charge_par",
+   "fieldtype": "Link",
+   "label": "Chargé par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_stock_distribution",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stock_entry_retour",
+   "fieldtype": "Link",
+   "label": "Transfert de retour",
+   "options": "Stock Entry",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_declaration_retour",
+   "fieldtype": "Datetime",
+   "label": "Retour déclaré le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retour_declare_par",
+   "fieldtype": "Link",
+   "label": "Retour déclaré par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_confirmation_retour",
+   "fieldtype": "Datetime",
+   "label": "Retour confirmé le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "retour_confirme_par",
+   "fieldtype": "Link",
+   "label": "Retour confirmé par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_quantite_chargee",
+   "fieldtype": "Float",
+   "label": "Quantité chargée",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_quantite_livree",
+   "fieldtype": "Float",
+   "label": "Quantité livrée",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_quantite_restante",
+   "fieldtype": "Float",
+   "label": "Quantité restante",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_quantite_retournee",
+   "fieldtype": "Float",
+   "label": "Quantité retournée",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lignes_chargement",
+   "fieldtype": "Table",
+   "label": "Lignes de chargement",
+   "options": "Ligne Chargement Tournee",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_caisse_distribution",
+   "fieldtype": "Section Break",
+   "label": "Contrôle de caisse"
+  },
+  {
+   "default": "Sans encaissement",
+   "fieldname": "statut_caisse",
+   "fieldtype": "Select",
+   "label": "Statut de caisse",
+   "options": "Sans encaissement\nÀ contrôler\nÉcart\nValidée",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_encaisse_declare",
+   "fieldtype": "Currency",
+   "label": "Total déclaré",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_encaisse_compte",
+   "fieldtype": "Currency",
+   "label": "Total compté",
+   "read_only": 1
+  },
+  {
+   "fieldname": "total_encaisse_valide",
+   "fieldtype": "Currency",
+   "label": "Total validé",
+   "read_only": 1
+  },
+  {
+   "fieldname": "controle_caisse_par",
+   "fieldtype": "Link",
+   "label": "Contrôlé par",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "date_controle_caisse",
+   "fieldtype": "Datetime",
+   "label": "Contrôlé le",
+   "read_only": 1
+  },
+  {
+   "fieldname": "motif_ecart_caisse",
+   "fieldtype": "Small Text",
+   "label": "Motif de l'écart",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_start_request_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Dernière requête de démarrage",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "last_return_request_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Dernière requête de déclaration de retour",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "last_return_confirmation_request_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Dernière requête de confirmation de retour",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
    "fieldname": "routing_geometry",
    "fieldtype": "Long Text",
    "hidden": 1,
@@ -349,6 +554,13 @@
    "print": 1,
    "read": 1,
    "role": "Livreur"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Caissier"
   },
   {
    "create": 1,

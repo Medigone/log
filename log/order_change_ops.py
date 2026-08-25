@@ -301,7 +301,9 @@ def reprepare_order(sales_order: str, expected_revision=None):
 				frappe.delete_doc("Pick List", name, ignore_permissions=True, force=True)
 
 		from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
+		from log.pick_list_ops import unreserve_sales_order_stock
 
+		unreserve_sales_order_stock(sales_order)
 		new_pick_list = create_pick_list(sales_order)
 		if not new_pick_list or not new_pick_list.get("locations"):
 			frappe.throw(_("La commande actualisée ne contient plus rien à préparer."))

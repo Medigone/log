@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { confirmOperation, markOperationAttempt, queueOperation, readPendingOperations } from "@/shared/persistence/pendingOperations";
+import { clearPendingOperations, confirmOperation, markOperationAttempt, queueOperation, readPendingOperations } from "@/shared/persistence/pendingOperations";
 import type { StopCompletionPayload } from "@/shared/types/distribution";
 
 const payload: StopCompletionPayload = {
@@ -8,7 +8,7 @@ const payload: StopCompletionPayload = {
   deliveryNote: "DN-1",
   outcome: "delivered",
   items: [],
-  evidence: { latitude: 36.75, longitude: 3.04, photoData: "data:image/jpeg;base64,AA==" },
+  evidence: { latitude: 36.75, longitude: 3.04, accuracy: 24, photoData: "data:image/jpeg;base64,AA==" },
 };
 
 describe("pendingOperations", () => {
@@ -16,6 +16,7 @@ describe("pendingOperations", () => {
   it("conserve une opération jusqu'à confirmation du serveur", () => {
     queueOperation(payload);
     expect(readPendingOperations()).toHaveLength(1);
+    expect(readPendingOperations()[0].payload.evidence.accuracy).toBe(24);
     markOperationAttempt(payload.requestId);
     expect(readPendingOperations()[0].attempts).toBe(1);
     confirmOperation(payload.requestId);
@@ -25,5 +26,10 @@ describe("pendingOperations", () => {
     queueOperation(payload);
     queueOperation(payload);
     expect(readPendingOperations()).toHaveLength(1);
+  });
+  it("vide toute la file d'attente", () => {
+    queueOperation(payload);
+    expect(clearPendingOperations()).toHaveLength(1);
+    expect(readPendingOperations()).toEqual([]);
   });
 });

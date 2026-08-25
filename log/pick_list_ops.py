@@ -56,6 +56,152 @@ def _sales_order_pickable(name):
 	return so
 
 
+def _required_pick_qty(item) -> float:
+	picked = flt(item.get("picked_qty")) / (flt(item.get("conversion_factor")) or 1)
+	return flt(item.get("qty")) - max(picked, flt(item.get("delivered_qty")))
+
+
+def _bundle_item_codes(item_codes):
+	if not item_codes:
+		return set()
+	return set(
+		frappe.get_all(
+			"Product Bundle",
+			filters={"new_item_code": ["in", list(item_codes)], "disabled": 0},
+			pluck="new_item_code",
+		)
+	)
+
+
+def _company_available_qty(item_codes, company) -> dict[str, float]:
+	if not item_codes or not company:
+		return {}
+	rows = frappe.db.sql(
+		"""
+		SELECT bin.item_code, SUM(bin.actual_qty) AS qty
+		FROM `tabBin` bin
+		INNER JOIN `tabWarehouse` warehouse ON warehouse.name = bin.warehouse
+		WHERE bin.item_code IN %(items)s AND warehouse.company = %(company)s
+		GROUP BY bin.item_code
+		""",
+		{"items": list(item_codes), "company": company},
+		as_dict=True,
+	)
+	return {row.item_code: flt(row.qty) for row in rows}
+
+
+def stock_shortages_for_items(items, *, available_by_item: dict[str, float], bundle_codes=None) -> list[dict]:
+	"""Retourne les lignes dont le stock société est inférieur à la quantité encore à prélever."""
+	bundle_codes = set(bundle_codes or ())
+	required_by_item: dict[str, dict] = {}
+	for item in items:
+		item_code = item.get("item_code")
+		if not item_code or item.get("delivered_by_supplier") or item_code in bundle_codes:
+			continue
+		required = _required_pick_qty(item)
+		if required <= 0:
+			continue
+		bucket = required_by_item.setdefault(
+			item_code,
+			{
+				"item_code": item_code,
+				"item_name": item.get("item_name") or item_code,
+				"warehouse": item.get("warehouse"),
+				"required": 0.0,
+			},
+		)
+		bucket["required"] += required
+		if item.get("warehouse") and not bucket.get("warehouse"):
+			bucket["warehouse"] = item.get("warehouse")
+
+	shortages = []
+	for item_code, bucket in required_by_item.items():
+		available = flt(available_by_item.get(item_code))
+		if available + 0.000001 < bucket["required"]:
+			shortages.append({**bucket, "available": available})
+	return shortages
+
+
+def _stock_shortages_for_orders(orders) -> dict[str, list[dict]]:
+	so_names = [order.name for order in orders]
+	if not so_names:
+		return {}
+	items = frappe.get_all(
+		"Sales Order Item",
+		filters={"parent": ["in", so_names]},
+		fields=[
+			"parent",
+			"item_code",
+			"item_name",
+			"qty",
+			"delivered_qty",
+			"picked_qty",
+			"warehouse",
+			"conversion_factor",
+			"delivered_by_supplier",
+		],
+	)
+	by_order = defaultdict(list)
+	for item in items:
+		by_order[item.parent].append(item)
+	item_codes = {item.item_code for item in items if item.item_code}
+	bundle_codes = _bundle_item_codes(item_codes)
+	available_by_company: dict[str, dict[str, float]] = {}
+	result = {}
+	for order in orders:
+		company = order.get("company")
+		if company not in available_by_company:
+			available_by_company[company] = _company_available_qty(item_codes, company)
+		result[order.name] = stock_shortages_for_items(
+			by_order.get(order.name, []),
+			available_by_item=available_by_company.get(company) or {},
+			bundle_codes=bundle_codes,
+		)
+	return result
+
+
+def _stock_reservation_names_for_order(so_name: str) -> list[str]:
+	return frappe.get_all(
+		"Stock Reservation Entry",
+		filters={"voucher_type": "Sales Order", "voucher_no": so_name, "docstatus": 1},
+		pluck="name",
+	)
+
+
+def unreserve_sales_order_stock(so_name: str) -> None:
+	"""Annule les réservations ERPNext de la commande : incompatibles avec une Pick List."""
+	for name in _stock_reservation_names_for_order(so_name):
+		doc = frappe.get_doc("Stock Reservation Entry", name)
+		if doc.docstatus != 1:
+			continue
+		doc.flags.ignore_permissions = True
+		doc.cancel()
+
+
+def _throw_if_insufficient_stock(so_name):
+	so = frappe.get_doc("Sales Order", so_name)
+	shortages = stock_shortages_for_items(
+		so.items,
+		available_by_item=_company_available_qty({item.item_code for item in so.items if item.item_code}, so.company),
+		bundle_codes=_bundle_item_codes({item.item_code for item in so.items if item.item_code}),
+	)
+	if not shortages:
+		return
+	details = "; ".join(
+		_("{0} : {1} demandé, {2} disponible{3}").format(
+			row["item_name"],
+			flt(row["required"], 3),
+			flt(row["available"], 3),
+			f" ({row['warehouse']})" if row.get("warehouse") else "",
+		)
+		for row in shortages
+	)
+	frappe.throw(
+		_("Stock insuffisant pour créer la liste de prélèvement de {0}. {1}").format(so_name, details),
+		title=_("Stock insuffisant"),
+	)
+
+
 def _draft_pick_lists_for_orders(sales_orders):
 	if not sales_orders:
 		return []
@@ -261,8 +407,10 @@ def get_sales_orders_to_pick(search=None, limit=100):
 	)
 	so_names = [o.name for o in orders]
 	drafts = {so: pl["name"] for pl in _draft_pick_lists_for_orders(so_names) for so in pl["sales_orders"]}
+	shortages = _stock_shortages_for_orders(orders)
 	for order in orders:
 		order["draft_pick_list"] = drafts.get(order.name)
+		order["stock_shortages"] = shortages.get(order.name, [])
 	return _attach_commune_names(orders)
 
 
@@ -317,8 +465,11 @@ def create_pick_list_from_sales_orders(sales_orders):
 				)
 			docs.append(frappe.get_doc("Pick List", existing[0]["name"]))
 			continue
+		_throw_if_insufficient_stock(so_name)
+		unreserve_sales_order_stock(so_name)
 		target = create_pick_list(so_name)
 		if not target or not target.get("locations"):
+			_throw_if_insufficient_stock(so_name)
 			frappe.throw(_("Aucune ligne à prélever pour la commande {0}.").format(so_name))
 		target.purpose = "Delivery"
 		target.pick_manually = 0
@@ -341,6 +492,75 @@ def get_pick_session(pick_lists):
 	if not names:
 		frappe.throw(_("La session de préparation est vide."))
 	return serialize_pick_session([frappe.get_doc("Pick List", name) for name in names])
+
+
+def _scan_barcode(search_value):
+	from erpnext.stock.utils import scan_barcode
+
+	return scan_barcode(search_value) or {}
+
+
+def _uom_conversion_factor(item_code, uom):
+	from erpnext.stock.get_item_details import get_conversion_factor
+
+	return flt(get_conversion_factor(item_code, uom).get("conversion_factor"))
+
+
+def _barcode_increment(item_code, barcode_uom, stock_uom):
+	"""1 unité, ou le facteur de conversion si le code-barres a une UOM pack/carton."""
+	if not barcode_uom or not stock_uom or barcode_uom == stock_uom:
+		return 1.0
+	factor = _uom_conversion_factor(item_code, barcode_uom)
+	return factor if factor > 0 else 1.0
+
+
+def _item_exists(name):
+	return bool(frappe.db.exists("Item", name))
+
+
+def _resolve_scanned_item(search_value):
+	data = _scan_barcode(search_value)
+	item_code = data.get("item_code")
+	if not item_code and data.get("warehouse"):
+		frappe.throw(_("Ce code correspond à un entrepôt, pas à un article."))
+	if not item_code and _item_exists(search_value):
+		item_code = search_value
+		data = {"item_code": item_code}
+	if not item_code:
+		frappe.throw(_("Code-barres inconnu : {0}").format(search_value))
+	return data
+
+
+@frappe.whitelist()
+def scan_pick_item(search_value, pick_lists):
+	"""Résout un code-barres / article dans la session de préparation, sans écrire les quantités."""
+	_require_preparation_role()
+	search_value = (search_value or "").strip()
+	if not search_value:
+		frappe.throw(_("Scannez un code-barres."))
+
+	data = _resolve_scanned_item(search_value)
+	session = get_pick_session(pick_lists)
+	item_code = data.get("item_code")
+	locations = [
+		location
+		for pick_list in session.get("pick_lists") or []
+		for location in pick_list.get("locations") or []
+		if location.get("item_code") == item_code
+	]
+	if not locations:
+		frappe.throw(_("Cet article n'est pas dans la session de préparation."))
+
+	first = locations[0]
+	stock_uom = first.get("stock_uom") or first.get("uom")
+	barcode_uom = data.get("uom")
+	return {
+		"item_code": item_code,
+		"item_name": first.get("item_name"),
+		"uom": barcode_uom or stock_uom,
+		"increment": _barcode_increment(item_code, barcode_uom, stock_uom),
+		"barcode": data.get("barcode") or search_value,
+	}
 
 
 @frappe.whitelist()

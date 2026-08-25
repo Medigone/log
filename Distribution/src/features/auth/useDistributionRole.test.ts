@@ -7,6 +7,7 @@ describe("resolveDistributionRole", () => {
     expect(resolveDistributionRole(["Préparateur"])).toBe("preparateur");
     expect(resolveDistributionRole(["Planificateur"])).toBe("planificateur");
     expect(resolveDistributionRole(["Livreur"])).toBe("livreur");
+    expect(resolveDistributionRole(["Caissier"])).toBe("caissier");
   });
   it("refuse un rôle non configuré", () => expect(resolveDistributionRole(["Sales User"])).toBe("none"));
 });

@@ -12,7 +12,7 @@
  ],
  "fields": [
   {"default":"Ouverte","fieldname":"statut","fieldtype":"Select","in_list_view":1,"in_standard_filter":1,"label":"Statut","options":"Ouverte\nEn traitement\nRésolue\nAnnulée","reqd":1},
-  {"fieldname":"type_exception","fieldtype":"Select","in_list_view":1,"label":"Type","options":"Commande modifiée après départ\nCommande annulée après départ\nÉcart de préparation\nTransfert de stock\nAutre","reqd":1},
+  {"fieldname":"type_exception","fieldtype":"Select","in_list_view":1,"label":"Type","options":"Commande modifiée après départ\nCommande annulée après départ\nÉcart de préparation\nTransfert de stock\nRetour de stock\nFacturation\nÉcart de caisse\nRégularisation historique\nAutre","reqd":1},
   {"default":"Haute","fieldname":"priorite","fieldtype":"Select","label":"Priorité","options":"Basse\nNormale\nHaute\nCritique","reqd":1},
   {"fieldname":"date_signalement","fieldtype":"Datetime","label":"Date de signalement","read_only":1,"reqd":1},
   {"fieldname":"signalee_par","fieldtype":"Link","label":"Signalée par","options":"User","read_only":1,"reqd":1},
@@ -32,6 +32,7 @@
  "permissions": [
   {"create":1,"delete":1,"export":1,"read":1,"report":1,"role":"Responsable","write":1},
   {"export":1,"read":1,"report":1,"role":"Planificateur"},
+  {"read":1,"role":"Caissier"},
   {"read":1,"role":"Livreur"},
   {"create":1,"delete":1,"export":1,"read":1,"report":1,"role":"System Manager","write":1}
  ],

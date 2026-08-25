@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:MVT-CAISSE-{YYYY}-{#####}",
+ "creation": "2026-08-25 16:40:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "caisse",
+  "livreur",
+  "type_mouvement",
+  "montant",
+  "solde_apres",
+  "tournee",
+  "paiement",
+  "motif",
+  "date"
+ ],
+ "fields": [
+  {
+   "fieldname": "caisse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Caisse",
+   "options": "Caisse Livreur",
+   "reqd": 1
+  },
+  {
+   "fieldname": "livreur",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Livreur",
+   "options": "Livreur",
+   "reqd": 1
+  },
+  {
+   "fieldname": "type_mouvement",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Retour tournée\nEncaissement\nRemise\nAvance\nAjustement",
+   "reqd": 1
+  },
+  {
+   "fieldname": "montant",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Montant",
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "fieldname": "solde_apres",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Solde après",
+   "precision": "2",
+   "read_only": 1
+  },
+  {
+   "fieldname": "tournee",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Tournée",
+   "options": "Livraison"
+  },
+  {
+   "fieldname": "paiement",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Paiement",
+   "options": "Paiement Client"
+  },
+  {
+   "fieldname": "motif",
+   "fieldtype": "Small Text",
+   "label": "Motif"
+  },
+  {
+   "default": "Now",
+   "fieldname": "date",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Date",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "modified": "2026-08-25 18:15:00",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Mouvement Caisse Livreur",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Caissier"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "date",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

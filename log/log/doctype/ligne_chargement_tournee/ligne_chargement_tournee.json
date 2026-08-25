@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "delivery_note", "delivery_note_item", "residual_delivery_note",
+  "item_code", "item_name", "batch_no", "serial_no",
+  "source_warehouse", "vehicle_warehouse", "return_warehouse",
+  "uom", "stock_uom", "conversion_factor",
+  "loaded_qty", "delivered_qty", "returned_qty"
+ ],
+ "fields": [
+  {"fieldname":"delivery_note","fieldtype":"Link","in_list_view":1,"label":"Bon de livraison","options":"Delivery Note","reqd":1},
+  {"fieldname":"delivery_note_item","fieldtype":"Data","label":"Ligne du bon","reqd":1},
+  {"fieldname":"residual_delivery_note","fieldtype":"Link","label":"Bon de reliquat","options":"Delivery Note","read_only":1},
+  {"fieldname":"item_code","fieldtype":"Link","in_list_view":1,"label":"Article","options":"Item","reqd":1},
+  {"fieldname":"item_name","fieldtype":"Data","label":"Nom de l'article","read_only":1},
+  {"fieldname":"batch_no","fieldtype":"Link","label":"Lot","options":"Batch"},
+  {"fieldname":"serial_no","fieldtype":"Small Text","label":"Numéros de série"},
+  {"fieldname":"source_warehouse","fieldtype":"Link","label":"Entrepôt source","options":"Warehouse","reqd":1},
+  {"fieldname":"vehicle_warehouse","fieldtype":"Link","label":"Entrepôt véhicule","options":"Warehouse","reqd":1},
+  {"fieldname":"return_warehouse","fieldtype":"Link","label":"Entrepôt retour","options":"Warehouse","read_only":1},
+  {"fieldname":"uom","fieldtype":"Link","label":"Unité","options":"UOM"},
+  {"fieldname":"stock_uom","fieldtype":"Link","label":"Unité de stock","options":"UOM"},
+  {"default":"1","fieldname":"conversion_factor","fieldtype":"Float","label":"Facteur de conversion","read_only":1},
+  {"fieldname":"loaded_qty","fieldtype":"Float","in_list_view":1,"label":"Quantité chargée","non_negative":1,"read_only":1},
+  {"default":"0","fieldname":"delivered_qty","fieldtype":"Float","in_list_view":1,"label":"Quantité livrée","non_negative":1,"read_only":1},
+  {"default":"0","fieldname":"returned_qty","fieldtype":"Float","in_list_view":1,"label":"Quantité retournée","non_negative":1,"read_only":1}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "module": "Log",
+ "name": "Ligne Chargement Tournee",
+ "permissions": [],
+ "track_changes": 1
+}

@@ -6,7 +6,7 @@ import { RouteMap } from "@/features/planning/RouteMap";
 vi.mock("leaflet", () => ({ divIcon: (options: unknown) => options }));
 vi.mock("react-leaflet", () => ({
   MapContainer: ({ children, attributionControl }: { children: ReactNode; attributionControl?: boolean }) => <div data-testid="map" data-attribution={String(attributionControl)}>{children}</div>,
-  Marker: ({ children }: { children: ReactNode }) => <div data-testid="marker">{children}</div>,
+  Marker: ({ children, icon }: { children: ReactNode; icon?: { className?: string; html?: string } }) => <div data-testid="marker" data-icon-class={icon?.className} data-icon-html={icon?.html}>{children}</div>,
   Polyline: () => <div data-testid="road-line" />,
   Popup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   TileLayer: () => <div data-testid="tiles" />,
@@ -17,10 +17,15 @@ const stop = {
   deliveryNote: "DN-1",
   customer: "CUST-1",
   customerName: "Client Test",
+  customerGpsStatus: "known" as const,
+  requiresCustomerGeolocation: false,
   latitude: 35.7,
   longitude: -0.6,
   totalQuantity: 1,
+  amountCollected: 0,
   amountToCollect: 0,
+  payments: [],
+  invoiceStatus: "Non créée",
   status: "Préparé",
   planningStatus: "Planifié" as const,
   sequence: 1,
@@ -54,5 +59,17 @@ describe("RouteMap", () => {
       routing={{ status: "not_calculated", provider: "openrouteservice", profile: "driving-car", optimizationEnabled: false }}
     />);
     expect(screen.queryByTestId("road-line")).not.toBeInTheDocument();
+  });
+
+  it("affiche une coche verte sur la carte lorsqu'un arrêt est livré", () => {
+    render(<RouteMap
+      stops={[{ ...stop, status: "Livré" }]}
+      routing={{ status: "not_calculated", provider: "openrouteservice", profile: "driving-car", optimizationEnabled: false }}
+    />);
+
+    const marker = screen.getByTestId("marker");
+    expect(marker).toHaveAttribute("data-icon-class", expect.stringContaining("distribution-map-marker--delivered"));
+    expect(marker).toHaveAttribute("data-icon-html", expect.stringContaining("✓"));
+    expect(screen.getByText("Livré")).toBeInTheDocument();
   });
 });

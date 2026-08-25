@@ -14,6 +14,8 @@
   "section_optimisation",
   "optimisation_routage_active",
   "depot_principal_html",
+  "section_stock_retour",
+  "entrepot_retour_livraison",
   "section_heritage",
   "section_break_1",
   "seuil_local_km",
@@ -82,6 +84,18 @@
    "fieldname": "depot_principal_html",
    "fieldtype": "HTML",
    "label": "Dépôt principal"
+  },
+  {
+   "description": "Toutes les marchandises non livrées doivent revenir dans cet entrepôt avant la clôture de la tournée.",
+   "fieldname": "section_stock_retour",
+   "fieldtype": "Section Break",
+   "label": "Retour des marchandises"
+  },
+  {
+   "fieldname": "entrepot_retour_livraison",
+   "fieldtype": "Link",
+   "label": "Entrepôt retour livraison",
+   "options": "Warehouse"
   },
   {
    "collapsible": 1,

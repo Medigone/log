@@ -4,7 +4,7 @@
 import frappe
 
 
-DISTRIBUTION_ROLES = ("Préparateur", "Planificateur", "Livreur", "Responsable")
+DISTRIBUTION_ROLES = ("Préparateur", "Planificateur", "Livreur", "Responsable", "Caissier")
 
 
 def ensure_distribution_roles():

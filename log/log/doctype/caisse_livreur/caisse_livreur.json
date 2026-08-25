@@ -1,0 +1,91 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "format:CAISSE-{livreur}",
+ "creation": "2026-08-25 16:40:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "livreur",
+  "nom_livreur",
+  "solde",
+  "date_derniere_maj"
+ ],
+ "fields": [
+  {
+   "fieldname": "livreur",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Livreur",
+   "options": "Livreur",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fetch_from": "livreur.nom",
+   "fieldname": "nom_livreur",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nom livreur",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "solde",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Solde",
+   "precision": "2",
+   "reqd": 1
+  },
+  {
+   "fieldname": "date_derniere_maj",
+   "fieldtype": "Datetime",
+   "label": "Dernière mise à jour",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [
+  {
+   "link_doctype": "Mouvement Caisse Livreur",
+   "link_fieldname": "caisse"
+  }
+ ],
+ "modified": "2026-08-25 16:40:00",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Caisse Livreur",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Caissier"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "nom_livreur",
+ "track_changes": 1
+}

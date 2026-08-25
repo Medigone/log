@@ -3,14 +3,17 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { useFrappeAuth } from "frappe-react-sdk";
 import {
   CalendarDays,
+  Banknote,
   ClipboardCheck,
   LogOut,
   Menu,
+  Package,
   PanelLeftClose,
   PanelLeftOpen,
   Route,
   Truck,
   UserRound,
+  Wallet,
   X,
 } from "lucide-react";
 import { BrandLogo } from "@/shared/ui/BrandLogo";
@@ -38,12 +41,16 @@ const navItems: NavItem[] = [
   { to: "/preparation", label: "Préparation", icon: ClipboardCheck, roles: ["preparateur", "responsable"] },
   { to: "/planning", label: "Planification", icon: Route, roles: ["planificateur", "responsable"] },
   { to: "/deliveries", label: "Livraisons", icon: Truck, roles: ["planificateur", "responsable"] },
+  { to: "/stock", label: "Stock véhicules", icon: Package, roles: ["preparateur", "planificateur", "responsable"] },
+  { to: "/cashier", label: "Caisse", icon: Banknote, roles: ["caissier", "responsable"] },
+  { to: "/caisses", label: "Caisses livreurs", icon: Wallet, roles: ["caissier", "responsable"] },
 ];
 
 const roleLabels: Record<DistributionRole, string> = {
   preparateur: "Préparateur",
   planificateur: "Planificateur",
   livreur: "Livreur",
+  caissier: "Caissier",
   responsable: "Responsable",
   none: "Accès limité",
 };

@@ -2,6 +2,7 @@ import "leaflet/dist/leaflet.css";
 import { divIcon } from "leaflet";
 import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import type { RouteDepot, RouteItinerary, RouteStop } from "@/shared/types/distribution";
 
 type MapPoint = [number, number];
@@ -15,10 +16,11 @@ function FitRouteBounds({ points }: { points: MapPoint[] }) {
   return null;
 }
 
-function numberedIcon(index: number) {
+function stopIcon(stop: RouteStop) {
+  const visual = getStopVisualStyle(stop.status);
   return divIcon({
-    className: "distribution-map-marker",
-    html: `<span>${index}</span>`,
+    className: `distribution-map-marker ${visual.markerClass}`,
+    html: `<span aria-label="${visual.label}">${visual.markerSymbol || stop.sequence}</span>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
   });
@@ -86,12 +88,16 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
             <Marker
               key={stop.deliveryNote}
               position={[stop.latitude, stop.longitude]}
-              icon={numberedIcon(stop.sequence)}
+              icon={stopIcon(stop)}
             >
               <Popup>
                 <strong>{stop.sequence}. {stop.customerName}</strong>
                 <br />
                 {stop.deliveryNote}
+                <br />
+                <strong>{getStopVisualStyle(stop.status).label}</strong>
+                <br />
+                {stop.amountCollected.toLocaleString("fr-DZ")} DZD encaissé(s) · {stop.amountToCollect.toLocaleString("fr-DZ")} DZD restant
               </Popup>
             </Marker>
           ))}

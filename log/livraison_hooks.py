@@ -6,6 +6,8 @@ from frappe import _
 
 
 def update_livraisons_on_delivery_note_change(doc, method=None):
+	if getattr(frappe.flags, "in_distribution_completion", False):
+		return
 	if not doc.get("__islocal") and doc.has_value_changed("custom_statut"):
 		update_livraison_status_from_delivery_note(doc.name)
 
@@ -121,7 +123,7 @@ def update_livraison_status_from_delivery_note(delivery_note_name):
 			livraison_doc = frappe.get_doc("Livraison", row.parent)
 			new_status = calculate_livraison_status_from_bls(livraison_doc)
 			if livraison_doc.status != new_status:
-				livraison_doc.db_set("status", new_status)
+				livraison_doc.db_set("status", new_status, update_modified=False)
 		except Exception:
 			frappe.log_error(title=f"Maj statut {row.parent}", message=frappe.get_traceback())
 

@@ -22,6 +22,36 @@
   box-shadow: 0 3px 12px rgb(15 23 42 / 35%);
 }
 
+.distribution-map-marker--pending span {
+  background: #64748b;
+}
+
+.distribution-map-marker--active span {
+  background: #1d4ed8;
+  box-shadow: 0 0 0 5px rgb(59 130 246 / 22%), 0 3px 12px rgb(15 23 42 / 35%);
+}
+
+.distribution-map-marker--delivered span {
+  background: #059669;
+  font-size: 17px;
+  box-shadow: 0 0 0 5px rgb(16 185 129 / 20%), 0 3px 12px rgb(15 23 42 / 35%);
+}
+
+.distribution-map-marker--partial span {
+  background: #d97706;
+  font-size: 15px;
+}
+
+.distribution-map-marker--failed span {
+  background: #dc2626;
+  font-size: 18px;
+}
+
+.distribution-map-marker--cancelled span {
+  background: #64748b;
+  font-size: 18px;
+}
+
 .distribution-map-depot span {
   width: 34px;
   height: 34px;

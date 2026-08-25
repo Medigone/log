@@ -5,4 +5,7 @@ from frappe.model.document import Document
 
 
 class Livreur(Document):
-	pass
+	def after_insert(self):
+		from log.services.distribution_driver_cash import ensure_cash_box
+
+		ensure_cash_box(self.name)

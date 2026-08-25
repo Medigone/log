@@ -2,16 +2,35 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Iterable
 
 ROUTE_TRANSITIONS = {
 	"Brouillon": {"Publiée", "Annulée"},
 	"Publiée": {"Brouillon", "En cours", "Annulée"},
-	"En cours": {"Terminée", "Annulée"},
+	"En cours": {"Retour dépôt"},
+	"Retour dépôt": {"Contrôle caisse"},
+	"Contrôle caisse": {"Terminée"},
 	"Terminée": set(),
 	"Annulée": set(),
 }
+
+MAX_CUSTOMER_GPS_ACCURACY_METERS = 50
+
+
+def parse_gps_value(value: str | None) -> tuple[float | None, float | None]:
+	if not value:
+		return None, None
+	numbers = re.findall(r"-?\d+(?:\.\d+)?", str(value))
+	if len(numbers) < 2:
+		return None, None
+	latitude, longitude = float(numbers[0]), float(numbers[1])
+	if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+		return None, None
+	if latitude == 0 and longitude == 0:
+		return None, None
+	return latitude, longitude
 
 
 def has_any_role(user_roles: Iterable[str], allowed_roles: set[str]) -> bool:
@@ -73,6 +92,8 @@ def planning_status_for_route(route_state: str | None) -> str:
 		"Brouillon": "Planifié",
 		"Publiée": "Publié",
 		"En cours": "En cours",
+		"Retour dépôt": "En attente retour",
+		"Contrôle caisse": "Terminé",
 		"Terminée": "Terminé",
 	}.get(route_state or "", "Non planifié")
 
@@ -102,17 +123,33 @@ def completion_errors(
 	*,
 	balance: float,
 	failure_reasons: set[str],
+	requires_customer_geolocation: bool = False,
 ) -> list[str]:
 	errors = []
 	outcome = data.get("outcome")
 	evidence = data.get("evidence") or {}
 	latitude, longitude = evidence.get("latitude"), evidence.get("longitude")
 	try:
-		valid_gps = latitude is not None and longitude is not None and -90 <= float(latitude) <= 90 and -180 <= float(longitude) <= 180
+		valid_gps = (
+			latitude is not None
+			and longitude is not None
+			and -90 <= float(latitude) <= 90
+			and -180 <= float(longitude) <= 180
+			and not (float(latitude) == 0 and float(longitude) == 0)
+		)
 	except (TypeError, ValueError):
 		valid_gps = False
 	if not valid_gps:
 		errors.append("Une position GPS valide est obligatoire.")
+	if requires_customer_geolocation and outcome in {"delivered", "partial"}:
+		try:
+			accuracy = float(evidence.get("accuracy"))
+		except (TypeError, ValueError):
+			accuracy = -1
+		if accuracy < 0 or accuracy > MAX_CUSTOMER_GPS_ACCURACY_METERS:
+			errors.append(
+				f"La localisation du client doit avoir une précision de {MAX_CUSTOMER_GPS_ACCURACY_METERS} m ou meilleure."
+			)
 	if outcome not in {"delivered", "partial", "failed"}:
 		errors.append("Résultat d'arrêt invalide.")
 	if outcome in {"delivered", "partial"} and not (evidence.get("photoData") or evidence.get("signatureData")):
@@ -131,14 +168,18 @@ def completion_errors(
 
 	payment = data.get("payment")
 	if payment:
+		if outcome == "failed":
+			errors.append("Aucun encaissement ne peut être déclaré pour un arrêt en échec.")
 		try:
 			amount = float(payment.get("amount") or 0)
 		except (TypeError, ValueError):
 			amount = 0
-		if amount <= 0 or amount > balance:
-			errors.append(f"Le paiement doit être positif et ne peut pas dépasser le solde de {balance:.2f} DZD.")
+		if amount <= 0:
+			errors.append("Le paiement doit être positif.")
 		if payment.get("method") not in {"cash", "cheque"}:
 			errors.append("Moyen de paiement invalide.")
-		if payment.get("method") == "cheque" and not (payment.get("chequePhotoData") and payment.get("collectionDate")):
-			errors.append("La photo du chèque et sa date d'encaissement sont obligatoires.")
+		if payment.get("method") == "cheque" and not (
+			payment.get("chequePhotoData") and payment.get("collectionDate") and str(payment.get("chequeNumber") or "").strip()
+		):
+			errors.append("La photo, le numéro et la date d'encaissement du chèque sont obligatoires.")
 	return errors

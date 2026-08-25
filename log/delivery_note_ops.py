@@ -17,7 +17,7 @@ ALLOWED_TRANSITIONS = {
 	"Nouveau": ["Préparé", "Annulé"],
 	"Préparé": ["Nouveau", "Enlevé", "Annulé"],
 	"Enlevé": ["Préparé", "Livré", "Partiellement Livré", "Non Livré"],
-	"Partiellement Livré": ["Livré", "Non Livré", "Enlevé"],
+	"Partiellement Livré": [],
 	"Livré": ["Annulé"],
 	"Non Livré": ["Préparé", "Enlevé"],
 	"Annulé": ["Nouveau"],

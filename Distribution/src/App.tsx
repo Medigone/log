@@ -10,6 +10,9 @@ import { LoginPage } from "@/features/auth/LoginPage";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage";
 import { DriverApp } from "@/features/driver/DriverApp";
+import { CashierPage } from "@/features/cashier/CashierPage";
+import { DriverCashPage } from "@/features/cashier/DriverCashPage";
+import { VehicleStockPage } from "@/features/stock/VehicleStockPage";
 import { PublicTrackingPage } from "@/features/tracking/PublicTrackingPage";
 import { DesktopShell } from "@/layouts/DesktopShell";
 import type { DistributionRole } from "@/shared/types/distribution";
@@ -42,7 +45,7 @@ function AccessDenied() {
         <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-amber-600" />
         <h1 className="text-xl font-bold text-slate-950">Accès non configuré</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Votre compte doit recevoir un rôle Préparateur, Planificateur, Livreur ou Responsable.
+          Votre compte doit recevoir un rôle Préparateur, Planificateur, Livreur, Caissier ou Responsable.
         </p>
         <Button className="mt-6" variant="outline" onClick={() => logout().then(() => window.location.reload())}>
           Se déconnecter
@@ -54,6 +57,7 @@ function AccessDenied() {
 
 function defaultRoute(role: string) {
   if (role === "livreur") return "/driver";
+  if (role === "caissier") return "/cashier";
   if (role === "preparateur") return "/preparation";
   return "/today";
 }
@@ -77,8 +81,11 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/today" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><TodayPage /></RoleGuard>} />
         <Route path="/preparation" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><PreparationPage /></RoleGuard>} />
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
-        <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div>}><RouteDetailsPage /></Suspense></RoleGuard>} />
+        <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
         <Route path="/deliveries" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DeliveriesPage /></RoleGuard>} />
+        <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage /></RoleGuard>} />
+        <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
+        <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><DriverCashPage canAdjust={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/" element={<Navigate to={defaultRoute(user.role)} replace />} />
         <Route path="*" element={<Navigate to={defaultRoute(user.role)} replace />} />
       </Routes>

@@ -1,0 +1,18 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["sales_invoice", "due_date", "outstanding_before", "allocated_amount"],
+ "fields": [
+  {"fieldname":"sales_invoice","fieldtype":"Link","in_list_view":1,"label":"Facture","options":"Sales Invoice","reqd":1},
+  {"fetch_from":"sales_invoice.due_date","fieldname":"due_date","fieldtype":"Date","label":"Échéance","read_only":1},
+  {"fieldname":"outstanding_before","fieldtype":"Currency","label":"Solde avant affectation","read_only":1},
+  {"fieldname":"allocated_amount","fieldtype":"Currency","in_list_view":1,"label":"Montant affecté","non_negative":1,"reqd":1}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "module": "Log",
+ "name": "Affectation Encaissement",
+ "permissions": []
+}

@@ -11,10 +11,24 @@ def update_livraison_totals_on_paiement_change(doc, method=None):
 	if not doc.livraison:
 		return
 	try:
-		if frappe.db.exists("Livraison", doc.livraison):
-			livraison_doc = frappe.get_doc("Livraison", doc.livraison)
-			livraison_doc.calculate_totals()
-			livraison_doc.save(ignore_permissions=True)
+		if not frappe.db.exists("Livraison", doc.livraison):
+			return
+		livraison_doc = frappe.get_doc("Livraison", doc.livraison)
+		livraison_doc.calculate_totals()
+		# Do not save the parent document: complete_delivery_stop keeps it in memory
+		# and a nested save causes TimestampMismatchError.
+		frappe.db.set_value(
+			"Livraison",
+			doc.livraison,
+			{
+				"nombre_bons_de_livraison": livraison_doc.nombre_bons_de_livraison,
+				"total_articles": livraison_doc.total_articles,
+				"total_montant_a_encaisser": livraison_doc.total_montant_a_encaisser,
+				"total_paiements": livraison_doc.total_paiements,
+				"solde_restant": livraison_doc.solde_restant,
+			},
+			update_modified=False,
+		)
 	except Exception:
 		frappe.log_error(title="Paiement Hook Error", message=frappe.get_traceback())
 
@@ -31,23 +45,10 @@ def validate_paiement_client(doc, method=None):
 		if doc.client and not _client_has_bl_in_livraison(doc):
 			frappe.throw(_("Le client sélectionné n'a aucun bon de livraison dans cette tournée."))
 
-	if doc.moyen_paiement == "Chèque" and (not doc.photo_cheque or not doc.date_encaissement):
-		frappe.throw(_("La photo du chèque et sa date d'encaissement sont obligatoires."))
-
-	if doc.bon_livraison:
-		grand_total = flt(frappe.db.get_value("Delivery Note", doc.bon_livraison, "grand_total"))
-		paid = flt(
-			frappe.db.sql(
-				"""
-				SELECT COALESCE(SUM(montant), 0)
-				FROM `tabPaiement Client`
-				WHERE bon_livraison = %s AND name != %s
-				""",
-				(doc.bon_livraison, doc.name or "NEW"),
-			)[0][0]
-		)
-		if paid + flt(doc.montant) > grand_total:
-			frappe.throw(_("Le paiement dépasse le solde restant du bon de livraison."))
+	if doc.moyen_paiement == "Chèque" and (
+		not doc.photo_cheque or not doc.date_encaissement or not str(doc.get("numero_cheque") or "").strip()
+	):
+		frappe.throw(_("La photo, le numéro et la date d'encaissement du chèque sont obligatoires."))
 
 
 def _client_has_bl_in_livraison(doc):

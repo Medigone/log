@@ -14,6 +14,7 @@ from log.api.distribution_rules import (
 	is_repeated_request,
 	intervals_overlap,
 	planning_status_for_route,
+	parse_gps_value,
 	public_tracking_payload,
 	revision_matches,
 	stop_status,
@@ -28,12 +29,16 @@ class TestDistributionRules(unittest.TestCase):
 		self.assertTrue(has_any_role({"Responsable"}, {"Préparateur", "Responsable"}))
 		self.assertTrue(has_any_role({"Livreur"}, {"Livreur", "Responsable"}))
 		self.assertTrue(has_any_role({"Préparateur"}, {"Préparateur", "Responsable"}))
+		self.assertTrue(has_any_role({"Caissier"}, {"Caissier", "Responsable"}))
 		self.assertFalse(has_any_role({"Livreur"}, {"Planificateur", "Responsable"}))
 
 	def test_route_transitions(self):
 		self.assertTrue(can_transition_route("Brouillon", "Publiée"))
 		self.assertTrue(can_transition_route("Publiée", "En cours"))
-		self.assertTrue(can_transition_route("En cours", "Terminée"))
+		self.assertTrue(can_transition_route("En cours", "Retour dépôt"))
+		self.assertTrue(can_transition_route("Retour dépôt", "Contrôle caisse"))
+		self.assertTrue(can_transition_route("Contrôle caisse", "Terminée"))
+		self.assertFalse(can_transition_route("En cours", "Terminée"))
 		self.assertFalse(can_transition_route("Terminée", "En cours"))
 
 	def test_vehicle_capacity(self):
@@ -95,6 +100,66 @@ class TestDistributionRules(unittest.TestCase):
 		data = {"outcome": "delivered", "evidence": {"latitude": 36.7, "longitude": 3.0}}
 		self.assertIn("photo ou une signature", completion_errors(data, balance=1000, failure_reasons=FAILURES)[0])
 
+	def test_missing_customer_requires_accurate_gps_for_delivery(self):
+		data = {
+			"outcome": "delivered",
+			"evidence": {
+				"latitude": 36.7,
+				"longitude": 3.0,
+				"accuracy": 51,
+				"photoData": "image",
+			},
+		}
+		errors = completion_errors(
+			data,
+			balance=1000,
+			failure_reasons=FAILURES,
+			requires_customer_geolocation=True,
+		)
+		self.assertTrue(any("50 m" in error for error in errors))
+		data["evidence"]["accuracy"] = 50
+		self.assertEqual(
+			completion_errors(
+				data,
+				balance=1000,
+				failure_reasons=FAILURES,
+				requires_customer_geolocation=True,
+			),
+			[],
+		)
+
+	def test_failure_does_not_require_customer_accuracy(self):
+		data = {
+			"outcome": "failed",
+			"failureReason": "Client absent",
+			"failureComment": "Porte fermée",
+			"evidence": {"latitude": 36.7, "longitude": 3.0, "accuracy": 120},
+		}
+		self.assertEqual(
+			completion_errors(
+				data,
+				balance=1000,
+				failure_reasons=FAILURES,
+				requires_customer_geolocation=True,
+			),
+			[],
+		)
+
+	def test_gps_parser_rejects_missing_invalid_and_zero_coordinates(self):
+		self.assertEqual(parse_gps_value(None), (None, None))
+		self.assertEqual(parse_gps_value("invalide"), (None, None))
+		self.assertEqual(parse_gps_value("0,0"), (None, None))
+		self.assertEqual(parse_gps_value("35.7,-0.6"), (35.7, -0.6))
+
+	def test_zero_delivery_coordinates_are_invalid(self):
+		data = {
+			"outcome": "failed",
+			"failureReason": "Client absent",
+			"failureComment": "Porte fermée",
+			"evidence": {"latitude": 0, "longitude": 0},
+		}
+		self.assertTrue(any("GPS valide" in error for error in completion_errors(data, balance=0, failure_reasons=FAILURES)))
+
 	def test_partial_requires_quantity(self):
 		data = {
 			"outcome": "partial",
@@ -109,6 +174,16 @@ class TestDistributionRules(unittest.TestCase):
 		self.assertTrue(any("motif" in error for error in errors))
 		self.assertTrue(any("commentaire" in error for error in errors))
 
+	def test_failed_stop_cannot_declare_payment(self):
+		data = {
+			"outcome": "failed",
+			"failureReason": "Client absent",
+			"failureComment": "Porte fermée",
+			"evidence": {"latitude": 36.7, "longitude": 3.0},
+			"payment": {"method": "cash", "amount": 500},
+		}
+		self.assertTrue(any("encaissement" in error for error in completion_errors(data, balance=1000, failure_reasons=FAILURES)))
+
 	def test_cheque_requires_photo_and_collection_date(self):
 		data = {
 			"outcome": "delivered",
@@ -117,13 +192,13 @@ class TestDistributionRules(unittest.TestCase):
 		}
 		self.assertTrue(any("chèque" in error for error in completion_errors(data, balance=1000, failure_reasons=FAILURES)))
 
-	def test_payment_cannot_exceed_balance(self):
+	def test_declared_payment_can_exceed_delivery_note_balance(self):
 		data = {
 			"outcome": "delivered",
 			"evidence": {"latitude": 36.7, "longitude": 3.0, "photoData": "image"},
 			"payment": {"method": "cash", "amount": 1001},
 		}
-		self.assertTrue(any("solde" in error for error in completion_errors(data, balance=1000, failure_reasons=FAILURES)))
+		self.assertFalse(any("solde" in error for error in completion_errors(data, balance=1000, failure_reasons=FAILURES)))
 
 
 if __name__ == "__main__":

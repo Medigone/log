@@ -7,6 +7,7 @@ const rolePriority: Array<{ names: string[]; role: DistributionRole }> = [
   { names: ["Planificateur", "Planificateur Distribution"], role: "planificateur" },
   { names: ["Préparateur", "Préparateur Distribution", "Preparateur Distribution"], role: "preparateur" },
   { names: ["Livreur", "Livreur Distribution"], role: "livreur" },
+  { names: ["Caissier", "Caissier Distribution"], role: "caissier" },
 ];
 
 export function resolveDistributionRole(roleNames: Iterable<string>, currentUser?: string): DistributionRole {

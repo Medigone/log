@@ -5,7 +5,6 @@ from __future__ import annotations
 import base64
 import binascii
 import json
-import re
 import uuid
 from typing import Any
 
@@ -25,6 +24,7 @@ from log.api.distribution_rules import (
 	is_repeated_request,
 	intervals_overlap,
 	planning_status_for_route,
+	parse_gps_value,
 	revision_matches,
 	stop_status,
 )
@@ -40,8 +40,10 @@ from log.services.routing import (
 PLANNING_ROLES = {"Planificateur", "Responsable", "System Manager"}
 DRIVER_ROLES = {"Livreur", "Responsable", "System Manager"}
 PREPARATION_ROLES = {"Préparateur", "Responsable", "System Manager"}
-ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours")
-TERMINAL_STOP_STATES = {"Livré", "Non Livré", "Annulé"}
+CASHIER_ROLES = {"Caissier", "Responsable", "System Manager"}
+STOCK_ROLES = PLANNING_ROLES | PREPARATION_ROLES
+ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours", "Retour dépôt", "Contrôle caisse")
+TERMINAL_STOP_STATES = {"Livré", "Partiellement Livré", "Non Livré", "Annulé"}
 FAILURE_REASONS = {
 	"Client absent",
 	"Client fermé",
@@ -57,6 +59,7 @@ ROLE_PRIORITY = (
 	({"Planificateur"}, "planificateur"),
 	({"Préparateur"}, "preparateur"),
 	({"Livreur"}, "livreur"),
+	({"Caissier"}, "caissier"),
 )
 
 
@@ -90,6 +93,11 @@ def _require_schema():
 		("Vehicule", "capacite_max_articles"),
 		("Delivery Note", "custom_last_delivery_request_id"),
 		("Delivery Note", "custom_statut_planification"),
+		("Delivery Note", "custom_stock_entry_chargement"),
+		("Delivery Note", "custom_sales_invoice"),
+		("Livraison", "statut_chargement"),
+		("Livraison", "statut_caisse"),
+		("Paiement Client", "statut_controle"),
 	)
 	missing = [f"{doctype}.{field}" for doctype, field in required if not frappe.db.has_column(doctype, field)]
 	if missing:
@@ -146,34 +154,25 @@ def get_current_distribution_user():
 	}
 
 
-def _parse_gps(value: str | None) -> tuple[float | None, float | None]:
-	if not value:
-		return None, None
-	numbers = re.findall(r"-?\d+(?:\.\d+)?", str(value))
-	if len(numbers) < 2:
-		return None, None
-	latitude, longitude = flt(numbers[0]), flt(numbers[1])
-	if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
-		return None, None
-	return latitude, longitude
-
-
 def _customer_details(customer: str | None) -> dict[str, Any]:
 	if not customer:
 		return {}
 	data = frappe.db.get_value(
 		"Customer",
 		customer,
-		["customer_name", "custom_gps", "mobile_no"],
+		["customer_name", "custom_gps", "mobile_no", "primary_address"],
 		as_dict=True,
 	) or {}
-	latitude, longitude = _parse_gps(data.get("custom_gps"))
+	latitude, longitude = parse_gps_value(data.get("custom_gps"))
+	has_gps = latitude is not None and longitude is not None
 	return {
 		"customerName": data.get("customer_name") or customer,
 		"phone": data.get("mobile_no"),
-		"address": None,
+		"address": data.get("primary_address"),
 		"latitude": latitude,
 		"longitude": longitude,
+		"customerGpsStatus": "known" if has_gps else "missing",
+		"requiresCustomerGeolocation": not has_gps,
 	}
 
 
@@ -184,6 +183,33 @@ def _paid_amount(delivery_note: str) -> float:
 			(delivery_note,),
 		)[0][0]
 	)
+
+
+def _payment_summary(delivery_note: str) -> tuple[float, list[dict[str, Any]]]:
+	rows = frappe.get_all(
+		"Paiement Client",
+		filters={"bon_livraison": delivery_note},
+		fields=[
+			"name", "date", "moyen_paiement", "montant", "date_encaissement",
+			"statut_controle", "facture_source", "payment_entry", "numero_cheque",
+		],
+		order_by="date asc, creation asc",
+	)
+	payments = [
+		{
+			"name": row.get("name"),
+			"date": str(row.get("date") or "") or None,
+			"method": row.get("moyen_paiement") or _("Non renseigné"),
+			"amount": flt(row.get("montant")),
+			"collectionDate": str(row.get("date_encaissement") or "") or None,
+			"status": row.get("statut_controle") or "Déclaré",
+			"salesInvoice": row.get("facture_source"),
+			"paymentEntry": row.get("payment_entry"),
+			"chequeNumber": row.get("numero_cheque"),
+		}
+		for row in rows
+	]
+	return sum(payment["amount"] for payment in payments), payments
 
 
 def _sales_order_for_dn(doc) -> str | None:
@@ -359,7 +385,9 @@ def _schedule_conflicts(route, *, published_only: bool = False) -> list[str]:
 
 def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 	details = _customer_details(doc.customer)
-	paid = _paid_amount(doc.name)
+	commune_id = doc.get("custom_commune")
+	commune_label = frappe.db.get_value("Commune", commune_id, "nom") if commune_id else None
+	paid, payments = _payment_summary(doc.name)
 	items = []
 	for item in doc.items or []:
 		delivered = flt(item.get("custom_quantite_livree"))
@@ -371,6 +399,8 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 				"quantity": flt(item.qty),
 				"deliveredQuantity": delivered,
 				"remainingQuantity": max(flt(item.qty) - delivered, 0),
+				"rate": flt(item.rate),
+				"amount": flt(item.amount),
 			}
 		)
 	remaining_quantity = sum(item["remainingQuantity"] for item in items)
@@ -379,15 +409,22 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 		"salesOrder": _sales_order_for_dn(doc),
 		"customer": doc.customer,
 		"customerName": details.get("customerName") or doc.customer_name or doc.customer,
-		"commune": doc.get("custom_commune"),
+		"commune": commune_label or commune_id,
 		"wilaya": doc.get("custom_wilaya"),
 		"address": doc.get("shipping_address") or details.get("address"),
 		"phone": details.get("phone") or doc.get("contact_mobile"),
 		"instructions": doc.get("instructions"),
 		"latitude": details.get("latitude"),
 		"longitude": details.get("longitude"),
+		"customerGpsStatus": details.get("customerGpsStatus") or "missing",
+		"requiresCustomerGeolocation": bool(details.get("requiresCustomerGeolocation", True)),
 		"totalQuantity": remaining_quantity,
+		"amountCollected": paid,
 		"amountToCollect": max(flt(doc.grand_total) - paid, 0),
+		"payments": payments,
+		"salesInvoice": doc.get("custom_sales_invoice"),
+		"invoiceStatus": doc.get("custom_statut_facturation") or "Non créée",
+		"residualDeliveryNote": doc.get("custom_residual_delivery_note"),
 		"status": doc.get("custom_statut") or "Nouveau",
 		"planningStatus": doc.get("custom_statut_planification") or "Non planifié",
 		"requestedDate": str(doc.get("custom_date_de_livraison") or "") or None,
@@ -406,7 +443,18 @@ def _route_state(doc) -> str:
 	return doc.get("etat_planification") or "Brouillon"
 
 
+def _gps_collection_warning(stops: list[dict[str, Any]]) -> str | None:
+	missing = [stop for stop in stops if stop.get("requiresCustomerGeolocation")]
+	if not missing:
+		return None
+	return _(
+		"{0} client(s) sans GPS : publication manuelle autorisée, itinéraire et optimisation indisponibles."
+	).format(len(missing))
+
+
 def _serialize_route(doc) -> dict[str, Any]:
+	from log.services.distribution_cashier import reconciliation
+	from log.services.distribution_fulfillment import route_stock_summary
 	capacity = None
 	vehicle_label = None
 	if doc.vehicule:
@@ -424,6 +472,7 @@ def _serialize_route(doc) -> dict[str, Any]:
 		if not row.bon_de_livraison or not frappe.db.exists("Delivery Note", row.bon_de_livraison):
 			continue
 		stops.append(_stop_from_dn(frappe.get_doc("Delivery Note", row.bon_de_livraison), sequence))
+	gps_warning = _gps_collection_warning(stops)
 	return {
 		"name": doc.name,
 		"date": str(doc.date_liv) if doc.date_liv else "",
@@ -447,19 +496,27 @@ def _serialize_route(doc) -> dict[str, Any]:
 		"vehicleLabel": vehicle_label,
 		"vehicleCapacity": cint(capacity) if capacity not in (None, "", 0) else None,
 		"totalQuantity": sum(stop["totalQuantity"] for stop in stops),
+		"totalCollected": sum(stop["amountCollected"] for stop in stops),
 		"totalAmount": sum(stop["amountToCollect"] for stop in stops),
 		"stops": stops,
 		"depot": _serialized_depot(doc),
 		"routing": _serialized_routing(doc, len(stops)),
+		"stock": route_stock_summary(doc),
+		"cash": reconciliation(doc),
 		"publishedAt": str(doc.get("date_publication") or "") or None,
 		"startedAt": str(doc.get("date_depart") or "") or None,
 		"finishedAt": str(doc.get("date_fin") or "") or None,
-		"alerts": [*_schedule_conflicts(doc), *([capacity_warning(capacity)] if capacity_warning(capacity) else [])],
+		"alerts": [
+			*_schedule_conflicts(doc),
+			*([capacity_warning(capacity)] if capacity_warning(capacity) else []),
+			*([gps_warning] if gps_warning else []),
+		],
 	}
 
 
 def _active_assignment(delivery_note: str, except_route: str | None = None) -> str | None:
 	params: list[Any] = [delivery_note, *ACTIVE_ROUTE_STATES]
+	state_placeholders = ", ".join(["%s"] * len(ACTIVE_ROUTE_STATES))
 	exclusion = ""
 	if except_route:
 		exclusion = " AND l.name != %s"
@@ -470,7 +527,7 @@ def _active_assignment(delivery_note: str, except_route: str | None = None) -> s
 		FROM `tabLivraison Bon de Livraison` child
 		JOIN `tabLivraison` l ON l.name = child.parent
 		WHERE child.bon_de_livraison = %s
-		  AND l.etat_planification IN (%s, %s, %s)
+		  AND l.etat_planification IN ({state_placeholders})
 		  AND l.docstatus < 2{exclusion}
 		LIMIT 1
 		""",
@@ -483,8 +540,22 @@ def _lock_delivery_note(delivery_note: str):
 	frappe.db.sql("SELECT name FROM `tabDelivery Note` WHERE name = %s FOR UPDATE", (delivery_note,))
 
 
+def _lock_customer(customer: str):
+	frappe.db.sql("SELECT name FROM `tabCustomer` WHERE name = %s FOR UPDATE", (customer,))
+
+
 def _lock_route(route_id: str):
 	frappe.db.sql("SELECT name FROM `tabLivraison` WHERE name = %s FOR UPDATE", (route_id,))
+
+
+def _refresh_document_timestamp(doc):
+	"""Align in-memory modified so nested Delivery Note saves cannot cause TimestampMismatchError."""
+	if not doc.name:
+		return
+	seen = frappe.db.get_value(doc.doctype, doc.name, ["modified", "modified_by"], as_dict=True)
+	if seen:
+		doc.modified = seen.modified
+		doc.modified_by = seen.modified_by
 
 
 def _capacity(route) -> tuple[int | None, float]:
@@ -556,8 +627,8 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 	eligible_names = frappe.get_all(
 		"Delivery Note",
 		filters={
-			"docstatus": ["<", 2],
-			"custom_statut": ["in", ["Préparé", "Enlevé", "Partiellement Livré", "Non Livré"]],
+			"docstatus": 0,
+			"custom_statut": ["in", ["Préparé", "Non Livré"]],
 		},
 		pluck="name",
 		order_by="custom_date_de_livraison asc, creation asc",
@@ -614,7 +685,7 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 		for key, row_key in (("status", "planningStatus"), ("driver", "driver"), ("vehicle", "vehicle"), ("route", "route"), ("wilaya", "wilaya")):
 			if filter_data.get(key) and row.get(row_key) != filter_data[key]:
 				return False
-		if filter_data.get("alertsOnly") and not row.get("planningAlert"):
+		if filter_data.get("alertsOnly") and not (row.get("planningAlert") or row.get("requiresCustomerGeolocation")):
 			return False
 		return True
 
@@ -665,10 +736,14 @@ def _routing_points(doc) -> tuple[dict[str, Any], list[dict[str, Any]], list[lis
 	stops = _serialize_route(doc)["stops"]
 	if not stops:
 		raise RoutingConfigurationError(_("La tournée ne contient aucun arrêt."))
-	missing = [stop["deliveryNote"] for stop in stops if stop.get("latitude") is None or stop.get("longitude") is None]
+	missing = [
+		f"{stop['customerName']} ({stop['deliveryNote']})"
+		for stop in stops
+		if stop.get("requiresCustomerGeolocation")
+	]
 	if missing:
 		raise RoutingConfigurationError(
-			_("Coordonnées GPS manquantes pour : {0}.").format(", ".join(missing))
+			_("Coordonnées GPS client à collecter pour : {0}.").format(", ".join(missing))
 		)
 	coordinates = [[depot["longitude"], depot["latitude"]]]
 	coordinates.extend([[stop["longitude"], stop["latitude"]] for stop in stops])
@@ -903,6 +978,7 @@ def publish_route(route_id, expected_revision=None):
 		if has_assignment_conflict(assignment):
 			frappe.throw(_("Le bon {0} appartient déjà à la tournée {1}.").format(row.bon_de_livraison, assignment))
 	warning = _validate_capacity(doc, for_publication=True)
+	gps_warning = _gps_collection_warning(_serialize_route(doc)["stops"])
 	doc.etat_planification = "Publiée"
 	doc.date_publication = now_datetime()
 	doc.revision_publiee = max(cint(doc.revision), 1)
@@ -915,7 +991,8 @@ def publish_route(route_id, expected_revision=None):
 	_sync_delivery_note_assignment(doc)
 	for row in doc.bons_de_livraison:
 		_set_delivery_note_assignment(frappe.get_doc("Delivery Note", row.bon_de_livraison), doc, "Publié")
-	return {"route": _serialize_route(doc), "warning": warning}
+	warnings = [message for message in (warning, gps_warning) if message]
+	return {"route": _serialize_route(doc), "warning": " ".join(warnings) or None}
 
 
 def _append_delivery_note(route, dn, position: int | None = None):
@@ -1040,6 +1117,8 @@ def reassign_delivery_note(payload):
 		frappe.throw(_("Bon de livraison introuvable."))
 	_lock_delivery_note(delivery_note)
 	dn = frappe.get_doc("Delivery Note", delivery_note)
+	if dn.docstatus != 0:
+		frappe.throw(_("Seul un bon de livraison brouillon peut être planifié."))
 	if dn.get("custom_statut_planification") in {"À repréparer", "Exception", "Terminé"}:
 		frappe.throw(_("Ce bon ne peut pas être réaffecté dans son état actuel."))
 
@@ -1130,7 +1209,7 @@ def get_driver_routes(date=None):
 		return []
 	filters = {
 		"date_liv": getdate(date or today()),
-		"etat_planification": ["in", ["Publiée", "En cours", "Terminée"]],
+		"etat_planification": ["in", ["Publiée", "En cours", "Retour dépôt", "Contrôle caisse", "Terminée"]],
 		"docstatus": ["<", 2],
 	}
 	if driver:
@@ -1145,6 +1224,15 @@ def get_driver_routes(date=None):
 
 
 @frappe.whitelist()
+def get_driver_dashboard(date=None):
+	_require(DRIVER_ROLES)
+	_require_schema()
+	from log.services.distribution_driver_dashboard import build_driver_dashboard
+
+	return build_driver_dashboard(driver=_driver_record(), date=date)
+
+
+@frappe.whitelist()
 def get_driver_route(route_id=None):
 	"""Compatibilité avec le premier frontend Distribution."""
 	if route_id:
@@ -1154,7 +1242,7 @@ def get_driver_route(route_id=None):
 		_assert_driver_route(doc)
 		return _serialize_route(doc)
 	routes = get_driver_routes(today())
-	return next((route for route in routes if route["lifecycle"] in {"Publiée", "En cours"}), routes[0] if routes else None)
+	return next((route for route in routes if route["lifecycle"] in {"Publiée", "En cours", "Retour dépôt"}), routes[0] if routes else None)
 
 
 @frappe.whitelist()
@@ -1184,26 +1272,39 @@ def acknowledge_route(route_id, revision):
 
 
 @frappe.whitelist()
-def start_route(route_id):
+def start_route(route_id, expected_revision=None, request_id=None):
 	_require(DRIVER_ROLES)
 	_require_schema()
 	_lock_route(route_id)
 	doc = frappe.get_doc("Livraison", route_id)
 	_assert_driver_route(doc)
+	request_id = str(request_id or "").strip()
+	if request_id and doc.get("last_start_request_id") == request_id and _route_state(doc) == "En cours":
+		return _serialize_route(doc)
+	if _route_state(doc) == "En cours" and doc.get("stock_entry_chargement"):
+		return _serialize_route(doc)
 	if not can_transition_route(_route_state(doc), "En cours"):
 		frappe.throw(_("Seule une tournée publiée peut être démarrée."))
 	if cint(doc.revision_acceptee) != cint(doc.revision_publiee) or cint(doc.revision_publiee) != cint(doc.revision):
 		frappe.throw(_("Acceptez la dernière révision de la tournée avant le départ."))
+	if expected_revision not in (None, "") and cint(expected_revision) != cint(doc.revision):
+		frappe.throw(_("La tournée a été révisée. Actualisez-la avant le chargement."))
+	for row in doc.bons_de_livraison or []:
+		_lock_delivery_note(row.bon_de_livraison)
+	from log.services.distribution_fulfillment import load_route_stock
+
+	load_route_stock(doc)
 	doc.etat_planification = "En cours"
 	doc.date_depart = now_datetime()
-	doc.save(ignore_permissions=True)
-	from log.delivery_note_ops import _apply_named_status
+	if doc.meta.has_field("last_start_request_id"):
+		doc.last_start_request_id = request_id or None
+	from log.livraison_hooks import calculate_livraison_status_from_bls
 
+	doc.status = calculate_livraison_status_from_bls(doc)
+	_refresh_document_timestamp(doc)
+	doc.save(ignore_permissions=True)
 	for row in doc.bons_de_livraison:
 		_set_delivery_note_assignment(frappe.get_doc("Delivery Note", row.bon_de_livraison), doc, "En cours")
-		status = frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut") or "Nouveau"
-		if status in {"Préparé", "Partiellement Livré", "Non Livré"}:
-			_apply_named_status(row.bon_de_livraison, "Enlevé")
 	return _serialize_route(doc)
 
 
@@ -1214,20 +1315,18 @@ def finish_route(route_id):
 	_lock_route(route_id)
 	doc = frappe.get_doc("Livraison", route_id)
 	_assert_driver_route(doc)
-	if not can_transition_route(_route_state(doc), "Terminée"):
-		frappe.throw(_("Seule une tournée en cours peut être terminée."))
+	if _route_state(doc) not in {"En cours", "Retour dépôt"}:
+		frappe.throw(_("Seule une tournée en cours peut déclarer son retour."))
 	statuses = {
 		frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut")
 		for row in doc.bons_de_livraison
 	}
 	if not statuses.issubset(TERMINAL_STOP_STATES):
 		frappe.throw(_("Tous les arrêts doivent avoir un résultat avant de terminer la tournée."))
-	doc.etat_planification = "Terminée"
-	doc.date_fin = now_datetime()
-	doc.save(ignore_permissions=True)
-	for row in doc.bons_de_livraison:
-		_set_delivery_note_assignment(frappe.get_doc("Delivery Note", row.bon_de_livraison), doc, "Terminé")
-	return _serialize_route(doc)
+	from log.services.distribution_fulfillment import declare_route_return
+
+	declare_route_return(doc)
+	return _serialize_route(frappe.get_doc("Livraison", doc.name))
 
 
 @frappe.whitelist()
@@ -1322,11 +1421,60 @@ def _attach_image(delivery_note: str, fieldname: str, data: str, filename: str) 
 	return file_doc.file_url
 
 
-def _validate_completion(data: dict[str, Any], doc):
+def _validate_completion(data: dict[str, Any], doc, *, requires_customer_geolocation: bool = False):
 	balance = max(flt(doc.grand_total) - _paid_amount(doc.name), 0)
-	errors = completion_errors(data, balance=balance, failure_reasons=FAILURE_REASONS)
+	errors = completion_errors(
+		data,
+		balance=balance,
+		failure_reasons=FAILURE_REASONS,
+		requires_customer_geolocation=requires_customer_geolocation,
+	)
 	if errors:
 		frappe.throw(_(errors[0]))
+
+
+def _capture_missing_customer_location(doc, evidence: dict[str, Any], *, outcome: str) -> bool:
+	if outcome not in {"delivered", "partial"} or not doc.customer:
+		return False
+	latitude, longitude = parse_gps_value(frappe.db.get_value("Customer", doc.customer, "custom_gps"))
+	if latitude is not None and longitude is not None:
+		return False
+	values = {
+		"custom_gps": f"{float(evidence['latitude']):.8f},{float(evidence['longitude']):.8f}",
+	}
+	audit_values = {
+		"custom_gps_precision_m": flt(evidence.get("accuracy")),
+		"custom_gps_capture_date": now_datetime(),
+		"custom_gps_capture_user": frappe.session.user,
+		"custom_gps_source_bl": doc.name,
+	}
+	for field, value in audit_values.items():
+		if frappe.db.has_column("Customer", field):
+			values[field] = value
+	frappe.db.set_value("Customer", doc.customer, values)
+	return True
+
+
+def _save_delivery_completion(doc):
+	"""Persist the controlled delivery result without revalidating the commercial document.
+
+	The endpoint validates quantities, evidence and payment before reaching this point. Running the
+	standard ERPNext Delivery Note validation again reloads Item details and checks Item permissions
+	for the driver, although the driver is only allowed to complete the assigned stop. Keeping the
+	normal save pipeline while skipping ``validate`` preserves timestamps, child updates and hooks
+	without granting broad ERP permissions to the Livreur role.
+	"""
+	doc.flags.ignore_validate = True
+	doc.flags.ignore_validate_update_after_submit = True
+	doc.save(ignore_permissions=True)
+
+
+def _customer_location_was_captured_by(doc) -> bool:
+	return bool(
+		doc.customer
+		and frappe.db.has_column("Customer", "custom_gps_source_bl")
+		and frappe.db.get_value("Customer", doc.customer, "custom_gps_source_bl") == doc.name
+	)
 
 
 def _apply_items(doc, data: dict[str, Any]):
@@ -1361,12 +1509,20 @@ def _apply_items(doc, data: dict[str, Any]):
 				item.custom_commentaire_article = data.get("failureComment")
 
 
+def _apply_payment_to_driver_cash(payment_doc, route):
+	from log.services.distribution_driver_cash import mark_route_pending_cash_control, post_declared_cash
+
+	post_declared_cash(payment_doc, route)
+	mark_route_pending_cash_control(route)
+
+
 def _new_payment(data: dict[str, Any], route, doc, request_id: str):
 	payment = data.get("payment")
 	if not payment:
 		return None
 	existing = frappe.db.get_value("Paiement Client", {"request_id": request_id}, "name")
 	if existing:
+		_apply_payment_to_driver_cash(frappe.get_doc("Paiement Client", existing), route)
 		return existing
 	cheque_url = None
 	if payment["method"] == "cheque":
@@ -1383,9 +1539,13 @@ def _new_payment(data: dict[str, Any], route, doc, request_id: str):
 			"montant": flt(payment["amount"]),
 			"photo_cheque": cheque_url,
 			"date_encaissement": payment.get("collectionDate"),
+			"numero_cheque": payment.get("chequeNumber"),
+			"statut_controle": "Déclaré",
+			"facture_source": doc.get("custom_sales_invoice"),
 			"request_id": request_id,
 		}
 	).insert(ignore_permissions=True)
+	_apply_payment_to_driver_cash(payment_doc, route)
 	return payment_doc.name
 
 
@@ -1395,11 +1555,15 @@ def _refresh_route_lifecycle(route):
 		for row in route.bons_de_livraison
 	]
 	if statuses and all(status in TERMINAL_STOP_STATES for status in statuses):
-		route.etat_planification = "Terminée"
-		route.date_fin = route.date_fin or now_datetime()
-		route.save(ignore_permissions=True)
+		route.etat_planification = "Retour dépôt"
+		route.statut_chargement = "Retour requis"
 		for row in route.bons_de_livraison:
-			_set_delivery_note_assignment(frappe.get_doc("Delivery Note", row.bon_de_livraison), route, "Terminé")
+			dn = frappe.get_doc("Delivery Note", row.bon_de_livraison)
+			planning_status = "Terminé" if dn.docstatus == 1 else "En attente retour"
+			_set_delivery_note_assignment(dn, route, planning_status)
+	# Nested DN/payment writes can bump Livraison.modified in the same request.
+	_refresh_document_timestamp(route)
+	route.save(ignore_permissions=True)
 
 
 @frappe.whitelist()
@@ -1426,15 +1590,24 @@ def complete_delivery_stop(payload):
 		return {
 			"success": True,
 			"idempotent": True,
+			"customerLocationUpdated": _customer_location_was_captured_by(doc),
 			"route": _serialize_route(frappe.get_doc("Livraison", route.name)),
 		}
-	if doc.get("custom_statut") == "Livré":
+	if doc.docstatus == 1 or doc.get("custom_statut") in {"Livré", "Partiellement Livré"}:
 		frappe.throw(_("Ce bon livré est en lecture seule."))
 
-	_validate_completion(data, doc)
+	if doc.customer:
+		_lock_customer(doc.customer)
+	customer_latitude, customer_longitude = parse_gps_value(
+		frappe.db.get_value("Customer", doc.customer, "custom_gps") if doc.customer else None
+	)
+	requires_customer_geolocation = customer_latitude is None or customer_longitude is None
+	_validate_completion(data, doc, requires_customer_geolocation=requires_customer_geolocation)
 	_apply_items(doc, data)
 	evidence = data["evidence"]
-	doc.custom_gps = f"{flt(evidence['latitude'])},{flt(evidence['longitude'])}"
+	doc.custom_gps = f"{float(evidence['latitude']):.8f},{float(evidence['longitude']):.8f}"
+	if doc.meta.has_field("custom_gps_accuracy_m"):
+		doc.custom_gps_accuracy_m = flt(evidence.get("accuracy"))
 	doc.custom_commentaire_livreur = evidence.get("comment") or data.get("failureComment")
 	if evidence.get("photoData"):
 		doc.custom_photo_livraison = _attach_image(doc.name, "custom_photo_livraison", evidence["photoData"], f"livraison_{request_id}.jpg")
@@ -1442,24 +1615,361 @@ def complete_delivery_stop(payload):
 		doc.custom_signature_livraison = _attach_image(doc.name, "custom_signature_livraison", evidence["signatureData"], f"signature_{request_id}.png")
 		doc.custom_nom_signataire = str(evidence.get("signerName")).strip()
 	doc.custom_last_delivery_request_id = request_id
-	remaining = sum(max(flt(item.qty) - flt(item.get("custom_quantite_livree")), 0) for item in doc.items)
-	delivered = sum(flt(item.get("custom_quantite_livree")) for item in doc.items)
-	doc.custom_statut = stop_status(
-		remaining_quantity=remaining,
-		delivered_quantity=delivered,
+	from log.services.distribution_fulfillment import finalize_delivery_document
+
+	accounting = finalize_delivery_document(route, doc, data["outcome"])
+	if accounting.get("salesInvoice"):
+		doc.custom_sales_invoice = accounting["salesInvoice"]
+	customer_location_updated = _capture_missing_customer_location(
+		doc,
+		evidence,
 		outcome=data["outcome"],
-	)
-	doc.flags.ignore_validate_update_after_submit = True
-	frappe.flags.in_distribution_completion = True
-	try:
-		doc.save(ignore_permissions=True)
-	finally:
-		frappe.flags.in_distribution_completion = False
+	) if requires_customer_geolocation else False
 	payment_name = _new_payment(data, route, doc, request_id)
 	_refresh_route_lifecycle(route)
 	return {
 		"success": True,
 		"idempotent": False,
+		"customerLocationUpdated": customer_location_updated,
 		"payment": payment_name,
+		"accounting": accounting,
 		"route": _serialize_route(frappe.get_doc("Livraison", route.name)),
 	}
+
+
+def _try_complete_route(route):
+	if route.get("statut_chargement") != "Retourné":
+		return
+	payment_count = frappe.db.count("Paiement Client", {"livraison": route.name, "statut_controle": ["!=", "Annulé"]})
+	if payment_count and route.get("statut_caisse") != "Validée":
+		return
+	for row in route.bons_de_livraison or []:
+		if frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut_facturation") == "Erreur":
+			return
+	open_exceptions = frappe.db.count(
+		"Exception Distribution",
+		{"tournee": route.name, "statut": ["in", ["Ouverte", "En traitement"]]},
+	)
+	if open_exceptions:
+		return
+	route.etat_planification = "Terminée"
+	route.date_fin = route.date_fin or now_datetime()
+	if not payment_count:
+		route.statut_caisse = "Sans encaissement"
+	_refresh_document_timestamp(route)
+	route.save(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def declare_route_return(route_id, expected_revision=None, request_id=None):
+	_require(DRIVER_ROLES)
+	_require_schema()
+	_lock_route(route_id)
+	route = frappe.get_doc("Livraison", route_id)
+	_assert_driver_route(route)
+	request_id = str(request_id or "").strip()
+	if request_id and route.get("last_return_request_id") == request_id and route.get("statut_chargement") in {"Retour déclaré", "Retourné"}:
+		return _serialize_route(route)
+	if expected_revision not in (None, "") and cint(expected_revision) != cint(route.revision):
+		frappe.throw(_("La tournée a été révisée. Actualisez-la."))
+	statuses = {
+		frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut")
+		for row in route.bons_de_livraison or []
+	}
+	if not statuses or not statuses.issubset(TERMINAL_STOP_STATES):
+		frappe.throw(_("Tous les arrêts doivent avoir un résultat avant le retour."))
+	from log.services.distribution_fulfillment import declare_route_return as declare_return
+
+	declare_return(route)
+	if route.meta.has_field("last_return_request_id"):
+		frappe.db.set_value("Livraison", route.name, "last_return_request_id", request_id or None, update_modified=False)
+	return _serialize_route(frappe.get_doc("Livraison", route.name))
+
+
+@frappe.whitelist()
+def get_route_return(route_id):
+	_require(PREPARATION_ROLES | DRIVER_ROLES)
+	_require_schema()
+	route = frappe.get_doc("Livraison", route_id)
+	if _roles() & {"Livreur"} and not (_roles() & {"Responsable", "System Manager"}):
+		_assert_driver_route(route)
+	from log.services.distribution_fulfillment import route_stock_summary
+
+	return route_stock_summary(route)
+
+
+@frappe.whitelist()
+def get_return_routes(date_from=None, date_to=None):
+	_require(PREPARATION_ROLES)
+	_require_schema()
+	start = getdate(date_from or add_days(today(), -7))
+	end = getdate(date_to or today())
+	return [
+		_serialize_route(frappe.get_doc("Livraison", row.name))
+		for row in frappe.get_all(
+			"Livraison",
+			filters={
+				"date_liv": ["between", [start, end]],
+				"statut_chargement": ["in", ["Retour requis", "Retour déclaré", "Exception"]],
+			},
+			fields=["name"],
+			order_by="date_liv asc, modified asc",
+		)
+	]
+
+
+@frappe.whitelist()
+def confirm_route_return(payload):
+	_require(PREPARATION_ROLES)
+	_require_schema()
+	data = _payload(payload)
+	route_id = str(data.get("routeId") or "").strip()
+	_lock_route(route_id)
+	route = frappe.get_doc("Livraison", route_id)
+	if data.get("expectedRevision") not in (None, "") and cint(data.get("expectedRevision")) != cint(route.revision):
+		frappe.throw(_("La tournée a été révisée. Actualisez-la."))
+	for line in route.get("lignes_chargement") or []:
+		for delivery_note in {line.delivery_note, line.get("residual_delivery_note")} - {None, ""}:
+			_lock_delivery_note(delivery_note)
+	from log.services.distribution_fulfillment import confirm_route_return as confirm_return
+
+	result = confirm_return(route, data.get("lines") or [])
+	if result.get("success") and route.meta.has_field("last_return_confirmation_request_id"):
+		frappe.db.set_value("Livraison", route_id, "last_return_confirmation_request_id", data.get("requestId"), update_modified=False)
+	if result.get("success"):
+		route = frappe.get_doc("Livraison", route_id)
+		_try_complete_route(route)
+	result["route"] = _serialize_route(frappe.get_doc("Livraison", route_id))
+	return result
+
+
+@frappe.whitelist()
+def get_cashier_routes(date_from=None, date_to=None, status=None):
+	_require(CASHIER_ROLES)
+	_require_schema()
+	start = getdate(date_from or today())
+	end = getdate(date_to or add_days(start, 7))
+	filters: dict[str, Any] = {
+		"date_liv": ["between", [start, end]],
+		"etat_planification": ["in", ["Retour dépôt", "Contrôle caisse", "Terminée"]],
+	}
+	if status:
+		filters["statut_caisse"] = status
+	return [
+		_serialize_route(frappe.get_doc("Livraison", row.name))
+		for row in frappe.get_all("Livraison", filters=filters, fields=["name"], order_by="date_liv desc, modified desc")
+	]
+
+
+@frappe.whitelist()
+def get_cashier_reconciliation(route_id=None):
+	_require(CASHIER_ROLES)
+	_require_schema()
+	route_id = str(route_id or "").strip()
+	if not route_id:
+		return None
+	from log.services.distribution_cashier import reconciliation
+
+	return reconciliation(frappe.get_doc("Livraison", route_id))
+
+
+@frappe.whitelist()
+def get_customer_outstanding_invoices(customer, company, currency="DZD"):
+	_require(CASHIER_ROLES)
+	_require_schema()
+	from log.services.distribution_cashier import outstanding_invoices
+
+	return outstanding_invoices(customer, company, currency)
+
+
+@frappe.whitelist()
+def validate_cash_reconciliation(payload):
+	_require(CASHIER_ROLES)
+	_require_schema()
+	data = _payload(payload)
+	route_id = str(data.get("routeId") or "").strip()
+	_lock_route(route_id)
+	route = frappe.get_doc("Livraison", route_id)
+	if data.get("expectedRevision") not in (None, "") and cint(data.get("expectedRevision")) != cint(route.revision):
+		frappe.throw(_("La tournée a été révisée. Actualisez-la."))
+	from log.services.distribution_cashier import validate_reconciliation
+
+	result = validate_reconciliation(route, data)
+	if not result.get("requiresManagerApproval"):
+		_try_complete_route(frappe.get_doc("Livraison", route_id))
+	return {
+		"reconciliation": result,
+		"route": _serialize_route(frappe.get_doc("Livraison", route_id)),
+	}
+
+
+@frappe.whitelist()
+def resolve_cash_discrepancy(payload):
+	_require({"Responsable", "System Manager"})
+	_require_schema()
+	data = _payload(payload)
+	route_id = str(data.get("routeId") or "").strip()
+	if not str(data.get("reason") or "").strip():
+		frappe.throw(_("La décision du Responsable doit être motivée."))
+	_lock_route(route_id)
+	route = frappe.get_doc("Livraison", route_id)
+	from log.services.distribution_cashier import validate_reconciliation
+
+	result = validate_reconciliation(route, data, approved_by_responsible=True)
+	for exception in frappe.get_all(
+		"Exception Distribution",
+		filters={"tournee": route_id, "type_exception": "Écart de caisse", "statut": ["in", ["Ouverte", "En traitement"]]},
+		pluck="name",
+	):
+		frappe.db.set_value(
+			"Exception Distribution",
+			exception,
+			{
+				"statut": "Résolue",
+				"resolution": data["reason"],
+				"resolue_par": frappe.session.user,
+				"date_resolution": now_datetime(),
+			},
+		)
+	_try_complete_route(frappe.get_doc("Livraison", route_id))
+	return {"reconciliation": result, "route": _serialize_route(frappe.get_doc("Livraison", route_id))}
+
+
+@frappe.whitelist()
+def retry_delivery_invoice(delivery_note):
+	_require({"Responsable", "System Manager"})
+	_require_schema()
+	_lock_delivery_note(delivery_note)
+	dn = frappe.get_doc("Delivery Note", delivery_note)
+	if dn.docstatus != 1:
+		frappe.throw(_("Le bon doit être validé avant sa facturation."))
+	route_id = dn.get("custom_tournee")
+	if not route_id:
+		frappe.throw(_("Aucune tournée n'est liée à ce bon."))
+	_lock_route(route_id)
+	route = frappe.get_doc("Livraison", route_id)
+	from log.services.distribution_fulfillment import create_and_submit_invoice
+
+	invoice, invoice_status = create_and_submit_invoice(route, dn.name)
+	if invoice:
+		for exception in frappe.get_all(
+			"Exception Distribution",
+			filters={"bon_de_livraison": dn.name, "type_exception": "Facturation", "statut": ["in", ["Ouverte", "En traitement"]]},
+			pluck="name",
+		):
+			frappe.db.set_value(
+				"Exception Distribution", exception,
+				{"statut": "Résolue", "resolution": _("Facture créée : {0}").format(invoice), "resolue_par": frappe.session.user, "date_resolution": now_datetime()},
+			)
+	_try_complete_route(route)
+	return {"salesInvoice": invoice, "invoiceStatus": invoice_status, "route": _serialize_route(route)}
+
+
+@frappe.whitelist()
+def get_vehicle_stocks():
+	_require(STOCK_ROLES)
+	from log.services.distribution_vehicle_stock import vehicle_stock_snapshot
+
+	return vehicle_stock_snapshot()
+
+
+@frappe.whitelist()
+def get_driver_cash_boxes():
+	_require(CASHIER_ROLES)
+	from log.services.distribution_driver_cash import list_cash_boxes
+
+	return list_cash_boxes()
+
+
+@frappe.whitelist()
+def get_driver_cash_box(livreur=None):
+	_require(CASHIER_ROLES)
+	livreur = str(livreur or "").strip()
+	if not livreur:
+		return None
+	from log.services.distribution_driver_cash import get_cash_box
+
+	return get_cash_box(livreur)
+
+
+@frappe.whitelist()
+def post_driver_cash_adjustment(payload):
+	_require({"Responsable", "System Manager"})
+	data = _payload(payload)
+	from log.services.distribution_driver_cash import post_adjustment
+
+	return post_adjustment(
+		str(data.get("driver") or "").strip(),
+		str(data.get("type") or "").strip(),
+		flt(data.get("amount")),
+		str(data.get("reason") or ""),
+		str(data.get("routeId") or "").strip() or None,
+	)
+
+
+@frappe.whitelist()
+def get_legacy_route_regularization(route_id):
+	_require({"Responsable", "System Manager"})
+	_require_schema()
+	route = frappe.get_doc("Livraison", route_id)
+	return {
+		"routeId": route.name,
+		"needsRegularization": not bool(route.get("stock_entry_chargement")) and _route_state(route) == "En cours",
+		"stops": [
+			{
+				"deliveryNote": row.bon_de_livraison,
+				"status": frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut"),
+				"deliveredQuantity": sum(
+					flt(item.custom_quantite_livree)
+					for item in frappe.get_all("Delivery Note Item", filters={"parent": row.bon_de_livraison}, fields=["custom_quantite_livree"])
+				),
+			}
+			for row in route.bons_de_livraison or []
+		],
+	}
+
+
+@frappe.whitelist()
+def regularize_legacy_route(route_id, confirmed=0):
+	_require({"Responsable", "System Manager"})
+	_require_schema()
+	if not cint(confirmed):
+		frappe.throw(_("Confirmez que les marchandises ont réellement été chargées dans le véhicule."))
+	_lock_route(route_id)
+	route = frappe.get_doc("Livraison", route_id)
+	statuses = {
+		row.bon_de_livraison: frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut")
+		for row in route.bons_de_livraison or []
+	}
+	from log.services.distribution_fulfillment import finalize_delivery_document, load_route_stock
+
+	for delivery_note, status in statuses.items():
+		dn = frappe.get_doc("Delivery Note", delivery_note)
+		if dn.docstatus != 0:
+			frappe.throw(_("Le bon historique {0} n'est plus en brouillon.").format(dn.name))
+		if status == "Livré":
+			for item in dn.items or []:
+				item.custom_quantite_livree = item.qty
+		elif status == "Partiellement Livré":
+			delivered = sum(flt(item.get("custom_quantite_livree")) for item in dn.items or [])
+			remaining = sum(max(flt(item.qty) - flt(item.get("custom_quantite_livree")), 0) for item in dn.items or [])
+			if delivered <= 0 or remaining <= 0:
+				frappe.throw(
+					_("Corrigez les quantités réellement livrées du bon {0} avant la régularisation.").format(dn.name)
+				)
+		dn.flags.ignore_validate = True
+		dn.save(ignore_permissions=True)
+	load_route_stock(route, historical=True)
+	for delivery_note, status in statuses.items():
+		if status not in {"Livré", "Partiellement Livré"}:
+			if status in TERMINAL_STOP_STATES:
+				dn = frappe.get_doc("Delivery Note", delivery_note)
+				dn.custom_statut = status
+				dn.custom_statut_planification = "En attente retour"
+				dn.flags.ignore_validate = True
+				dn.save(ignore_permissions=True)
+			continue
+		dn = frappe.get_doc("Delivery Note", delivery_note)
+		finalize_delivery_document(route, dn, "delivered" if status == "Livré" else "partial")
+	_refresh_route_lifecycle(route)
+	return _serialize_route(frappe.get_doc("Livraison", route_id))

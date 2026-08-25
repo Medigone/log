@@ -44,3 +44,9 @@ export function markOperationAttempt(requestId: string) {
 export function confirmOperation(requestId: string) {
   write(readPendingOperations().filter((operation) => operation.requestId !== requestId));
 }
+
+export function clearPendingOperations(): PendingOperation[] {
+  const operations = readPendingOperations();
+  write([]);
+  return operations;
+}

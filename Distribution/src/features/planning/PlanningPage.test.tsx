@@ -14,8 +14,8 @@ const mocks = vi.hoisted(() => ({
 const board: PlanningBoard = {
   dateFrom: "2026-08-24",
   dateTo: "2026-08-30",
-  unassigned: [{ deliveryNote: "DN-1", customer: "C-1", customerName: "Client Test", totalQuantity: 2, amountToCollect: 1000, status: "Préparé", planningStatus: "Non planifié", sequence: 1 }],
-  assignments: [{ deliveryNote: "DN-1", customer: "C-1", customerName: "Client Test", totalQuantity: 2, amountToCollect: 1000, status: "Préparé", planningStatus: "Non planifié", sequence: 1, routeRevision: 0 }],
+  unassigned: [{ deliveryNote: "DN-1", customer: "C-1", customerName: "Client Test", customerGpsStatus: "missing", requiresCustomerGeolocation: true, totalQuantity: 2, amountCollected: 0, amountToCollect: 1000, payments: [], invoiceStatus: "Non créée", status: "Préparé", planningStatus: "Non planifié", sequence: 1 }],
+  assignments: [{ deliveryNote: "DN-1", customer: "C-1", customerName: "Client Test", customerGpsStatus: "missing", requiresCustomerGeolocation: true, totalQuantity: 2, amountCollected: 0, amountToCollect: 1000, payments: [], invoiceStatus: "Non créée", status: "Préparé", planningStatus: "Non planifié", sequence: 1, routeRevision: 0 }],
   routes: [],
   drivers: [{ name: "DRV-1", label: "Livreur Test", active: true }],
   vehicles: [{ name: "VEH-1", label: "Camion Test", active: true, capacity: 10 }],
@@ -39,6 +39,7 @@ describe("PlanningPage", () => {
     const user = userEvent.setup();
     render(<MemoryRouter><PlanningPage /></MemoryRouter>);
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /planifier/i }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/planifier la livraison/i)).toBeInTheDocument();

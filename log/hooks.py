@@ -164,7 +164,6 @@ doc_events = {
             "log.delivery_note_ops.ensure_qr_code",
         ],
         "on_update": [
-            "log.log.delivery_note_hooks.on_update_delivery_note",
             "log.livraison_hooks.update_livraisons_on_delivery_note_change",
             "log.order_change_ops.invalidate_delivery_note_distribution",
             "log.delivery_note_ops.ensure_qr_code",
@@ -286,7 +285,7 @@ fixtures = [
     "Workflow",
     {
         "dt": "Role",
-        "filters": [["name", "in", ["Préparateur", "Planificateur", "Livreur", "Responsable"]]],
+        "filters": [["name", "in", ["Préparateur", "Planificateur", "Livreur", "Responsable", "Caissier"]]],
     },
 ]
 
