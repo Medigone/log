@@ -11,10 +11,12 @@ app_license = "mit"
 # required_apps = []
 
 # Each item in the list will be shown as an app in the apps page
+app_logo_url = "/assets/log/images/intrapro-mark.png"
+
 add_to_apps_screen = [
     {
         "name": "log",
-        "logo": "/assets/log/images/distribution-favicon.svg",
+        "logo": "/assets/log/images/intrapro-mark.png",
         "title": "IntraPro Distribution",
         "route": "/distribution",
     }
@@ -272,7 +274,7 @@ override_whitelisted_methods = {
 # }
 
 website_redirects = [
-    {"source": r"/favicon\.ico", "target": "/assets/log/images/distribution-favicon.svg"},
+    {"source": r"/favicon\.ico", "target": "/assets/log/images/intrapro-mark.png"},
 ]
 
 website_route_rules = [

@@ -1,17 +1,36 @@
 # Copyright (c) 2025, Amine Melizi and contributors
 # For license information, please see license.txt
 
+import re
+from urllib.parse import urlparse
+
 import frappe
 from frappe.model.document import Document
-import re
+from frappe.utils import cint
+
+DEFAULT_STOP_DURATION_MINUTES = 15
 
 
 class ParametresLivraison(Document):
 	def validate(self):
 		"""Validation des paramètres de livraison"""
+		self.validate_routing()
 		self.validate_seuils_distance()
 		self.validate_rate_limit()
 		self.validate_google_api_key()
+
+	def validate_routing(self):
+		url = str(self.url_openrouteservice or "").strip().rstrip("/")
+		parsed = urlparse(url)
+		if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+			frappe.throw("L'URL OpenRouteService est invalide")
+		self.url_openrouteservice = url
+		if self.profil_routage != "driving-car":
+			frappe.throw("Le profil routier doit être driving-car")
+		if self.get("duree_arret_defaut_minutes") in (None, ""):
+			self.duree_arret_defaut_minutes = DEFAULT_STOP_DURATION_MINUTES
+		if cint(self.duree_arret_defaut_minutes) < 0:
+			frappe.throw("Le temps d'arrêt par livraison ne peut pas être négatif")
 	
 	def validate_seuils_distance(self):
 		"""Valide que les seuils de distance sont cohérents"""

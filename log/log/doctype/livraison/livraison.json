@@ -22,6 +22,7 @@
   "status",
   "section_break_zbae",
   "date_liv",
+  "depot",
   "vehicule",
   "column_break_wsgq",
   "livreur",
@@ -37,6 +38,12 @@
   "total_montant_a_encaisser",
   "total_paiements",
   "solde_restant",
+  "routing_geometry",
+  "routing_distance_m",
+  "routing_duration_s",
+  "routing_provider",
+  "routing_calculated_at",
+  "routing_revision",
   "étapes_de_livraison_tab",
   "rt"
  ],
@@ -153,6 +160,12 @@
    "label": "Date"
   },
   {
+   "fieldname": "depot",
+   "fieldtype": "Link",
+   "label": "Dépôt de départ",
+   "options": "Depot Distribution"
+  },
+  {
    "fieldname": "section_break_zbae",
    "fieldtype": "Section Break"
   },
@@ -177,6 +190,7 @@
   },
   {
    "fetch_from": "livreur.vehicule",
+   "fetch_if_empty": 1,
    "fieldname": "vehicule",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -229,6 +243,49 @@
    "read_only": 1
   },
   {
+   "fieldname": "routing_geometry",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Géométrie de routage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "routing_distance_m",
+   "fieldtype": "Float",
+   "hidden": 1,
+   "label": "Distance routière (m)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "routing_duration_s",
+   "fieldtype": "Float",
+   "hidden": 1,
+   "label": "Durée routière (s)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "routing_provider",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Fournisseur de routage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "routing_calculated_at",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Itinéraire calculé le",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "routing_revision",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Révision du routage",
+   "read_only": 1
+  },
+  {
    "fieldname": "étapes_de_livraison_tab",
    "fieldtype": "Tab Break",
    "label": "Étapes de Livraison"
@@ -236,7 +293,8 @@
   {
    "fieldname": "rt",
    "fieldtype": "Text Editor",
-   "label": "Routing"
+   "hidden": 1,
+   "label": "Routing historique"
   },
   {
    "fieldname": "section_break_ecye",

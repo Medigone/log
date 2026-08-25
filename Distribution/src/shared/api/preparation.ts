@@ -12,6 +12,7 @@ export interface SalesOrderRow {
   total_qty?: number;
   per_picked?: number;
   custom_commune?: string;
+  custom_commune_nom?: string;
   custom_wilaya?: string;
   draft_pick_list?: string;
 }

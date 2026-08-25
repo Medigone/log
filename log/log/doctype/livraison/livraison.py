@@ -40,7 +40,32 @@ class Livraison(Document):
 		self.refresh_status_from_delivery_notes()
 
 	def before_save(self):
+		self.invalidate_routing_if_route_changed()
 		self.calculate_totals()
+
+	def invalidate_routing_if_route_changed(self):
+		"""Invalide aussi le cache lors d'une modification directe depuis Desk."""
+		before = self.get_doc_before_save()
+		if not before or not self.meta.has_field("routing_geometry"):
+			return
+		tracked_fields = ("depot", "date_liv", "livreur", "vehicule", "depart_prevu", "fin_prevue")
+		before_values = tuple(before.get(field) for field in tracked_fields)
+		current_values = tuple(self.get(field) for field in tracked_fields)
+		before_stops = tuple(row.bon_de_livraison for row in before.bons_de_livraison or [])
+		current_stops = tuple(row.bon_de_livraison for row in self.bons_de_livraison or [])
+		if before_values == current_values and before_stops == current_stops:
+			return
+		if cint(self.revision) <= cint(before.revision):
+			self.revision = max(cint(before.revision), 1) + 1
+		for field, value in {
+			"routing_geometry": None,
+			"routing_distance_m": 0,
+			"routing_duration_s": 0,
+			"routing_provider": None,
+			"routing_calculated_at": None,
+			"routing_revision": 0,
+		}.items():
+			self.set(field, value)
 
 	def validate_distribution_route(self):
 		if not self.meta.has_field("etat_planification"):

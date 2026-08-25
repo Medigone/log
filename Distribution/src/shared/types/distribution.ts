@@ -14,6 +14,52 @@ export interface DistributionUser {
 
 export type RouteLifecycle = "Brouillon" | "Publiée" | "En cours" | "Terminée" | "Annulée";
 
+export interface RouteDepot {
+  name: string;
+  label: string;
+  address?: string;
+  latitude: number;
+  longitude: number;
+  isDefault: boolean;
+}
+
+export interface RouteGeometry {
+  type: "LineString";
+  coordinates: Array<[number, number]>;
+}
+
+export interface RouteItinerary {
+  status: "ready" | "stale" | "not_calculated";
+  provider: "openrouteservice" | string;
+  profile: string;
+  optimizationEnabled: boolean;
+  geometry?: RouteGeometry;
+  distanceMeters?: number;
+  durationSeconds?: number;
+  stopDurationMinutes?: number;
+  stopDurationSeconds?: number;
+  totalDurationSeconds?: number;
+  calculatedAt?: string;
+  revision?: number;
+}
+
+export interface RouteOptimizationMetrics {
+  distanceMeters: number;
+  durationSeconds: number;
+  stopDurationMinutes?: number;
+  stopDurationSeconds?: number;
+  totalDurationSeconds?: number;
+}
+
+export interface RouteOptimizationProposal {
+  routeId: string;
+  revision: number;
+  currentOrder: string[];
+  optimizedOrder: string[];
+  current: RouteOptimizationMetrics;
+  optimized: RouteOptimizationMetrics;
+}
+
 export interface RouteStop {
   deliveryNote: string;
   salesOrder?: string;
@@ -31,6 +77,9 @@ export interface RouteStop {
   plannedDate?: string;
   routeId?: string;
   planningAlert?: string;
+  qrCode?: string;
+  packageCount?: number;
+  postingDate?: string;
   sequence: number;
   address?: string;
   phone?: string;
@@ -75,10 +124,13 @@ export interface DistributionRoute {
   driver?: string;
   driverName?: string;
   vehicle?: string;
+  vehicleLabel?: string;
   vehicleCapacity?: number;
   totalQuantity: number;
   totalAmount: number;
   stops: RouteStop[];
+  depot?: RouteDepot;
+  routing: RouteItinerary;
   alerts: string[];
 }
 

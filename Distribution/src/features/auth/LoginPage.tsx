@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from "react";
 import { useFrappeAuth } from "frappe-react-sdk";
-import { AlertTriangle, Eye, EyeOff, Route } from "lucide-react";
+import { AlertTriangle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiErrorMessage } from "@/shared/api/distribution";
+import { BrandLogo } from "@/shared/ui/BrandLogo";
 
 export function LoginPage() {
   const [username, setUsername] = useState("");
@@ -30,13 +31,13 @@ export function LoginPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-slate-50 p-4">
       <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 md:grid-cols-[1.05fr_0.95fr]">
-        <section className="hidden bg-blue-800 p-12 text-white md:flex md:flex-col md:justify-between">
-          <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-white/15"><Route className="h-6 w-6" /></span><div><p className="font-bold">IntraPro</p><p className="text-sm text-blue-100">Distribution</p></div></div>
-          <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-200">Opérations logistiques</p><h1 className="mt-4 text-4xl font-bold leading-tight">Préparer, planifier et livrer avec clarté.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-blue-100">Une interface simple pour garder les équipes alignées, du picking jusqu’à la preuve de livraison.</p></div>
+        <section className="hidden bg-blue-700 p-12 text-white md:flex md:flex-col md:justify-between">
+          <div className="self-start rounded-2xl bg-white px-4 py-3"><BrandLogo className="h-12 w-auto" alt="IntraPro Distribution" /></div>
+          <div><p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-200">Opérations logistiques</p><h1 className="mt-4 text-4xl font-bold leading-tight">Préparer, planifier et livrer avec clarté.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-blue-100">Une interface simple pour garder les équipes alignées, du prélèvement jusqu’à la preuve de livraison.</p></div>
           <p className="text-xs text-blue-200">Accès sécurisé réservé aux équipes autorisées.</p>
         </section>
         <section className="p-7 sm:p-10 md:p-12">
-          <div className="mb-8 flex items-center gap-3 md:hidden"><span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-700 text-white"><Route className="h-5 w-5" /></span><div><p className="font-bold text-slate-950">IntraPro</p><p className="text-xs font-semibold text-blue-700">Distribution</p></div></div>
+          <div className="mb-8 md:hidden"><BrandLogo className="h-10 w-auto" alt="IntraPro Distribution" /></div>
           <p className="text-sm font-semibold text-blue-700">Bienvenue</p><h2 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Connexion</h2><p className="mt-2 text-sm text-slate-500">Utilisez votre compte professionnel Frappe.</p>
           {error && <div role="alert" className="mt-6 flex gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
           <form onSubmit={submit} className="mt-7 space-y-5">

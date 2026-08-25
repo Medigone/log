@@ -28,6 +28,14 @@ from log.api.distribution_rules import (
 	revision_matches,
 	stop_status,
 )
+from log.services.routing import (
+	OpenRouteServiceClient,
+	RoutingConfigurationError,
+	RoutingProviderError,
+	get_depot_snapshot,
+	get_routing_settings,
+	route_duration_summary,
+)
 
 PLANNING_ROLES = {"Planificateur", "Responsable", "System Manager"}
 DRIVER_ROLES = {"Livreur", "Responsable", "System Manager"}
@@ -87,6 +95,34 @@ def _require_schema():
 	if missing:
 		frappe.throw(
 			_("Le schéma Distribution n'est pas encore synchronisé ({0}). Lancez la migration Bench manuellement.").format(
+				", ".join(missing)
+			)
+		)
+
+
+def _require_routing_schema():
+	_require_schema()
+	required_columns = (
+		"depot",
+		"routing_geometry",
+		"routing_distance_m",
+		"routing_duration_s",
+		"routing_provider",
+		"routing_calculated_at",
+		"routing_revision",
+	)
+	missing = [field for field in required_columns if not frappe.db.has_column("Livraison", field)]
+	for field in (
+		"url_openrouteservice",
+		"profil_routage",
+		"cle_api_openrouteservice",
+		"optimisation_routage_active",
+	):
+		if not frappe.db.exists("DocField", {"parent": "Parametres Livraison", "fieldname": field}):
+			missing.append(f"Parametres Livraison.{field}")
+	if missing:
+		frappe.throw(
+			_("Le schéma de routage n'est pas synchronisé ({0}). Lancez la migration Bench manuellement.").format(
 				", ".join(missing)
 			)
 		)
@@ -207,6 +243,79 @@ def _bump_route_revision(route, reason: str | None = None):
 		route.etat_planification = "Brouillon"
 		route.a_revalider = 1
 		route.motif_reouverture = reason
+	_invalidate_route_routing(route)
+
+
+def _invalidate_route_routing(route):
+	for field, value in {
+		"routing_geometry": None,
+		"routing_distance_m": 0,
+		"routing_duration_s": 0,
+		"routing_provider": None,
+		"routing_calculated_at": None,
+		"routing_revision": 0,
+	}.items():
+		if route.meta.has_field(field):
+			route.set(field, value)
+
+
+def _assign_default_depot(route):
+	if not route.meta.has_field("depot") or route.get("depot"):
+		return
+	try:
+		route.depot = get_depot_snapshot()["name"]
+	except RoutingConfigurationError:
+		# L'absence de dépôt ne doit pas empêcher la planification manuelle.
+		return
+
+
+def _serialized_depot(route) -> dict[str, Any] | None:
+	try:
+		return get_depot_snapshot(route.get("depot"))
+	except RoutingConfigurationError:
+		return None
+
+
+def _serialized_routing(route, stop_count: int) -> dict[str, Any]:
+	geometry = None
+	if route.get("routing_geometry"):
+		try:
+			candidate = json.loads(route.get("routing_geometry"))
+			if isinstance(candidate, dict) and candidate.get("type") == "LineString":
+				geometry = candidate
+		except (TypeError, json.JSONDecodeError):
+			geometry = None
+	try:
+		settings = get_routing_settings()
+		optimization_enabled = settings.optimization_enabled
+		profile = settings.profile
+		stop_duration_minutes = settings.stop_duration_minutes
+	except Exception:
+		optimization_enabled = False
+		profile = "driving-car"
+		stop_duration_minutes = 15
+	routing_revision = cint(route.get("routing_revision"))
+	current_revision = max(cint(route.get("revision")), 1)
+	status = "ready" if geometry and routing_revision == current_revision else "stale" if geometry else "not_calculated"
+	durations = route_duration_summary(
+		flt(route.get("routing_duration_s")) if status == "ready" else 0,
+		stop_count,
+		stop_duration_minutes,
+	)
+	return {
+		"status": status,
+		"provider": route.get("routing_provider") or "openrouteservice",
+		"profile": profile,
+		"optimizationEnabled": optimization_enabled,
+		"geometry": geometry if status == "ready" else None,
+		"distanceMeters": flt(route.get("routing_distance_m")) if status == "ready" else None,
+		"durationSeconds": durations["durationSeconds"] if status == "ready" else None,
+		"stopDurationMinutes": durations["stopDurationMinutes"],
+		"stopDurationSeconds": durations["stopDurationSeconds"],
+		"totalDurationSeconds": durations["totalDurationSeconds"] if status == "ready" else None,
+		"calculatedAt": str(route.get("routing_calculated_at") or "") or None,
+		"revision": routing_revision or None,
+	}
 
 
 def _set_delivery_note_assignment(doc, route, planning_status: str | None = None):
@@ -285,6 +394,9 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 		"plannedDate": str(doc.get("custom_date_planifiee") or "") or None,
 		"routeId": doc.get("custom_tournee"),
 		"planningAlert": doc.get("custom_motif_invalidation"),
+		"qrCode": doc.get("custom_qr_image"),
+		"packageCount": max(cint(doc.get("custom_nombre_colis")), 1),
+		"postingDate": str(doc.posting_date) if doc.posting_date else None,
 		"sequence": sequence,
 		"items": items,
 	}
@@ -296,8 +408,17 @@ def _route_state(doc) -> str:
 
 def _serialize_route(doc) -> dict[str, Any]:
 	capacity = None
+	vehicle_label = None
 	if doc.vehicule:
-		capacity = frappe.db.get_value("Vehicule", doc.vehicule, "capacite_max_articles")
+		vehicle = frappe.db.get_value(
+			"Vehicule",
+			doc.vehicule,
+			["nom", "immatriculation", "capacite_max_articles"],
+			as_dict=True,
+		)
+		if vehicle:
+			capacity = vehicle.capacite_max_articles
+			vehicle_label = " · ".join(filter(None, [vehicle.nom, vehicle.immatriculation])) or doc.vehicule
 	stops = []
 	for sequence, row in enumerate(doc.bons_de_livraison or [], start=1):
 		if not row.bon_de_livraison or not frappe.db.exists("Delivery Note", row.bon_de_livraison):
@@ -321,12 +442,15 @@ def _serialize_route(doc) -> dict[str, Any]:
 		"needsReview": bool(doc.get("a_revalider")),
 		"reviewReason": doc.get("motif_reouverture"),
 		"driver": doc.livreur,
-		"driverName": doc.nom_livreur,
+		"driverName": doc.nom_livreur or (frappe.db.get_value("Livreur", doc.livreur, "nom") if doc.livreur else None),
 		"vehicle": doc.vehicule,
-		"vehicleCapacity": cint(capacity) if capacity not in (None, "") else None,
+		"vehicleLabel": vehicle_label,
+		"vehicleCapacity": cint(capacity) if capacity not in (None, "", 0) else None,
 		"totalQuantity": sum(stop["totalQuantity"] for stop in stops),
 		"totalAmount": sum(stop["amountToCollect"] for stop in stops),
 		"stops": stops,
+		"depot": _serialized_depot(doc),
+		"routing": _serialized_routing(doc, len(stops)),
 		"publishedAt": str(doc.get("date_publication") or "") or None,
 		"startedAt": str(doc.get("date_depart") or "") or None,
 		"finishedAt": str(doc.get("date_fin") or "") or None,
@@ -515,6 +639,173 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 
 
 @frappe.whitelist()
+def get_route_details(route_id):
+	_require(PLANNING_ROLES)
+	_require_schema()
+	route_id = str(route_id or "").strip()
+	if not route_id or not frappe.db.exists("Livraison", route_id):
+		frappe.throw(_("Tournée introuvable."))
+	return _serialize_route(frappe.get_doc("Livraison", route_id))
+
+
+def _routing_route(route_id: str, expected_revision=None):
+	route_id = str(route_id or "").strip()
+	if not route_id or not frappe.db.exists("Livraison", route_id):
+		frappe.throw(_("Tournée introuvable."))
+	doc = frappe.get_doc("Livraison", route_id)
+	if expected_revision in (None, ""):
+		frappe.throw(_("La révision attendue de la tournée est obligatoire."))
+	if not revision_matches(cint(doc.revision), cint(expected_revision)):
+		frappe.throw(_("La tournée a été modifiée. Actualisez-la avant de recalculer l'itinéraire."))
+	return doc
+
+
+def _routing_points(doc) -> tuple[dict[str, Any], list[dict[str, Any]], list[list[float]]]:
+	depot = get_depot_snapshot(doc.get("depot"))
+	stops = _serialize_route(doc)["stops"]
+	if not stops:
+		raise RoutingConfigurationError(_("La tournée ne contient aucun arrêt."))
+	missing = [stop["deliveryNote"] for stop in stops if stop.get("latitude") is None or stop.get("longitude") is None]
+	if missing:
+		raise RoutingConfigurationError(
+			_("Coordonnées GPS manquantes pour : {0}.").format(", ".join(missing))
+		)
+	coordinates = [[depot["longitude"], depot["latitude"]]]
+	coordinates.extend([[stop["longitude"], stop["latitude"]] for stop in stops])
+	coordinates.append([depot["longitude"], depot["latitude"]])
+	return depot, stops, coordinates
+
+
+def _routing_error(error: Exception):
+	frappe.throw(str(error), title=_("Routage indisponible"))
+
+
+@frappe.whitelist()
+def calculate_route_itinerary(route_id, expected_revision=None):
+	"""Calcule puis met en cache la boucle dépôt-arrêts-dépôt dans l'ordre officiel idx."""
+	_require(PLANNING_ROLES)
+	_require_routing_schema()
+	doc = _routing_route(route_id, expected_revision)
+	revision = cint(doc.revision)
+	stop_names = [row.bon_de_livraison for row in doc.bons_de_livraison or []]
+	try:
+		depot, _stops, coordinates = _routing_points(doc)
+		settings = get_routing_settings(include_secret=True)
+		result = OpenRouteServiceClient(settings).directions(coordinates)
+	except (RoutingConfigurationError, RoutingProviderError) as error:
+		return _routing_error(error)
+
+	# L'appel externe est terminé : seulement maintenant on verrouille et revérifie la tournée.
+	_lock_route(doc.name)
+	current = frappe.get_doc("Livraison", doc.name)
+	current_names = [row.bon_de_livraison for row in current.bons_de_livraison or []]
+	if cint(current.revision) != revision or current_names != stop_names:
+		frappe.throw(_("La tournée a changé pendant le calcul. Aucun itinéraire n'a été enregistré."))
+	current.depot = current.get("depot") or depot["name"]
+	current.routing_geometry = json.dumps(result["geometry"], separators=(",", ":"))
+	current.routing_distance_m = result["distanceMeters"]
+	current.routing_duration_s = result["durationSeconds"]
+	current.routing_provider = "openrouteservice"
+	current.routing_calculated_at = now_datetime()
+	current.routing_revision = revision
+	current.save(ignore_permissions=True)
+	return _serialize_route(current)
+
+
+@frappe.whitelist()
+def propose_route_optimization(route_id, expected_revision=None):
+	"""Retourne une proposition d'ordre sans modifier la tournée."""
+	_require(PLANNING_ROLES)
+	_require_routing_schema()
+	doc = _routing_route(route_id, expected_revision)
+	if _route_state(doc) != "Brouillon":
+		frappe.throw(_("Seule une tournée en brouillon peut être optimisée."))
+	try:
+		depot, stops, current_coordinates = _routing_points(doc)
+		settings = get_routing_settings(include_secret=True)
+		if not settings.optimization_enabled:
+			raise RoutingConfigurationError(_("L'optimisation du routage est désactivée dans Paramètres Livraison."))
+		client = OpenRouteServiceClient(settings)
+		current = client.directions(current_coordinates)
+		jobs = [
+			{
+				"deliveryNote": stop["deliveryNote"],
+				"location": [stop["longitude"], stop["latitude"]],
+			}
+			for stop in stops
+		]
+		optimized = client.optimize([depot["longitude"], depot["latitude"]], jobs)
+		by_name = {job["deliveryNote"]: job["location"] for job in jobs}
+		optimized_coordinates = [[depot["longitude"], depot["latitude"]]]
+		optimized_coordinates.extend(by_name[name] for name in optimized["orderedDeliveryNotes"])
+		optimized_coordinates.append([depot["longitude"], depot["latitude"]])
+		optimized_route = client.directions(optimized_coordinates)
+	except (RoutingConfigurationError, RoutingProviderError) as error:
+		return _routing_error(error)
+	current_durations = route_duration_summary(
+		current["durationSeconds"],
+		len(stops),
+		settings.stop_duration_minutes,
+	)
+	optimized_durations = route_duration_summary(
+		optimized_route["durationSeconds"],
+		len(stops),
+		settings.stop_duration_minutes,
+	)
+	return {
+		"routeId": doc.name,
+		"revision": cint(doc.revision),
+		"currentOrder": [stop["deliveryNote"] for stop in stops],
+		"optimizedOrder": optimized["orderedDeliveryNotes"],
+		"current": {
+			"distanceMeters": current["distanceMeters"],
+			**current_durations,
+		},
+		"optimized": {
+			"distanceMeters": optimized_route["distanceMeters"],
+			**optimized_durations,
+		},
+	}
+
+
+@frappe.whitelist()
+def apply_route_optimization(route_id, ordered_delivery_notes, expected_revision=None):
+	"""Applique atomiquement une proposition confirmée et invalide l'ancien tracé."""
+	_require(PLANNING_ROLES)
+	_require_routing_schema()
+	if isinstance(ordered_delivery_notes, str):
+		try:
+			ordered_delivery_notes = json.loads(ordered_delivery_notes)
+		except json.JSONDecodeError:
+			frappe.throw(_("L'ordre optimisé est invalide."))
+	if not isinstance(ordered_delivery_notes, list):
+		frappe.throw(_("L'ordre optimisé est invalide."))
+	ordered = [str(name or "").strip() for name in ordered_delivery_notes]
+	if not ordered or any(not name for name in ordered) or len(ordered) != len(set(ordered)):
+		frappe.throw(_("L'ordre optimisé contient un doublon ou un bon invalide."))
+
+	_lock_route(str(route_id or ""))
+	doc = _routing_route(route_id, expected_revision)
+	if _route_state(doc) != "Brouillon":
+		frappe.throw(_("Seule une tournée en brouillon peut être optimisée."))
+	try:
+		settings = get_routing_settings()
+	except RoutingConfigurationError as error:
+		return _routing_error(error)
+	if not settings.optimization_enabled:
+		frappe.throw(_("L'optimisation du routage est désactivée dans Paramètres Livraison."))
+	rows_by_name = {row.bon_de_livraison: row for row in doc.bons_de_livraison or []}
+	if len(rows_by_name) != len(doc.bons_de_livraison or []) or set(ordered) != set(rows_by_name):
+		frappe.throw(_("La liste des arrêts a changé. Recalculez la proposition."))
+	doc.set("bons_de_livraison", [rows_by_name[name] for name in ordered])
+	for index, row in enumerate(doc.bons_de_livraison, start=1):
+		row.idx = index
+	_bump_route_revision(doc)
+	doc.save(ignore_permissions=True)
+	return _serialize_route(doc)
+
+
+@frappe.whitelist()
 def save_route(route):
 	_require(PLANNING_ROLES)
 	_require_schema()
@@ -545,6 +836,8 @@ def save_route(route):
 	doc.revision_acceptee = 0
 	doc.accepte_par = None
 	doc.date_acceptation = None
+	_assign_default_depot(doc)
+	_invalidate_route_routing(doc)
 	doc.set("bons_de_livraison", [])
 	seen: set[str] = set()
 	for stop in data.get("stops") or []:
@@ -649,11 +942,25 @@ def _append_delivery_note(route, dn, position: int | None = None):
 		item.idx = index
 
 
+def _preserve_selected_route_vehicle(route):
+	"""Keep an explicitly selected route vehicle instead of overwriting it from the driver default.
+
+	The DocType uses ``livreur.vehicule`` as a convenience default. Planning must still allow a
+	different vehicle per route, and legacy drivers can reference a vehicle that no longer exists.
+	``fetch_if_empty`` is also declared in the DocType JSON; setting it here keeps the endpoint safe
+	before the next schema synchronization has been applied on an existing site.
+	"""
+	field = route.meta.get_field("vehicule")
+	if field and field.fetch_from == "livreur.vehicule":
+		field.fetch_if_empty = 1
+
+
 def _compatible_route(data: dict[str, Any], source_name: str | None = None):
 	requested_id = data.get("targetRouteId")
 	if requested_id:
 		_lock_route(requested_id)
 		target = frappe.get_doc("Livraison", requested_id)
+		_preserve_selected_route_vehicle(target)
 		checks = {
 			"plannedDate": str(target.date_liv or ""),
 			"driver": target.livreur,
@@ -690,18 +997,37 @@ def _compatible_route(data: dict[str, Any], source_name: str | None = None):
 		frappe.throw(_("Plusieurs tournées compatibles existent. Sélectionnez la tournée de destination."))
 	if candidates:
 		_lock_route(candidates[0])
-		return frappe.get_doc("Livraison", candidates[0])
+		target = frappe.get_doc("Livraison", candidates[0])
+		_preserve_selected_route_vehicle(target)
+		return target
 	doc = frappe.new_doc("Livraison")
 	doc.date_liv = date_value
 	doc.depart_prevu = start
 	doc.fin_prevue = end
 	doc.livreur = driver
 	doc.vehicule = vehicle
+	_preserve_selected_route_vehicle(doc)
 	doc.planificateur = frappe.session.user
 	doc.etat_planification = "Brouillon"
 	doc.batch_id = f"distribution:{uuid.uuid4()}"
 	doc.revision = 1
+	_assign_default_depot(doc)
 	return doc
+
+
+@frappe.whitelist()
+def schedule_delivery_note(payload):
+	"""Create the first planning assignment for an unassigned Delivery Note."""
+	_require(PLANNING_ROLES)
+	_require_schema()
+	data = _payload(payload)
+	delivery_note = str(data.get("deliveryNote") or "").strip()
+	if not delivery_note or not frappe.db.exists("Delivery Note", delivery_note):
+		frappe.throw(_("Bon de livraison introuvable."))
+	_lock_delivery_note(delivery_note)
+	if _active_assignment(delivery_note):
+		frappe.throw(_("Ce bon est déjà planifié. Utilisez la modification d'affectation."))
+	return reassign_delivery_note(data)
 
 
 @frappe.whitelist()
@@ -761,6 +1087,7 @@ def reassign_delivery_note(payload):
 		return {"assignment": _stop_from_dn(dn, cint(data.get("position") or 1)), "route": _serialize_route(source), "warning": _validate_capacity(source, for_publication=False)}
 
 	if source:
+		_preserve_selected_route_vehicle(source)
 		source.set("bons_de_livraison", [row for row in source.bons_de_livraison if row.bon_de_livraison != delivery_note])
 		_bump_route_revision(source, reason)
 		source.save(ignore_permissions=True)

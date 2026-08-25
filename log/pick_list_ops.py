@@ -77,6 +77,23 @@ def _draft_pick_lists_for_orders(sales_orders):
 	return [{"name": name, "sales_orders": by_parent[name]} for name in drafts]
 
 
+def _attach_commune_names(orders):
+	"""Ajoute le libellé métier des communes sans remplacer leur identifiant Link."""
+	commune_ids = list(dict.fromkeys(order.get("custom_commune") for order in orders if order.get("custom_commune")))
+	if not commune_ids:
+		return orders
+	communes = frappe.get_all(
+		"Commune",
+		filters={"name": ["in", commune_ids]},
+		fields=["name", "nom"],
+	)
+	labels = {commune.name: commune.nom or commune.name for commune in communes}
+	for order in orders:
+		commune_id = order.get("custom_commune")
+		order["custom_commune_nom"] = labels.get(commune_id, commune_id)
+	return orders
+
+
 def serialize_pick_list(doc):
 	locations = []
 	grouped_map = defaultdict(lambda: {"qty": 0, "stock_qty": 0, "picked_qty": 0, "rows": []})
@@ -246,7 +263,7 @@ def get_sales_orders_to_pick(search=None, limit=100):
 	drafts = {so: pl["name"] for pl in _draft_pick_lists_for_orders(so_names) for so in pl["sales_orders"]}
 	for order in orders:
 		order["draft_pick_list"] = drafts.get(order.name)
-	return orders
+	return _attach_commune_names(orders)
 
 
 @frappe.whitelist()

@@ -15,7 +15,6 @@ import {
   Phone,
   Play,
   RefreshCw,
-  Route,
   ScanLine,
   Truck,
 } from "lucide-react";
@@ -23,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage, useDistributionMutations, useDriverRoutes } from "@/shared/api/distribution";
+import { BrandLogo } from "@/shared/ui/BrandLogo";
 import { confirmOperation, markOperationAttempt, queueOperation, readPendingOperations } from "@/shared/persistence/pendingOperations";
 import type { DeliveryOutcome, EvidenceInput, PaymentInput, RouteStop, StopCompletionPayload } from "@/shared/types/distribution";
 import { SignaturePad } from "@/features/driver/SignaturePad";
@@ -255,7 +255,7 @@ export function DriverApp() {
     else setMessage("Ce bon ne fait pas partie de votre tournée active.");
   };
 
-  return <div className="mx-auto min-h-screen max-w-xl bg-slate-50 pb-24 text-slate-950"><header className="bg-blue-800 px-4 pb-6 pt-5 text-white"><div className="flex items-center justify-between"><div className="flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-white/15"><Route className="h-5 w-5" /></span><div><p className="text-sm font-bold">IntraPro Distribution</p><p className="text-xs text-blue-100">Interface livreur</p></div></div><button type="button" onClick={() => logout().then(() => window.location.reload())} aria-label="Se déconnecter" className="grid h-10 w-10 place-items-center rounded-xl bg-white/10"><LogOut className="h-4 w-4" /></button></div>{routeData && <div className="mt-6"><div className="flex items-end justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-200">Ma tournée</p><h1 className="mt-1 text-2xl font-bold">{routeData.name}</h1></div><span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold">{routeData.lifecycle}</span></div><p className="mt-2 text-sm text-blue-100">{routeData.stops.length} arrêts · {routeData.totalQuantity} articles</p></div>}</header><main className="space-y-4 p-4">
+  return <div className="mx-auto min-h-screen max-w-xl bg-slate-50 pb-24 text-slate-950"><header className="bg-blue-700 px-4 pb-6 pt-5 text-white"><div className="flex items-center justify-between"><div className="rounded-xl bg-white px-3 py-2"><BrandLogo className="h-8 w-auto" alt="IntraPro Distribution" /></div><button type="button" onClick={() => logout().then(() => window.location.reload())} aria-label="Se déconnecter" className="grid h-10 w-10 place-items-center rounded-xl bg-white/10"><LogOut className="h-4 w-4" /></button></div>{routeData && <div className="mt-6"><div className="flex items-end justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-200">Ma tournée</p><h1 className="mt-1 text-2xl font-bold">{routeData.name}</h1></div><span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold">{routeData.lifecycle}</span></div><p className="mt-2 text-sm text-blue-100">{routeData.stops.length} arrêts · {routeData.totalQuantity} articles</p></div>}</header><main className="space-y-4 p-4">
     {message && <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{message}</div>}
     {pendingCount > 0 && <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">{pendingCount} opération(s) en attente</p><Button variant="outline" size="sm" onClick={() => void retryPending()}><RefreshCw />Réessayer</Button></div>}
     {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{apiErrorMessage(error)}</div>}

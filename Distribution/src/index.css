@@ -1,6 +1,35 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+.distribution-map-marker,
+.distribution-map-depot {
+  background: transparent;
+  border: 0;
+}
+
+.distribution-map-marker span,
+.distribution-map-depot span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 3px solid white;
+  border-radius: 9999px;
+  background: #1d4ed8;
+  color: white;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 3px 12px rgb(15 23 42 / 35%);
+}
+
+.distribution-map-depot span {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: #0f172a;
+  font-size: 19px;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 /* Reset léger et base */
@@ -20,7 +49,8 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376);
+  --brand: #457b9d;
+  --primary: #457b9d;
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -31,7 +61,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.488 0.243 264.376);
+  --ring: #457b9d;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -73,7 +103,7 @@
   --chart-5: oklch(0.645 0.246 16.439);
   --sidebar: oklch(0.19 0.02 240);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary: #457b9d;
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.25 0.02 240);
   --sidebar-accent-foreground: oklch(0.985 0 0);
@@ -109,7 +139,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid rgba(99, 102, 241, 0.6);
+  outline: 2px solid color-mix(in srgb, #457b9d 60%, transparent);
   outline-offset: 2px;
 }
 
@@ -158,6 +188,17 @@ textarea:focus-visible {
 }
 
 @theme inline {
+  --color-blue-50: color-mix(in srgb, #457b9d 10%, white);
+  --color-blue-100: color-mix(in srgb, #457b9d 18%, white);
+  --color-blue-200: color-mix(in srgb, #457b9d 32%, white);
+  --color-blue-300: color-mix(in srgb, #457b9d 48%, white);
+  --color-blue-400: color-mix(in srgb, #457b9d 70%, white);
+  --color-blue-500: #457b9d;
+  --color-blue-600: #457b9d;
+  --color-blue-700: #457b9d;
+  --color-blue-800: color-mix(in srgb, #457b9d 88%, black);
+  --color-blue-900: color-mix(in srgb, #457b9d 72%, black);
+  --color-blue-950: color-mix(in srgb, #457b9d 58%, black);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

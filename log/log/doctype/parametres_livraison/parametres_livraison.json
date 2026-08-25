@@ -5,6 +5,16 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "section_routage",
+  "url_openrouteservice",
+  "profil_routage",
+  "duree_arret_defaut_minutes",
+  "column_routage",
+  "cle_api_openrouteservice",
+  "section_optimisation",
+  "optimisation_routage_active",
+  "depot_principal_html",
+  "section_heritage",
   "section_break_1",
   "seuil_local_km",
   "seuil_regional_km",
@@ -19,14 +29,77 @@
  ],
  "fields": [
   {
+   "description": "Le calcul routier suit toujours l'ordre manuel des arrêts. La clé reste chiffrée côté serveur.",
+   "fieldname": "section_routage",
+   "fieldtype": "Section Break",
+   "label": "Routage OpenRouteService"
+  },
+  {
+   "default": "https://api.openrouteservice.org",
+   "fieldname": "url_openrouteservice",
+   "fieldtype": "Data",
+   "label": "URL du service",
+   "reqd": 1
+  },
+  {
+   "default": "driving-car",
+   "fieldname": "profil_routage",
+   "fieldtype": "Select",
+   "label": "Profil routier",
+   "options": "driving-car",
+   "reqd": 1
+  },
+  {
+   "default": "15",
+   "description": "Temps moyen ajouté pour chaque bon de livraison de la tournée. Saisissez 0 pour ne pas ajouter de temps d'arrêt.",
+   "fieldname": "duree_arret_defaut_minutes",
+   "fieldtype": "Int",
+   "label": "Temps d'arrêt par livraison (min)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_routage",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cle_api_openrouteservice",
+   "fieldtype": "Password",
+   "label": "Clé API OpenRouteService"
+  },
+  {
+   "description": "Désactivée : le planificateur conserve son ordre manuel. Activée : une proposition optimisée peut être comparée puis confirmée.",
+   "fieldname": "section_optimisation",
+   "fieldtype": "Section Break",
+   "label": "Optimisation"
+  },
+  {
+   "default": "0",
+   "fieldname": "optimisation_routage_active",
+   "fieldtype": "Check",
+   "label": "Activer l'optimisation du routage"
+  },
+  {
+   "fieldname": "depot_principal_html",
+   "fieldtype": "HTML",
+   "label": "Dépôt principal"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_heritage",
+   "fieldtype": "Section Break",
+   "label": "Paramètres historiques"
+  },
+  {
    "fieldname": "section_break_1",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Seuils de distance"
   },
   {
    "default": "20",
    "fieldname": "seuil_local_km",
    "fieldtype": "Int",
+   "hidden": 1,
    "in_list_view": 1,
    "label": "Seuil local (km)",
    "reqd": 1
@@ -35,6 +108,7 @@
    "default": "100",
    "fieldname": "seuil_regional_km",
    "fieldtype": "Int",
+   "hidden": 1,
    "in_list_view": 1,
    "label": "Seuil r\u00e9gional (km)",
    "reqd": 1
@@ -42,12 +116,14 @@
   {
    "fieldname": "section_break_4",
    "fieldtype": "Section Break",
+   "hidden": 1,
    "label": "Configuration g\u00e9olocalisation"
   },
   {
    "default": "nominatim",
    "fieldname": "api_geolocation",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "API de g\u00e9olocalisation",
    "options": "nominatim\ngoogle_maps\nbing_maps"
   },
@@ -55,32 +131,38 @@
    "default": "1",
    "fieldname": "rate_limit_geocoding",
    "fieldtype": "Int",
+   "hidden": 1,
    "label": "Limite de requ\u00eates (par seconde)"
   },
   {
    "fieldname": "column_break_7",
-   "fieldtype": "Column Break"
+   "fieldtype": "Column Break",
+   "hidden": 1
   },
   {
    "default": "1",
    "fieldname": "auto_update_distances",
    "fieldtype": "Check",
+   "hidden": 1,
    "label": "Mise \u00e0 jour automatique des distances"
   },
   {
    "default": "load_balancing_geographique",
    "fieldname": "algorithme_repartition",
    "fieldtype": "Select",
+   "hidden": 1,
    "label": "Algorithme de r\u00e9partition",
    "options": "load_balancing_geographique\noptimisation_distance\npriorite_specialisation"
   },
   {
    "fieldname": "section_break_jkjx",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "hidden": 1
   },
   {
    "fieldname": "cle_api_google",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Cl\u00e9 API Google"
   }
  ],

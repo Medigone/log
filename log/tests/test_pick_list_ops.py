@@ -1,11 +1,23 @@
 import unittest
+from unittest.mock import patch
 
 import frappe
 
-from log.pick_list_ops import serialize_pick_session
+from log.pick_list_ops import _attach_commune_names, serialize_pick_session
 
 
 class TestPickListSerialization(unittest.TestCase):
+	def test_commune_link_uses_nom_as_display_label(self):
+		orders = [frappe._dict(name="SO-1", custom_commune="COM-00979")]
+		with patch(
+			"log.pick_list_ops.frappe.get_all",
+			return_value=[frappe._dict(name="COM-00979", nom="Alger Centre")],
+		):
+			result = _attach_commune_names(orders)
+
+		self.assertEqual(result[0]["custom_commune"], "COM-00979")
+		self.assertEqual(result[0]["custom_commune_nom"], "Alger Centre")
+
 	def test_session_groups_expose_locations(self):
 		location = frappe._dict(
 			name="PLI-1",

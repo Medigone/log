@@ -1,18 +1,20 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useFrappeAuth } from "frappe-react-sdk";
 import {
   CalendarDays,
-  ChevronRight,
   ClipboardCheck,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Route,
   Truck,
   UserRound,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/shared/ui/BrandLogo";
+import { cn } from "@/lib/utils";
 import type { DistributionRole, DistributionUser } from "@/shared/types/distribution";
 
 interface DesktopShellProps {
@@ -23,16 +25,19 @@ interface DesktopShellProps {
 interface NavItem {
   to: string;
   label: string;
-  description: string;
   icon: typeof CalendarDays;
   roles: DistributionRole[];
 }
 
+const SIDEBAR_STORAGE_KEY = "intrapro-distribution.sidebar-collapsed";
+const EXPANDED_WIDTH = "w-60";
+const COLLAPSED_WIDTH = "w-[4.5rem]";
+
 const navItems: NavItem[] = [
-  { to: "/today", label: "Aujourd’hui", description: "Priorités opérationnelles", icon: CalendarDays, roles: ["planificateur", "responsable"] },
-  { to: "/preparation", label: "Préparation", description: "Commandes et picking", icon: ClipboardCheck, roles: ["preparateur", "responsable"] },
-  { to: "/planning", label: "Planification", description: "Tournées et ressources", icon: Route, roles: ["planificateur", "responsable"] },
-  { to: "/deliveries", label: "Livraisons", description: "Suivi et historique", icon: Truck, roles: ["planificateur", "responsable"] },
+  { to: "/today", label: "Aujourd’hui", icon: CalendarDays, roles: ["planificateur", "responsable"] },
+  { to: "/preparation", label: "Préparation", icon: ClipboardCheck, roles: ["preparateur", "responsable"] },
+  { to: "/planning", label: "Planification", icon: Route, roles: ["planificateur", "responsable"] },
+  { to: "/deliveries", label: "Livraisons", icon: Truck, roles: ["planificateur", "responsable"] },
 ];
 
 const roleLabels: Record<DistributionRole, string> = {
@@ -43,11 +48,38 @@ const roleLabels: Record<DistributionRole, string> = {
   none: "Accès limité",
 };
 
+function readCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function DesktopShell({ children, user }: DesktopShellProps) {
-  const [open, setOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const { logout } = useFrappeAuth();
   const navigate = useNavigate();
   const visibleItems = navItems.filter((item) => item.roles.includes(user.role));
+  const homePath = visibleItems[0]?.to || "/today";
+  const slim = collapsed && !mobileOpen;
+
+  useEffect(() => {
+    setCollapsed(readCollapsed());
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore quota / private mode */
+      }
+      return next;
+    });
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -56,36 +88,117 @@ export function DesktopShell({ children, user }: DesktopShellProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
-      <button type="button" aria-label={open ? "Fermer le menu" : "Ouvrir le menu"} onClick={() => setOpen((value) => !value)} className="fixed left-4 top-4 z-[60] inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 md:hidden">
-        {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      <button
+        type="button"
+        aria-label={mobileOpen ? "Fermer le menu de navigation" : "Ouvrir le menu de navigation"}
+        onClick={() => setMobileOpen((value) => !value)}
+        className="fixed left-3 top-3 z-[60] inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm md:hidden"
+      >
+        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
       </button>
-      {open && <button type="button" aria-label="Fermer le menu" className="fixed inset-0 z-40 bg-slate-950/30 md:hidden" onClick={() => setOpen(false)} />}
-      <aside className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full md:translate-x-0"}`}>
-        <button type="button" className="flex items-center gap-3 border-b border-slate-100 px-6 py-5 text-left" onClick={() => navigate("/today")}>
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-700 text-white"><Route className="h-5 w-5" /></span>
-          <span><span className="block text-sm font-bold tracking-tight text-slate-950">IntraPro</span><span className="block text-xs font-semibold text-blue-700">Distribution</span></span>
-        </button>
-        <nav aria-label="Navigation principale" className="flex-1 space-y-2 px-4 py-5">
-          {visibleItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <NavLink key={item.to} to={item.to} onClick={() => setOpen(false)} className={({ isActive }) => `group flex items-center gap-3 rounded-xl px-3 py-3 transition-colors ${isActive ? "bg-blue-50 text-blue-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}>
-                <Icon className="h-5 w-5 shrink-0" />
-                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{item.label}</span><span className="block truncate text-xs text-slate-500">{item.description}</span></span>
-                <ChevronRight className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-              </NavLink>
-            );
-          })}
-        </nav>
-        <div className="border-t border-slate-100 p-4">
-          <div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3">
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-slate-600"><UserRound className="h-4 w-4" /></span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{user.fullName}</span><span className="block text-xs text-slate-500">{roleLabels[user.role]}</span></span>
+      {mobileOpen && (
+        <button type="button" aria-label="Fermer le menu de navigation" className="fixed inset-0 z-40 bg-slate-950/40 md:hidden" onClick={() => setMobileOpen(false)} />
+      )}
+
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200/80 bg-white shadow-[1px_0_0_rgba(15,23,42,0.03)] transition-[width,transform] duration-200 ease-out",
+          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+          slim ? COLLAPSED_WIDTH : EXPANDED_WIDTH,
+        )}
+      >
+        <div className={cn("flex h-16 shrink-0 items-center border-b border-slate-100", slim ? "justify-center px-2" : "justify-between gap-2 px-3")}>
+          <button type="button" className="flex min-w-0 items-center" onClick={() => { navigate(homePath); setMobileOpen(false); }} aria-label="IntraPro Distribution">
+            <BrandLogo compact={slim} className={slim ? "h-8 w-8" : "h-9 w-auto max-w-[148px]"} alt="IntraPro Distribution" />
+          </button>
+          {!slim && (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-pressed={false}
+              aria-label="Réduire le menu"
+              title="Réduire le menu"
+              className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 md:inline-flex"
+            >
+              <PanelLeftClose className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {slim && (
+          <div className="hidden justify-center border-b border-slate-100 py-2 md:flex">
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label="Déplier le menu"
+              title="Déplier le menu"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
           </div>
-          <Button variant="outline" className="w-full justify-start" onClick={handleLogout}><LogOut className="mr-2 h-4 w-4" />Déconnexion</Button>
+        )}
+
+        <nav aria-label="Navigation principale" className={cn("flex-1 overflow-y-auto py-4", slim ? "px-2" : "px-3")}>
+          <p className={cn("mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400", slim && "sr-only")}>
+            Menu
+          </p>
+          <ul className="space-y-1">
+            {visibleItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <li key={item.to}>
+                  <NavLink
+                    to={item.to}
+                    title={item.label}
+                    aria-label={item.label}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        "group flex h-10 items-center rounded-lg text-sm transition-colors",
+                        slim ? "justify-center px-0" : "gap-3 px-2.5",
+                        isActive ? "font-bold text-slate-950" : "font-normal text-slate-600 hover:text-slate-950",
+                      )
+                    }
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" strokeWidth={1.5} />
+                    <span className={cn("truncate", slim && "sr-only")}>{item.label}</span>
+                  </NavLink>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className={cn("border-t border-slate-100", slim ? "p-2" : "p-3")}>
+          <div className={cn("mb-2 flex items-center rounded-lg bg-slate-50", slim ? "justify-center p-2" : "gap-2.5 px-2 py-2")}>
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200">
+              <UserRound className="h-4 w-4" />
+            </span>
+            <span className={cn("min-w-0 flex-1", slim && "sr-only")}>
+              <span className="block truncate text-sm font-medium text-slate-900">{user.fullName}</span>
+              <span className="block truncate text-xs text-slate-500">{roleLabels[user.role]}</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Se déconnecter"
+            aria-label="Se déconnecter"
+            className={cn(
+              "flex h-9 w-full items-center rounded-lg text-sm font-medium text-slate-600 transition-colors hover:bg-red-50 hover:text-red-700",
+              slim ? "justify-center" : "gap-2.5 px-2.5",
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            <span className={cn(slim && "sr-only")}>Déconnexion</span>
+          </button>
         </div>
       </aside>
-      <main className="min-h-screen md:pl-72"><div className="mx-auto w-full max-w-[1500px] px-4 pb-10 pt-20 sm:px-6 md:px-8 md:pt-8">{children}</div></main>
+
+      <main className={cn("min-h-screen transition-[padding] duration-200 ease-out", slim ? "md:pl-[4.5rem]" : "md:pl-60")}>
+        <div className="mx-auto w-full max-w-[1500px] px-4 pb-10 pt-16 sm:px-6 md:px-8 md:pt-7">{children}</div>
+      </main>
     </div>
   );
 }

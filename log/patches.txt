@@ -11,3 +11,6 @@ log.patches.v1_0.remove_delivery_note_html_and_attach_qr
 log.patches.v1_0.initialize_distribution_routes
 log.patches.v1_0.initialize_advanced_distribution_planning
 log.patches.v1_0.remove_legacy_colis_desktop_icon
+log.patches.v1_0.sync_distribution_branding
+log.patches.v1_0.sync_distribution_branding_png
+log.patches.v1_0.initialize_distribution_routing
