@@ -8,7 +8,6 @@ import frappe
 from frappe import _
 from frappe.utils import flt, now_datetime
 
-RETURN_MOVEMENT = "Retour tournée"
 ENCAISSEMENT = "Encaissement"
 REMISE = "Remise"
 AVANCE = "Avance"
@@ -25,16 +24,19 @@ def signed_amount(movement_type: str, amount: float) -> float:
 	return value
 
 
-def should_post_route_return(route, counted_cash: float) -> bool:
-	if route.get("statut_caisse") != "Validée":
+def should_post_route_return(route, counted_cash: float = 0) -> bool:
+	if route.get("statut_caisse") != "Validée" or not route.get("livreur"):
 		return False
-	if not route.get("livreur"):
-		return False
-	return abs(flt(counted_cash)) >= 0.000001
+	# Zero counted cash is allowed so an approved discrepancy can reverse declared cash.
+	return counted_cash is not None
 
 
 def count_difference_reason(route_name: str) -> str:
 	return _("Écart de comptage au retour {0}").format(route_name)
+
+
+def handover_reason(route_name: str) -> str:
+	return _("Remise caisse tournée {0}").format(route_name)
 
 
 def ensure_cash_box(livreur: str) -> str:
@@ -206,41 +208,56 @@ def _has_encaissement(route_name: str) -> bool:
 	)
 
 
+def _has_route_handover(route_name: str) -> bool:
+	if not route_name:
+		return False
+	return bool(
+		frappe.db.exists(
+			"Mouvement Caisse Livreur",
+			{"tournee": route_name, "type_mouvement": REMISE, "motif": handover_reason(route_name)},
+		)
+	)
+
+
+def _has_count_adjustment(route_name: str) -> bool:
+	if not route_name:
+		return False
+	return bool(
+		frappe.db.exists(
+			"Mouvement Caisse Livreur",
+			{"tournee": route_name, "type_mouvement": AJUSTEMENT, "motif": count_difference_reason(route_name)},
+		)
+	)
+
+
 def post_route_return_cash(route, counted_cash: float) -> dict[str, Any] | None:
 	if not should_post_route_return(route, counted_cash):
 		return None
 	sync_route_declared_cash(route)
 	collected = _encaissement_total(route.name)
-	if collected > 0 or _has_encaissement(route.name):
-		difference = flt(counted_cash) - collected
-		if abs(difference) < 0.000001:
-			return None
-		reason = count_difference_reason(route.name)
-		existing = frappe.db.exists(
-			"Mouvement Caisse Livreur",
-			{"tournee": route.name, "type_mouvement": AJUSTEMENT, "motif": reason},
-		)
-		if existing:
-			return None
-		return post_movement(
+	if collected <= 0 and not _has_encaissement(route.name):
+		return None
+
+	result = None
+	difference = flt(counted_cash) - collected
+	if abs(difference) >= 0.000001 and not _has_count_adjustment(route.name):
+		result = post_movement(
 			livreur=route.livreur,
 			movement_type=AJUSTEMENT,
 			amount=difference,
 			tournee=route.name,
-			motif=reason,
+			motif=count_difference_reason(route.name),
 		)
-	existing = frappe.db.exists(
-		"Mouvement Caisse Livreur",
-		{"tournee": route.name, "type_mouvement": RETURN_MOVEMENT},
-	)
-	if existing:
-		return None
+
+	handover_amount = flt(counted_cash)
+	if abs(handover_amount) < 0.000001 or _has_route_handover(route.name):
+		return result
 	return post_movement(
 		livreur=route.livreur,
-		movement_type=RETURN_MOVEMENT,
-		amount=flt(counted_cash),
+		movement_type=REMISE,
+		amount=handover_amount,
 		tournee=route.name,
-		motif=_("Espèces comptées au retour {0}").format(route.name),
+		motif=handover_reason(route.name),
 	)
 
 

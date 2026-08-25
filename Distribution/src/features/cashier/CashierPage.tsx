@@ -1,9 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Banknote, Check, CircleDollarSign, LoaderCircle, ReceiptText, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { KpiTile } from "@/components/ui/kpi-tile";
+import { Money } from "@/components/ui/money";
+import { NativeSelect } from "@/components/ui/native-select";
+import { PageHeader } from "@/components/ui/page-header";
 import { Textarea } from "@/components/ui/textarea";
+import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
 import { apiErrorMessage, useCashierReconciliation, useCashierRoutes, useDistributionMutations } from "@/shared/api/distribution";
+import { formatMoney } from "@/shared/format";
 import type { CashCollection, CashReconciliationInput, InvoiceAllocation } from "@/shared/types/distribution";
 
 function isoDate(offsetDays = 0) {
@@ -12,8 +20,9 @@ function isoDate(offsetDays = 0) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
+/** Le contrôle de caisse compte au centime. */
 function money(value: number) {
-  return `${new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 2 }).format(value)} DZD`;
+  return formatMoney(value, { precise: true });
 }
 
 interface PaymentEdit {
@@ -100,7 +109,7 @@ export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscr
         : await actions.validateCashReconciliation(payload);
       setNotice(result.reconciliation.requiresManagerApproval
         ? "Écart enregistré. Aucun paiement comptable n’a été créé; une validation Responsable est requise."
-        : "Caisse validée et écritures de paiement créées.");
+        : "Caisse validée, écritures de paiement créées, caisse livreur remise.");
       await Promise.all([refreshDetail(), refreshRoutes()]);
     } catch (submitError) {
       setError(apiErrorMessage(submitError));
@@ -108,71 +117,278 @@ export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscr
   };
 
   return (
-    <div className="space-y-5">
-      <header>
-        <p className="text-sm font-bold text-blue-700">Contrôle financier</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">Caisse des tournées</h1>
-        <p className="mt-1 text-sm text-slate-500">Comptez les espèces, vérifiez chaque chèque et contrôlez la ventilation avant de créer les règlements ERPNext.</p>
-      </header>
+    <>
+      <PageHeader
+        eyebrow="Contrôle financier"
+        title="Caisse des tournées"
+        description="Comptez les espèces, vérifiez chaque chèque et contrôlez la ventilation avant de créer les règlements ERPNext."
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => void Promise.all([refreshRoutes(), selectedRoute ? refreshDetail() : Promise.resolve()])}
+            disabled={routesLoading}
+          >
+            <RefreshCw />
+            Actualiser
+          </Button>
+        }
+      />
 
-      <section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-4">
-        <label className="text-sm font-semibold text-slate-700">Du<Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="mt-1" /></label>
-        <label className="text-sm font-semibold text-slate-700">Au<Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="mt-1" /></label>
-        <label className="text-sm font-semibold text-slate-700">État<select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 font-normal"><option value="">Tous</option><option>À contrôler</option><option>Écart</option><option>Validée</option><option>Sans encaissement</option></select></label>
-        <label className="text-sm font-semibold text-slate-700">Tournée<select value={selectedRoute} onChange={(event) => setSelectedRoute(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-200 bg-white px-3 font-normal"><option value="">Sélectionner</option>{routes.map((route) => <option key={route.name} value={route.name}>{route.name} · {route.driverName || route.driver}</option>)}</select></label>
-      </section>
+      <Toolbar>
+        <ToolbarField label="Du" className="w-36">
+          <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </ToolbarField>
+        <ToolbarField label="Au" className="w-36">
+          <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </ToolbarField>
+        <ToolbarField label="État" className="w-44">
+          <NativeSelect aria-label="État" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="">Tous</option>
+            <option>À contrôler</option>
+            <option>Écart</option>
+            <option>Validée</option>
+            <option>Sans encaissement</option>
+          </NativeSelect>
+        </ToolbarField>
+        <ToolbarField label="Tournée" className="min-w-56 flex-1">
+          <NativeSelect
+            aria-label="Tournée"
+            value={selectedRoute}
+            onChange={(event) => setSelectedRoute(event.target.value)}
+          >
+            <option value="">Sélectionner</option>
+            {routes.map((route) => (
+              <option key={route.name} value={route.name}>
+                {route.name} · {route.driverName || route.driver}
+              </option>
+            ))}
+          </NativeSelect>
+        </ToolbarField>
+      </Toolbar>
 
-      {(routesError || detailError) && <p role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertTriangle className="h-4 w-4 shrink-0" />{apiErrorMessage(routesError || detailError)}</p>}
-      {error && <p role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</p>}
-      {notice && <p role="status" className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"><Check className="h-4 w-4 shrink-0" />{notice}</p>}
+      {(routesError || detailError) && (
+        <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="size-4 shrink-0" />
+          {apiErrorMessage(routesError || detailError)}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="size-4 shrink-0" />
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="flex gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          <Check className="size-4 shrink-0" />
+          {notice}
+        </p>
+      )}
 
-      {(routesLoading || (selectedRoute && detailLoading)) && <div className="grid min-h-48 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div>}
-      {!routesLoading && routes.length === 0 && <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><div><Banknote className="mx-auto h-10 w-10 text-slate-400" /><p className="mt-3 font-bold">Aucune tournée à contrôler</p><p className="text-sm text-slate-500">Élargissez la période ou attendez la confirmation du retour stock.</p></div></div>}
+      {(routesLoading || (selectedRoute && detailLoading)) && (
+        <div className="grid min-h-48 place-items-center">
+          <LoaderCircle className="size-7 animate-spin text-brand-600" />
+        </div>
+      )}
+      {!routesLoading && routes.length === 0 && (
+        <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
+          <EmptyState
+            icon={Banknote}
+            title="Aucune tournée à contrôler"
+            description="Élargissez la période ou attendez la confirmation du retour stock."
+          />
+        </div>
+      )}
 
       {reconciliation && selected && (
         <>
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <article className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-400">Déclaré espèces</p><p className="mt-2 text-xl font-bold">{money(reconciliation.declaredCash)}</p></article>
-            <article className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase text-slate-400">Déclaré chèques</p><p className="mt-2 text-xl font-bold">{money(reconciliation.declaredCheques)}</p></article>
-            <article className="rounded-xl border border-blue-200 bg-blue-50 p-4"><p className="text-xs font-bold uppercase text-blue-700">Total compté</p><p className="mt-2 text-xl font-bold text-blue-950">{money(countedTotal)}</p></article>
-            <article className="rounded-xl border border-emerald-200 bg-emerald-50 p-4"><p className="text-xs font-bold uppercase text-emerald-700">Comptabilisé</p><p className="mt-2 text-xl font-bold text-emerald-950">{money(reconciliation.validatedTotal)}</p></article>
+            <KpiTile label="Déclaré espèces" value={money(reconciliation.declaredCash)} />
+            <KpiTile label="Déclaré chèques" value={money(reconciliation.declaredCheques)} />
+            <KpiTile label="Total compté" value={money(countedTotal)} tone={hasDifference ? "warning" : "info"} />
+            <KpiTile label="Comptabilisé" value={money(reconciliation.validatedTotal)} tone="success" />
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="font-bold">Comptage physique</h2><p className="text-sm text-slate-500">Les montants ne génèrent aucun Payment Entry tant que le contrôle complet n’est pas validé.</p></div><label className="text-sm font-semibold">Espèces réellement comptées<Input type="number" min="0" step="0.01" value={countedCash} onChange={(event) => setCountedCash(event.target.value)} className="mt-1 sm:w-52" /></label></div>
-          </section>
+          <Card>
+            <CardHeader className="flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <CardTitle>Comptage physique</CardTitle>
+                <p className="t-body text-muted-foreground">
+                  Les montants ne génèrent aucun Payment Entry tant que le contrôle complet n’est pas validé.
+                </p>
+              </div>
+              <label className="flex shrink-0 flex-col gap-1.5 sm:w-52">
+                <span className="t-micro text-muted-foreground">Espèces réellement comptées</span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={countedCash}
+                  onChange={(event) => setCountedCash(event.target.value)}
+                  className="num"
+                />
+              </label>
+            </CardHeader>
+            <CardContent className="pb-4" />
+          </Card>
 
           <section className="space-y-3">
             {reconciliation.payments.map((payment) => {
               const edit = edits[payment.name];
               const allocated = edit?.allocations.reduce((sum, allocation) => sum + allocation.allocatedAmount, 0) || 0;
-              return <article key={payment.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                <header className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4">
-                  <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-50 text-blue-700">{payment.method === "Chèque" ? <ReceiptText className="h-5 w-5" /> : <CircleDollarSign className="h-5 w-5" />}</span>
-                  <div className="min-w-0 flex-1"><h3 className="font-bold">{payment.customerName || payment.customer}</h3><p className="text-xs text-slate-500">{payment.deliveryNote} · {payment.salesInvoice || "Facture non créée"}</p></div>
-                  <div className="text-right"><p className="font-bold">{money(payment.amount)}</p><p className="text-xs font-semibold text-slate-500">{payment.status}</p></div>
-                </header>
-                <div className="space-y-4 p-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-sm font-semibold">{payment.method === "Chèque" ? "Montant du chèque vérifié" : "Montant de la déclaration"}<Input type="number" min="0" step="0.01" disabled={payment.method !== "Chèque"} value={edit?.countedAmount ?? ""} onChange={(event) => setEdits((current) => ({ ...current, [payment.name]: { ...current[payment.name], countedAmount: event.target.value } }))} className="mt-1" /></label>
-                    {payment.method === "Chèque" && <label className="text-sm font-semibold">Numéro du chèque<Input value={edit?.chequeNumber ?? ""} onChange={(event) => setEdits((current) => ({ ...current, [payment.name]: { ...current[payment.name], chequeNumber: event.target.value } }))} className="mt-1" /></label>}
+              const isCheque = payment.method === "Chèque";
+
+              return (
+                <Card key={payment.name} className="overflow-hidden">
+                  <header className="flex flex-wrap items-center gap-3 border-b border-hairline p-4">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700">
+                      {isCheque ? <ReceiptText className="size-5" /> : <CircleDollarSign className="size-5" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="t-section">{payment.customerName || payment.customer}</h3>
+                      <p className="truncate t-meta text-muted-foreground">
+                        {payment.deliveryNote} · {payment.salesInvoice || "Facture non créée"}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <Money value={payment.amount} precise className="block font-semibold" />
+                      <p className="t-meta text-muted-foreground">{payment.status}</p>
+                    </div>
+                  </header>
+
+                  <div className="space-y-4 p-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="flex flex-col gap-1.5">
+                        <span className="t-micro text-muted-foreground">
+                          {isCheque ? "Montant du chèque vérifié" : "Montant de la déclaration"}
+                        </span>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          disabled={!isCheque}
+                          value={edit?.countedAmount ?? ""}
+                          onChange={(event) =>
+                            setEdits((current) => ({
+                              ...current,
+                              [payment.name]: { ...current[payment.name], countedAmount: event.target.value },
+                            }))
+                          }
+                          className="num"
+                        />
+                      </label>
+                      {isCheque && (
+                        <label className="flex flex-col gap-1.5">
+                          <span className="t-micro text-muted-foreground">Numéro du chèque</span>
+                          <Input
+                            value={edit?.chequeNumber ?? ""}
+                            onChange={(event) =>
+                              setEdits((current) => ({
+                                ...current,
+                                [payment.name]: { ...current[payment.name], chequeNumber: event.target.value },
+                              }))
+                            }
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="t-micro text-muted-foreground">Ventilation des factures</p>
+                      <div className="mt-2 space-y-2">
+                        {edit?.allocations.map((allocation, index) => (
+                          <div
+                            key={allocation.salesInvoice}
+                            className="grid gap-2 rounded-md bg-surface-subtle p-3 sm:grid-cols-[minmax(0,1fr)_140px] sm:items-center"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{allocation.salesInvoice}</p>
+                              <p className="num t-meta text-muted-foreground">
+                                Solde {money(allocation.outstandingBefore)}
+                                {allocation.dueDate ? ` · échéance ${allocation.dueDate}` : ""}
+                              </p>
+                            </div>
+                            <Input
+                              aria-label={`Montant affecté à ${allocation.salesInvoice}`}
+                              type="number"
+                              min="0"
+                              max={allocation.outstandingBefore}
+                              step="0.01"
+                              value={allocation.allocatedAmount}
+                              onChange={(event) => updateAllocation(payment.name, index, event.target.value)}
+                              className="num"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="num mt-2 t-meta text-muted-foreground">
+                        Affecté : {money(allocated)} · avance client : {money(Math.max(payment.amount - allocated, 0))}
+                      </p>
+                    </div>
                   </div>
-                  <div><p className="text-xs font-bold uppercase text-slate-400">Ventilation des factures</p><div className="mt-2 space-y-2">{edit?.allocations.map((allocation, index) => <div key={allocation.salesInvoice} className="grid gap-2 rounded-lg bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_140px]"><div><p className="text-sm font-bold">{allocation.salesInvoice}</p><p className="text-xs text-slate-500">Solde {money(allocation.outstandingBefore)}{allocation.dueDate ? ` · échéance ${allocation.dueDate}` : ""}</p></div><Input aria-label={`Montant affecté à ${allocation.salesInvoice}`} type="number" min="0" max={allocation.outstandingBefore} step="0.01" value={allocation.allocatedAmount} onChange={(event) => updateAllocation(payment.name, index, event.target.value)} /></div>)}</div><p className="mt-2 text-xs text-slate-500">Affecté : {money(allocated)} · avance client : {money(Math.max(payment.amount - allocated, 0))}</p></div>
-                </div>
-              </article>;
+                </Card>
+              );
             })}
-            {!reconciliation.payments.length && <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">Aucun encaissement déclaré. La tournée pourra être clôturée après le retour stock et la facturation.</div>}
+
+            {!reconciliation.payments.length && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                Aucun encaissement déclaré. La tournée pourra être clôturée après le retour stock et la facturation.
+              </div>
+            )}
           </section>
 
-          {hasDifference && <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><p className="flex gap-2 text-sm font-bold text-amber-950"><AlertTriangle className="h-4 w-4" />Écart de {money(countedTotal - reconciliation.declaredTotal)}</p><label className="mt-3 block text-sm font-semibold text-amber-950">Motif obligatoire<Textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 bg-white" placeholder="Décrivez l’écart constaté…" /></label></section>}
+          {hasDifference && (
+            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="flex items-center gap-2 text-sm font-semibold text-amber-950">
+                <AlertTriangle className="size-4 shrink-0" />
+                Écart de <span className="num">{money(countedTotal - reconciliation.declaredTotal)}</span>
+              </p>
+              <label className="mt-3 flex flex-col gap-1.5">
+                <span className="t-micro text-amber-900">Motif obligatoire</span>
+                <Textarea
+                  value={reason}
+                  onChange={(event) => setReason(event.target.value)}
+                  className="bg-white"
+                  placeholder="Décrivez l’écart constaté…"
+                />
+              </label>
+            </section>
+          )}
 
-          {reconciliation.status === "Écart" && !canResolveDiscrepancy && <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">Écart transmis au Responsable. Aucun Payment Entry ne sera créé avant sa décision.</p>}
-          {reconciliation.status !== "Validée" && reconciliation.payments.length > 0 && (reconciliation.status !== "Écart" || canResolveDiscrepancy) && <div className="flex justify-end"><Button onClick={() => void submit(reconciliation.status === "Écart" && canResolveDiscrepancy)} disabled={actions.cashier || ((hasDifference || reconciliation.status === "Écart") && !reason.trim())} className="h-12 bg-blue-700 px-6 hover:bg-blue-800">{actions.cashier ? <LoaderCircle className="animate-spin" /> : <Check />}{reconciliation.status === "Écart" && canResolveDiscrepancy ? "Approuver et comptabiliser l’écart" : "Valider le contrôle de caisse"}</Button></div>}
-          {reconciliation.status === "Validée" && <p className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 font-bold text-emerald-800"><Check />Caisse validée · {money(reconciliation.validatedTotal)} comptabilisés.</p>}
+          {reconciliation.status === "Écart" && !canResolveDiscrepancy && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm font-medium text-amber-900">
+              Écart transmis au Responsable. Aucun Payment Entry ne sera créé avant sa décision.
+            </p>
+          )}
+
+          {reconciliation.status !== "Validée" &&
+            reconciliation.payments.length > 0 &&
+            (reconciliation.status !== "Écart" || canResolveDiscrepancy) && (
+              <div className="flex justify-end">
+                <Button
+                  size="lg"
+                  onClick={() => void submit(reconciliation.status === "Écart" && canResolveDiscrepancy)}
+                  disabled={
+                    actions.cashier || ((hasDifference || reconciliation.status === "Écart") && !reason.trim())
+                  }
+                >
+                  {actions.cashier ? <LoaderCircle className="animate-spin" /> : <Check />}
+                  {reconciliation.status === "Écart" && canResolveDiscrepancy
+                    ? "Approuver et comptabiliser l’écart"
+                    : "Valider le contrôle de caisse"}
+                </Button>
+              </div>
+            )}
+
+          {reconciliation.status === "Validée" && (
+            <p className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">
+              <Check className="size-4 shrink-0" />
+              Caisse validée · <span className="num">{money(reconciliation.validatedTotal)}</span> comptabilisés.
+            </p>
+          )}
         </>
       )}
-      <Button variant="outline" onClick={() => void Promise.all([refreshRoutes(), selectedRoute ? refreshDetail() : Promise.resolve()])} disabled={routesLoading} className="w-full sm:w-auto"><RefreshCw />Actualiser</Button>
-    </div>
+    </>
   );
 }
 

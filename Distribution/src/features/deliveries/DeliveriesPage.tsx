@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { CalendarDays, ChevronDown, ChevronUp, LoaderCircle, MapPin, Route, Truck } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { apiErrorMessage, usePlanningBoard } from "@/shared/api/distribution";
+import { getStopVisualStyle } from "@/features/planning/stopStatus";
+import { routeLifecycleTone } from "@/shared/design/statusTone";
 
 function localDate() {
   const value = new Date();
@@ -13,9 +18,131 @@ export function DeliveriesPage() {
   const [expanded, setExpanded] = useState<string>();
   const { data, error, isLoading } = usePlanningBoard(date);
   const routes = data?.message.routes || [];
-  return <div className="space-y-6">
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-semibold text-blue-700">Suivi opérationnel</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Livraisons</h1><p className="mt-2 text-sm text-slate-500">Consultez l’avancement des tournées et de leurs arrêts.</p></div><label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2"><CalendarDays className="h-4 w-4 text-blue-700" /><span className="sr-only">Date</span><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="h-8 border-0 p-0 shadow-none" /></label></header>
-    {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{apiErrorMessage(error)}</div>}
-    {isLoading ? <div className="grid min-h-80 place-items-center rounded-2xl border border-slate-200 bg-white"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div> : <div className="space-y-3">{routes.map((routeData) => { const open = expanded === routeData.name; const done = routeData.stops.filter((stop) => ["Livré", "Non Livré"].includes(stop.status)).length; return <article key={routeData.name} className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><button type="button" onClick={() => setExpanded(open ? undefined : routeData.name)} className="flex w-full items-center gap-4 p-5 text-left"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700"><Truck className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-2"><strong className="text-slate-950">{routeData.name}</strong><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{routeData.lifecycle}</span></span><span className="mt-1 block text-sm text-slate-500">{routeData.driverName || "Livreur non affecté"} · {routeData.vehicle || "Véhicule non affecté"}</span></span><span className="text-right"><span className="block text-sm font-bold text-slate-900">{done}/{routeData.stops.length}</span><span className="text-xs text-slate-500">arrêts traités</span></span>{open ? <ChevronUp className="h-5 w-5 text-slate-400" /> : <ChevronDown className="h-5 w-5 text-slate-400" />}</button>{open && <div className="border-t border-slate-100 bg-slate-50/60 p-4"><ol className="space-y-2">{routeData.stops.map((stop, index) => <li key={stop.deliveryNote} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"><span className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-sm font-bold text-slate-700">{index + 1}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-slate-900">{stop.customerName}</span><span className="block text-xs text-slate-500">{stop.deliveryNote} · {stop.commune || stop.address || "Adresse non renseignée"}</span></span><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{stop.status}</span>{stop.latitude != null && stop.longitude != null && <a aria-label="Ouvrir la position" target="_blank" rel="noreferrer" href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`} className="rounded-lg p-2 text-blue-700 hover:bg-blue-50"><MapPin className="h-4 w-4" /></a>}</li>)}</ol></div>}</article>; })}{!routes.length && <div className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center"><div><Route className="mx-auto h-9 w-9 text-slate-400" /><p className="mt-3 font-bold text-slate-900">Aucune tournée ce jour</p><p className="mt-1 text-sm text-slate-500">Changez de date ou préparez un nouveau planning.</p></div></div>}</div>}
-  </div>;
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Suivi opérationnel"
+        title="Livraisons"
+        description="Consultez l’avancement des tournées et de leurs arrêts."
+        actions={
+          <label className="flex items-center gap-2">
+            <CalendarDays className="size-4 shrink-0 text-brand-600" />
+            <span className="sr-only">Date</span>
+            <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-40" />
+          </label>
+        }
+      />
+
+      {error && (
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {apiErrorMessage(error)}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="grid min-h-80 place-items-center rounded-lg border border-hairline bg-card">
+          <LoaderCircle className="size-7 animate-spin text-brand-600" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {routes.map((routeData) => {
+            const open = expanded === routeData.name;
+            const done = routeData.stops.filter((stop) => ["Livré", "Non Livré"].includes(stop.status)).length;
+
+            return (
+              <article key={routeData.name} className="overflow-hidden rounded-lg border border-hairline bg-card shadow-card">
+                <button
+                  type="button"
+                  onClick={() => setExpanded(open ? undefined : routeData.name)}
+                  aria-expanded={open}
+                  className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-surface-subtle"
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-md bg-brand-50 text-brand-700">
+                    <Truck className="size-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-2">
+                      <strong className="font-semibold text-foreground">{routeData.name}</strong>
+                      <StatusBadge tone={routeLifecycleTone(routeData.lifecycle)} size="sm">
+                        {routeData.lifecycle}
+                      </StatusBadge>
+                    </span>
+                    <span className="mt-0.5 block t-body text-muted-foreground">
+                      {routeData.driverName || "Livreur non affecté"} · {routeData.vehicle || "Véhicule non affecté"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span className="num block text-sm font-semibold text-foreground">
+                      {done}/{routeData.stops.length}
+                    </span>
+                    <span className="t-meta text-muted-foreground">arrêts traités</span>
+                  </span>
+                  {open ? (
+                    <ChevronUp className="size-5 shrink-0 text-subtle" />
+                  ) : (
+                    <ChevronDown className="size-5 shrink-0 text-subtle" />
+                  )}
+                </button>
+
+                {open && (
+                  <div className="border-t border-hairline bg-surface-subtle p-3">
+                    <ol className="space-y-2">
+                      {routeData.stops.map((stop, index) => {
+                        const visual = getStopVisualStyle(stop.status);
+                        return (
+                          <li
+                            key={stop.deliveryNote}
+                            className="flex items-center gap-3 rounded-md border border-hairline bg-white p-3"
+                          >
+                            <span
+                              className={`num grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold ${visual.sequenceClass}`}
+                            >
+                              {visual.markerSymbol || index + 1}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-foreground">
+                                {stop.customerName}
+                              </span>
+                              <span className="block truncate t-meta text-muted-foreground">
+                                {stop.deliveryNote} · {stop.commune || stop.address || "Adresse non renseignée"}
+                              </span>
+                            </span>
+                            <StatusBadge tone={visual.tone} size="sm">
+                              {stop.status}
+                            </StatusBadge>
+                            {stop.latitude != null && stop.longitude != null && (
+                              <a
+                                aria-label="Ouvrir la position"
+                                target="_blank"
+                                rel="noreferrer"
+                                href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`}
+                                className="shrink-0 rounded-md p-2 text-brand-700 transition-colors hover:bg-brand-50"
+                              >
+                                <MapPin className="size-4" />
+                              </a>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+
+          {!routes.length && (
+            <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
+              <EmptyState
+                icon={Route}
+                title="Aucune tournée ce jour"
+                description="Changez de date ou préparez un nouveau planning."
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
 }

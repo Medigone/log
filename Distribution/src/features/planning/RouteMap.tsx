@@ -3,7 +3,11 @@ import { divIcon } from "leaflet";
 import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
+import { formatMoney } from "@/shared/format";
 import type { RouteDepot, RouteItinerary, RouteStop } from "@/shared/types/distribution";
+
+/** Couleur de marque du tracé — miroir de `--color-brand-600` (Leaflet ne lit pas les variables CSS). */
+const BRAND = "#457b9d";
 
 type MapPoint = [number, number];
 
@@ -59,7 +63,7 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
 
   return (
     <div>
-      <div className="h-80 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100">
+      <div className="h-80 overflow-hidden rounded-lg border border-hairline bg-surface-subtle">
         <MapContainer
           center={center}
           zoom={markerPoints.length ? 11 : 7}
@@ -72,7 +76,7 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
           {routePoints.length > 1 && (
             <Polyline
               positions={routePoints}
-              pathOptions={{ color: "#1d4ed8", weight: 5, opacity: 0.82 }}
+              pathOptions={{ color: BRAND, weight: 5, opacity: 0.82 }}
             />
           )}
           {depot && (
@@ -97,13 +101,13 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
                 <br />
                 <strong>{getStopVisualStyle(stop.status).label}</strong>
                 <br />
-                {stop.amountCollected.toLocaleString("fr-DZ")} DZD encaissé(s) · {stop.amountToCollect.toLocaleString("fr-DZ")} DZD restant
+                {formatMoney(stop.amountCollected)} encaissé(s) · {formatMoney(stop.amountToCollect)} restant
               </Popup>
             </Marker>
           ))}
         </MapContainer>
       </div>
-      <p className="mt-1.5 text-right text-[10px] text-slate-400">
+      <p className="mt-1.5 text-right text-[10px] text-subtle">
         Données cartographiques ©{" "}
         <a className="underline hover:text-slate-600" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
           OpenStreetMap

@@ -30,18 +30,34 @@ import {
   type SalesOrderRow,
 } from "@/shared/api/preparation";
 import { ReturnControlPanel } from "@/features/preparation/ReturnControlPanel";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { StatusTone } from "@/shared/design/statusTone";
+import { formatQuantity } from "@/shared/format";
 
-function priority(date?: string) {
-  if (!date) return { label: "Date à confirmer", className: "bg-slate-100 text-slate-600" };
+function priority(date?: string): { label: string; tone: StatusTone } {
+  if (!date) return { label: "Date à confirmer", tone: "neutral" };
   const target = new Date(`${date}T00:00:00`);
   const current = new Date();
   current.setHours(0, 0, 0, 0);
-  if (target < current) return { label: "En retard", className: "bg-red-100 text-red-700" };
-  if (target.getTime() === current.getTime()) return { label: "Aujourd’hui", className: "bg-amber-100 text-amber-700" };
-  return { label: "Planifiée", className: "bg-blue-50 text-blue-700" };
+  if (target < current) return { label: "En retard", tone: "danger" };
+  if (target.getTime() === current.getTime()) return { label: "Aujourd’hui", tone: "warning" };
+  return { label: "Planifiée", tone: "info" };
 }
 
 type DateScope = "all" | "today" | "tomorrow" | "overdue";
+
+const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
 
 function localIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -50,9 +66,7 @@ function localIsoDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-function formatQty(value: number) {
-  return new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 3 }).format(value);
-}
+const formatQty = formatQuantity;
 
 function stockShortages(order: SalesOrderRow) {
   return order.stock_shortages || [];
@@ -141,15 +155,11 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
   const activeFilterCount = [dateScope !== "all", dateFrom, dateTo, wilaya, commune].filter(Boolean).length;
   const insufficientOrders = selectedOrders.filter((order) => stockShortages(order).length > 0);
 
+  // Le Dialog gère Échap et le piège de focus ; on force seulement le focus initial
+  // sur l'action de confirmation plutôt que sur « Annuler ».
   useEffect(() => {
-    if (!confirming) return;
-    confirmButtonRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !creating) setConfirming(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [confirming, creating]);
+    if (confirming) confirmButtonRef.current?.focus();
+  }, [confirming]);
 
   const toggle = (name: string) => {
     setSelected((prev) => {
@@ -207,14 +217,12 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <p className="text-sm font-semibold text-blue-700">Entrepôt</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Préparation</h1>
-        <p className="text-muted-foreground text-sm">
-          Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever.
-        </p>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Entrepôt"
+        title="Préparation"
+        description="Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever."
+      />
 
       {(error || errorMessage) && (
         <Alert>
@@ -229,7 +237,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle className="text-base">Commandes à prélever ({filtered.length})</CardTitle>
             {selectedOrders.length > 0 && (
-              <Badge aria-live="polite" className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+              <Badge aria-live="polite" className="bg-brand-100 text-brand-800 hover:bg-brand-100">
                 {selectedOrders.length} sélectionnée{selectedOrders.length > 1 ? "s" : ""}
               </Badge>
             )}
@@ -259,10 +267,10 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="rounded-xl border border-hairline bg-surface-subtle p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <Filter className="h-4 w-4 text-blue-700" />
+                <Filter className="h-4 w-4 text-brand-700" />
                 Filtres {activeFilterCount > 0 && <Badge variant="secondary">{activeFilterCount}</Badge>}
               </div>
               {(activeFilterCount > 0 || search) && (
@@ -310,7 +318,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
                 <select
                   value={wilaya}
                   onChange={(event) => { setWilaya(event.target.value); setCommune(""); }}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm text-slate-900 shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm text-foreground shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   <option value="">Toutes les wilayas</option>
                   {wilayas.map((value) => <option key={value} value={value}>{value}</option>)}
@@ -321,7 +329,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
                 <select
                   value={commune}
                   onChange={(event) => setCommune(event.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm text-slate-900 shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm text-foreground shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   <option value="">Toutes les communes</option>
                   {communes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -332,7 +340,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
 
           {isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
           {!isLoading && filtered.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-300 p-6 text-center">
+            <div className="rounded-xl border border-dashed border-hairline-strong p-6 text-center">
               <p className="text-sm font-medium text-slate-700">Aucune commande ne correspond aux filtres.</p>
               <Button type="button" variant="link" size="sm" onClick={resetFilters}>Réinitialiser les filtres</Button>
             </div>
@@ -355,9 +363,13 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {stockShortages(row).length > 0 && (
-                  <Badge variant="destructive" className="bg-red-100 text-red-800 hover:bg-red-100">Stock insuffisant</Badge>
+                  <StatusBadge tone="danger" size="sm">
+                    Stock insuffisant
+                  </StatusBadge>
                 )}
-                <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${priority(row.delivery_date).className}`}>{priority(row.delivery_date).label}</span>
+                <StatusBadge tone={priority(row.delivery_date).tone} size="sm">
+                  {priority(row.delivery_date).label}
+                </StatusBadge>
                 {row.draft_pick_list ? (
                   <Button
                     type="button"
@@ -379,43 +391,35 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
         </CardContent>
       </Card>
 
-      {confirming && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
-          onMouseDown={() => !creating && setConfirming(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-pick-list-title"
-            aria-describedby="confirm-pick-list-description"
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
+      <Dialog open={confirming} onOpenChange={(open) => !open && !creating && setConfirming(false)}>
+        <DialogContent>
+          <DialogHeader>
             <div className="flex items-start gap-3">
-              <div className={`rounded-xl p-2 ${insufficientOrders.length ? "bg-red-50 text-red-700" : "bg-blue-50 text-blue-700"}`}>
-                {insufficientOrders.length ? <AlertTriangle className="h-5 w-5" /> : <ClipboardList className="h-5 w-5" />}
+              <div
+                className={`shrink-0 rounded-md p-2 ${insufficientOrders.length ? "bg-red-50 text-red-700" : "bg-brand-50 text-brand-700"}`}
+              >
+                {insufficientOrders.length ? <AlertTriangle className="size-5" /> : <ClipboardList className="size-5" />}
               </div>
               <div>
-                <h2 id="confirm-pick-list-title" className="text-lg font-bold text-slate-950">
-                  {insufficientOrders.length ? "Stock insuffisant" : "Confirmer la création"}
-                </h2>
-                <p id="confirm-pick-list-description" className="mt-1 text-sm text-slate-600">
+                <DialogTitle>{insufficientOrders.length ? "Stock insuffisant" : "Confirmer la création"}</DialogTitle>
+                <DialogDescription className="mt-1">
                   {insufficientOrders.length
                     ? "Réapprovisionnez l’entrepôt avant de créer la liste. ERPNext ne peut pas prélever un article sans stock disponible."
                     : `${selectedOrders.length} ${selectedOrders.length > 1 ? "listes de prélèvement seront créées" : "liste de prélèvement sera créée"}, une par commande sélectionnée.`}
-                </p>
+                </DialogDescription>
               </div>
             </div>
+          </DialogHeader>
 
-            <div className="mt-5 max-h-56 space-y-2 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <DialogBody>
+            <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-hairline bg-surface-subtle p-3">
               {selectedOrders.map((order) => {
                 const shortages = stockShortages(order);
                 return (
                   <div key={order.name} className="space-y-1">
                     <div className="flex items-center justify-between gap-3 text-sm">
-                      <strong className="text-slate-900">{order.name}</strong>
-                      <span className="truncate text-slate-500">{order.customer_name || order.customer || "Client non renseigné"}</span>
+                      <strong className="text-foreground">{order.name}</strong>
+                      <span className="truncate text-muted-foreground">{order.customer_name || order.customer || "Client non renseigné"}</span>
                     </div>
                     {shortages.map((shortage) => (
                       <p key={`${order.name}-${shortage.item_code}`} className="text-xs text-red-700">
@@ -428,30 +432,35 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
               })}
             </div>
 
-            <p className="mt-4 text-xs text-slate-500">
+            <p className="mt-4 t-meta text-muted-foreground">
               {insufficientOrders.length
                 ? "Désélectionnez les commandes en rupture ou réceptionnez le stock, puis réessayez."
                 : "Les listes seront créées en brouillon et pourront être contrôlées avant la génération des bons de livraison."}
             </p>
+          </DialogBody>
 
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={() => setConfirming(false)} disabled={creating}>
-                Annuler
-              </Button>
-              <Button ref={confirmButtonRef} type="button" onClick={handleCreate} disabled={creating || insufficientOrders.length > 0}>
-                <ClipboardList className="mr-2 h-4 w-4" />
-                {creating ? "Création…" : "Confirmer la création"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirming(false)} disabled={creating}>
+              Annuler
+            </Button>
+            <Button
+              ref={confirmButtonRef}
+              type="button"
+              onClick={handleCreate}
+              disabled={creating || insufficientOrders.length > 0}
+            >
+              <ClipboardList />
+              {creating ? "Création…" : "Confirmer la création"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Sessions récentes</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {recentLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-          {recentPickLists.map((pickList) => <div key={pickList.name} className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-slate-900">{pickList.name}</strong><Badge variant={pickList.docstatus === 1 ? "default" : "secondary"}>{pickList.docstatus === 1 ? "Soumise" : "Brouillon"}</Badge></div><p className="mt-1 text-xs text-slate-500">{pickList.sales_order_count} commande(s) · {pickList.delivery_notes.length ? `BL produits : ${pickList.delivery_notes.join(", ")}` : "Aucun BL produit"}</p></div><Button type="button" size="sm" variant="outline" onClick={() => onOpenPickLists([pickList.name])}>Ouvrir</Button></div>)}
+          {recentPickLists.map((pickList) => <div key={pickList.name} className="flex flex-col gap-3 rounded-xl border border-hairline p-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-foreground">{pickList.name}</strong><Badge variant={pickList.docstatus === 1 ? "default" : "secondary"}>{pickList.docstatus === 1 ? "Soumise" : "Brouillon"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{pickList.sales_order_count} commande(s) · {pickList.delivery_notes.length ? `BL produits : ${pickList.delivery_notes.join(", ")}` : "Aucun BL produit"}</p></div><Button type="button" size="sm" variant="outline" onClick={() => onOpenPickLists([pickList.name])}>Ouvrir</Button></div>)}
           {!recentLoading && !recentPickLists.length && <p className="text-sm text-muted-foreground">Aucune session récente.</p>}
         </CardContent>
       </Card>
@@ -502,14 +511,8 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   });
 
   useEffect(() => {
-    if (!confirmingBl) return;
-    confirmBlButtonRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !submitting && !saving) setConfirmingBl(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [confirmingBl, saving, submitting]);
+    if (confirmingBl) confirmBlButtonRef.current?.focus();
+  }, [confirmingBl]);
 
   const persistQty = async () => {
     for (const pickList of pickLists.filter((item) => item.docstatus === 0)) {
@@ -583,25 +586,41 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     }
   };
 
+  const currentStep: (typeof PREPARATION_STEPS)[number] =
+    pickLists.every((item) => item.docstatus === 1) || reviewing ? "Contrôle" : "Prélèvement";
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <Button variant="ghost" size="sm" className="-ml-2 mb-2" onClick={onBack}>
-            <ArrowLeft className="w-4 h-4 mr-1" />
+    <div className="space-y-5">
+      <PageHeader
+        breadcrumb={
+          <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
+            <ArrowLeft />
             Commandes
           </Button>
-          <h1 className="text-2xl font-semibold">Session de préparation</h1>
-          <p className="text-muted-foreground text-sm">
-            Scannez les articles pour compter les quantités, puis créez les bons de livraison.
-          </p>
-        </div>
-        {session && <Badge>{pickLists.every((item) => item.docstatus === 1) ? "Soumise" : `${pickLists.length} ${pickLists.length > 1 ? "listes de prélèvement" : "liste de prélèvement"}`}</Badge>}
-      </div>
+        }
+        title="Session de préparation"
+        meta={
+          session ? (
+            <StatusBadge tone={pickLists.every((item) => item.docstatus === 1) ? "success" : "info"}>
+              {pickLists.every((item) => item.docstatus === 1)
+                ? "Soumise"
+                : `${pickLists.length} ${pickLists.length > 1 ? "listes de prélèvement" : "liste de prélèvement"}`}
+            </StatusBadge>
+          ) : undefined
+        }
+        description="Scannez les articles pour compter les quantités, puis créez les bons de livraison."
+      />
 
-      <ol className="grid grid-cols-3 gap-2" aria-label="Étapes de préparation">
-        {["Sélection", "Prélèvement", "Contrôle"].map((step, index) => <li key={step} className={`rounded-xl border p-3 text-center text-xs font-bold ${index < 2 || reviewing || pickLists.every((item) => item.docstatus === 1) ? "border-blue-200 bg-blue-50 text-blue-800" : "border-slate-200 bg-white text-slate-400"}`}><span className="mr-1">{index + 1}.</span>{step}</li>)}
-      </ol>
+      <Tabs value={currentStep} aria-label="Étapes de préparation">
+        <TabsList variant="segmented" className="grid w-full grid-cols-3">
+          {PREPARATION_STEPS.map((step, index) => (
+            <TabsTrigger key={step} value={step} variant="segmented" disabled className="disabled:opacity-100">
+              <span className="num mr-1 text-muted-foreground">{index + 1}.</span>
+              {step}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {creationConfirmed && (
         <Alert role="status" className="border-emerald-200 bg-emerald-50 text-emerald-900">
@@ -649,7 +668,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         </CardHeader>
         <CardContent className="space-y-4">
           {!reviewing && draftOpen && (
-            <form onSubmit={handleScan} className="sticky top-0 z-10 space-y-2 rounded-lg border border-blue-200 bg-blue-50/80 p-3 backdrop-blur">
+            <form onSubmit={handleScan} className="sticky top-0 z-10 space-y-2 rounded-lg border border-brand-200 bg-brand-50/80 p-3 backdrop-blur">
               <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
                 <ScanBarcode className="h-4 w-4" />
                 Code-barres article
@@ -725,7 +744,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
                 <div className="flex gap-3">
                   <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
                   <div>
-                    <h3 className="font-bold text-amber-900">Vérifiez les écarts avant création des BL</h3>
+                    <h3 className="font-semibold text-amber-900">Vérifiez les écarts avant création des BL</h3>
                     <p className="mt-1 text-sm text-amber-800">
                       Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.
                     </p>
@@ -739,13 +758,13 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
                 );
                 const difference = pickedTotal - group.stock_qty;
                 return (
-                  <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[1fr_auto_auto_auto]">
+                  <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-hairline p-4 sm:grid-cols-[1fr_auto_auto_auto]">
                     <div>
-                      <p className="text-sm font-bold text-slate-900">{group.item_code} · {group.item_name}</p>
-                      <p className="text-xs text-slate-500">{group.warehouse || "Emplacement non défini"}</p>
+                      <p className="text-sm font-semibold text-foreground">{group.item_code} · {group.item_name}</p>
+                      <p className="text-xs text-muted-foreground">{group.warehouse || "Emplacement non défini"}</p>
                     </div>
-                    <p className="text-sm"><span className="block text-xs text-slate-500">Demandé</span><strong>{group.stock_qty}</strong></p>
-                    <p className="text-sm"><span className="block text-xs text-slate-500">Prélevé</span><strong>{pickedTotal}</strong></p>
+                    <p className="text-sm"><span className="block text-xs text-muted-foreground">Demandé</span><strong>{group.stock_qty}</strong></p>
+                    <p className="text-sm"><span className="block text-xs text-muted-foreground">Prélevé</span><strong>{pickedTotal}</strong></p>
                     <p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}>
                       <span className="block text-xs">Écart</span>
                       <strong>{difference > 0 ? "+" : ""}{difference}</strong>
@@ -765,36 +784,28 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         </CardContent>
       </Card>
 
-      {confirmingBl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"
-          onMouseDown={() => !submitting && !saving && setConfirmingBl(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-delivery-notes-title"
-            aria-describedby="confirm-delivery-notes-description"
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
+      <Dialog open={confirmingBl} onOpenChange={(open) => !open && !submitting && !saving && setConfirmingBl(false)}>
+        <DialogContent>
+          <DialogHeader>
             <div className="flex items-start gap-3">
-              <div className={`rounded-xl p-2 ${varianceGroups.length ? "bg-amber-50 text-amber-700" : "bg-blue-50 text-blue-700"}`}>
-                {varianceGroups.length ? <AlertTriangle className="h-5 w-5" /> : <Package className="h-5 w-5" />}
+              <div
+                className={`shrink-0 rounded-md p-2 ${varianceGroups.length ? "bg-amber-50 text-amber-700" : "bg-brand-50 text-brand-700"}`}
+              >
+                {varianceGroups.length ? <AlertTriangle className="size-5" /> : <Package className="size-5" />}
               </div>
               <div>
-                <h2 id="confirm-delivery-notes-title" className="text-lg font-bold text-slate-950">
-                  Confirmer la création des BL
-                </h2>
-                <p id="confirm-delivery-notes-description" className="mt-1 text-sm text-slate-600">
+                <DialogTitle>Confirmer la création des BL</DialogTitle>
+                <DialogDescription className="mt-1">
                   {blCount > 1
                     ? `${blCount} bons de livraison seront créés, un par commande de la session.`
                     : "Un bon de livraison sera créé pour la commande de cette session."}
-                </p>
+                </DialogDescription>
               </div>
             </div>
+          </DialogHeader>
 
-            <div className="mt-5 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+          <DialogBody>
+            <div className="space-y-2 rounded-md border border-hairline bg-surface-subtle p-3 text-sm">
               <p><strong>{pickLists.length}</strong> {pickLists.length > 1 ? "listes de prélèvement seront soumises" : "liste de prélèvement sera soumise"}.</p>
               {varianceGroups.length > 0 && (
                 <p className="text-amber-800">
@@ -803,22 +814,22 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               )}
             </div>
 
-            <p className="mt-4 text-xs text-slate-500">
+            <p className="mt-4 t-meta text-muted-foreground">
               Cette action enregistre les quantités, soumet les listes et crée les BL. Elle ne peut pas être annulée.
             </p>
+          </DialogBody>
 
-            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={() => setConfirmingBl(false)} disabled={submitting || saving}>
-                Annuler
-              </Button>
-              <Button ref={confirmBlButtonRef} type="button" onClick={handleSubmit} disabled={submitting || saving}>
-                <Package className="mr-2 h-4 w-4" />
-                {submitting || saving ? "Création…" : "Créer les BL"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmingBl(false)} disabled={submitting || saving}>
+              Annuler
+            </Button>
+            <Button ref={confirmBlButtonRef} type="button" onClick={handleSubmit} disabled={submitting || saving}>
+              <Package />
+              {submitting || saving ? "Création…" : "Créer les BL"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {createdNotes.length > 0 && (
         <Card>

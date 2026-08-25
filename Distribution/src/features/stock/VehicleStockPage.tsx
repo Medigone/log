@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, LoaderCircle, Package, RefreshCw, Search, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 import { apiErrorMessage, useVehicleStocks } from "@/shared/api/distribution";
-
-function formatQty(value: number) {
-  return new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 3 }).format(value);
-}
+import { formatQuantity } from "@/shared/format";
+import type { VehicleStockLine } from "@/shared/types/distribution";
 
 export function VehicleStockPage() {
   const [selected, setSelected] = useState("");
@@ -38,39 +40,79 @@ export function VehicleStockPage() {
     if (!filtered.length) setSelected("");
   }, [filtered, selected]);
 
-  return (
-    <div className="space-y-5">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-sm font-bold text-blue-700">Stock physique</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">Stock des véhicules</h1>
-          <p className="mt-1 text-sm text-slate-500">Quantités réellement présentes dans l’entrepôt de chaque camion, actualisées toutes les 10 secondes.</p>
+  const columns: Array<DataTableColumn<VehicleStockLine>> = [
+    {
+      id: "item",
+      header: "Article",
+      sortValue: (line) => line.itemName || line.itemCode,
+      cell: (line) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium">{line.itemName || line.itemCode}</p>
+          <p className="truncate t-meta text-subtle">{line.itemCode}</p>
         </div>
-        <Button variant="outline" onClick={() => void mutate()} disabled={isLoading} className="h-11 w-full sm:w-auto">
-          {isLoading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-          Actualiser
-        </Button>
-      </header>
+      ),
+    },
+    {
+      id: "uom",
+      header: "Unité",
+      width: "120px",
+      hideBelow: "sm",
+      sortValue: (line) => line.uom || "",
+      cell: (line) => <span className="text-muted-foreground">{line.uom || "—"}</span>,
+    },
+    {
+      id: "quantity",
+      header: "Quantité",
+      width: "120px",
+      align: "right",
+      numeric: true,
+      sortValue: (line) => line.quantity,
+      cell: (line) => <span className="font-semibold">{formatQuantity(line.quantity)}</span>,
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader
+        eyebrow="Stock physique"
+        title="Stock des véhicules"
+        description="Quantités réellement présentes dans l’entrepôt de chaque camion, actualisées toutes les 10 secondes."
+        actions={
+          <Button variant="outline" onClick={() => void mutate()} disabled={isLoading}>
+            {isLoading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
+            Actualiser
+          </Button>
+        }
+      />
 
       <label className="block">
         <span className="sr-only">Rechercher un véhicule</span>
         <span className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un véhicule, une plaque ou un entrepôt…" className="h-11 pl-9" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un véhicule, une plaque ou un entrepôt…" className="pl-9" />
         </span>
       </label>
 
-      {error && <p role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertTriangle className="h-4 w-4 shrink-0" />{apiErrorMessage(error)}</p>}
+      {error && (
+        <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="size-4 shrink-0" />
+          {apiErrorMessage(error)}
+        </p>
+      )}
 
-      {isLoading && !vehicles.length && <div className="grid min-h-48 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div>}
+      {isLoading && !vehicles.length && (
+        <div className="grid min-h-48 place-items-center">
+          <LoaderCircle className="size-7 animate-spin text-brand-600" />
+        </div>
+      )}
 
       {!isLoading && vehicles.length === 0 && (
-        <div className="grid min-h-56 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center">
-          <div>
-            <Truck className="mx-auto h-10 w-10 text-slate-400" />
-            <p className="mt-3 font-bold">Aucun véhicule</p>
-            <p className="text-sm text-slate-500">Créez un véhicule pour suivre son stock camion.</p>
-          </div>
+        <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
+          <EmptyState
+            icon={Truck}
+            title="Aucun véhicule"
+            description="Créez un véhicule pour suivre son stock camion."
+          />
         </div>
       )}
 
@@ -84,44 +126,49 @@ export function VehicleStockPage() {
                   key={row.name}
                   type="button"
                   onClick={() => setSelected(row.name)}
-                  className={`w-full rounded-2xl border p-4 text-left transition-colors ${active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                  aria-pressed={active}
+                  className={`w-full rounded-lg border p-4 text-left shadow-card transition-colors ${active ? "border-brand-300 bg-brand-50" : "border-hairline bg-card hover:border-hairline-strong"}`}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-bold text-slate-950">{row.label}</p>
-                      <p className="text-xs text-slate-500">{row.warehouse || "Entrepôt manquant"}{row.status ? ` · ${row.status}` : ""}</p>
+                      <p className="t-section text-foreground">{row.label}</p>
+                      <p className="t-meta text-muted-foreground">{row.warehouse || "Entrepôt manquant"}{row.status ? ` · ${row.status}` : ""}</p>
                     </div>
-                    <Package className={`h-5 w-5 shrink-0 ${active ? "text-blue-700" : "text-slate-400"}`} />
+                    <Package className={`size-5 shrink-0 ${active ? "text-brand-600" : "text-slate-400"}`} />
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{formatQty(row.totalQuantity)} art.</span>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{row.itemCount} ligne{row.itemCount > 1 ? "s" : ""}</span>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
+                    <span className="num rounded-full bg-surface-subtle px-2.5 py-1 text-slate-700">{formatQuantity(row.totalQuantity)} art.</span>
+                    <span className="num rounded-full bg-surface-subtle px-2.5 py-1 text-slate-700">{row.itemCount} ligne{row.itemCount > 1 ? "s" : ""}</span>
                     {row.activeRoutes[0] && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">{row.activeRoutes[0].routeId}</span>}
                   </div>
                 </button>
               );
             })}
-            {!filtered.length && <p className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">Aucun véhicule ne correspond à la recherche.</p>}
+            {!filtered.length && (
+              <p className="rounded-lg border border-dashed border-hairline-strong bg-card p-4 t-body text-muted-foreground">
+                Aucun véhicule ne correspond à la recherche.
+              </p>
+            )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-            {!vehicle && <p className="text-sm text-slate-500">Sélectionnez un véhicule pour voir son stock.</p>}
+          <Card className="p-4 sm:p-5">
+            {!vehicle && <p className="t-body text-muted-foreground">Sélectionnez un véhicule pour voir son stock.</p>}
             {vehicle && (
               <div className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <h2 className="font-bold">{vehicle.label}</h2>
-                    <p className="text-sm text-slate-500">{vehicle.warehouse || "Aucun entrepôt n’est associé à ce véhicule."}</p>
+                    <h2 className="t-section">{vehicle.label}</h2>
+                    <p className="t-body text-muted-foreground">{vehicle.warehouse || "Aucun entrepôt n’est associé à ce véhicule."}</p>
                   </div>
                   {vehicle.activeRoutes[0] && (
-                    <p className="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+                    <p className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
                       {vehicle.activeRoutes[0].routeId} · {vehicle.activeRoutes[0].lifecycle}
                       {vehicle.activeRoutes[0].driverName ? ` · ${vehicle.activeRoutes[0].driverName}` : ""}
                     </p>
                   )}
                 </div>
                 {vehicle.missingWarehouse && (
-                  <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p role="status" className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
                     L’entrepôt camion n’est pas encore créé. Le stock physique restera vide tant qu’il n’existe pas.
                   </p>
                 )}
@@ -130,46 +177,34 @@ export function VehicleStockPage() {
                   <Input value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Filtrer un article…" />
                 </label>
                 {!vehicle.lines.length && !vehicle.missingWarehouse && (
-                  <div className="grid min-h-40 place-items-center rounded-xl border border-dashed border-slate-200 text-center">
-                    <div>
-                      <Package className="mx-auto h-8 w-8 text-slate-300" />
-                      <p className="mt-2 font-bold text-slate-700">Véhicule vide</p>
-                      <p className="text-sm text-slate-500">Aucun article n’est actuellement dans cet entrepôt.</p>
-                    </div>
+                  <div className="rounded-md border border-dashed border-hairline-strong">
+                    <EmptyState
+                      icon={Package}
+                      title="Véhicule vide"
+                      description="Aucun article n’est actuellement dans cet entrepôt."
+                    />
                   </div>
                 )}
-                {lines.length > 0 && (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-left text-sm">
-                      <thead className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        <tr>
-                          <th className="pb-2 pr-4">Article</th>
-                          <th className="pb-2 pr-4">Unité</th>
-                          <th className="pb-2 text-right">Quantité</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lines.map((line) => (
-                          <tr key={`${line.itemCode}-${line.uom || ""}`} className="border-t border-slate-100">
-                            <td className="py-3 pr-4">
-                              <p className="font-semibold text-slate-900">{line.itemName || line.itemCode}</p>
-                              <p className="text-xs text-slate-400">{line.itemCode}</p>
-                            </td>
-                            <td className="py-3 pr-4 text-slate-500">{line.uom || "—"}</td>
-                            <td className="py-3 text-right font-bold">{formatQty(line.quantity)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                {vehicle.lines.length > 0 && (
+                  <DataTable
+                    label={`Stock du véhicule ${vehicle.label}`}
+                    columns={columns}
+                    rows={lines}
+                    rowKey={(line) => `${line.itemCode}-${line.uom || ""}`}
+                    maxHeight="max-h-[55vh]"
+                    empty={
+                      <p className="py-8 text-center t-body text-muted-foreground">
+                        Aucun article ne correspond au filtre.
+                      </p>
+                    }
+                  />
                 )}
-                {vehicle.lines.length > 0 && !lines.length && <p className="text-sm text-slate-500">Aucun article ne correspond au filtre.</p>}
               </div>
             )}
-          </section>
+          </Card>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

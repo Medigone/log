@@ -50,28 +50,28 @@ function ReturnRouteCard({ route, onUpdated }: { route: DistributionRoute; onUpd
   };
 
   return (
-    <article className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+    <article className="overflow-hidden rounded-md border border-hairline bg-white">
       <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-3 p-4 text-left">
-        <span className={`grid h-10 w-10 place-items-center rounded-full ${canConfirm ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-500"}`}><Truck className="h-5 w-5" /></span>
+        <span className={`grid h-10 w-10 place-items-center rounded-full ${canConfirm ? "bg-amber-100 text-amber-800" : "bg-surface-subtle text-muted-foreground"}`}><Truck className="h-5 w-5" /></span>
         <span className="min-w-0 flex-1">
-          <span className="block font-bold text-slate-950">{route.name}</span>
-          <span className="block text-sm text-slate-500">{route.driverName || route.driver || "Livreur"} · {route.vehicleLabel || route.vehicle || "Véhicule"}</span>
+          <span className="block font-semibold text-foreground">{route.name}</span>
+          <span className="block text-sm text-muted-foreground">{route.driverName || route.driver || "Livreur"} · {route.vehicleLabel || route.vehicle || "Véhicule"}</span>
         </span>
         <span className="text-right">
-          <span className="block text-sm font-bold text-slate-900">{route.stock.remainingQuantity} à retourner</span>
+          <span className="block text-sm font-semibold text-foreground">{route.stock.remainingQuantity} à retourner</span>
           <span className="text-xs font-semibold text-amber-700">{route.stock.status}</span>
         </span>
       </button>
 
       {open && (
-        <div className="border-t border-slate-200 p-4">
-          {!canConfirm && <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Le livreur doit d’abord déclarer son retour depuis son interface mobile.</p>}
+        <div className="border-t border-hairline p-4">
+          {!canConfirm && <p className="rounded-lg bg-surface-subtle p-3 text-sm text-slate-600">Le livreur doit d’abord déclarer son retour depuis son interface mobile.</p>}
           {canConfirm && <p className="mb-4 text-sm text-slate-600">Comptez physiquement chaque ligne. Le transfert vers l’entrepôt de retour n’est créé que si tout correspond.</p>}
           <div className="space-y-2">
             {remainingLines.map((line) => (
-              <div key={line.name} className="grid gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-[minmax(0,1fr)_130px_150px] sm:items-center">
-                <div className="min-w-0"><p className="truncate text-sm font-bold">{line.itemCode} {line.itemName ? `· ${line.itemName}` : ""}</p><p className="text-xs text-slate-500">{line.deliveryNote}{line.batchNo ? ` · lot ${line.batchNo}` : ""}</p></div>
-                <p className="text-sm"><span className="text-slate-500">Attendu :</span> <strong>{line.remainingQuantity}</strong></p>
+              <div key={line.name} className="grid gap-2 rounded-lg border border-hairline p-3 sm:grid-cols-[minmax(0,1fr)_130px_150px] sm:items-center">
+                <div className="min-w-0"><p className="truncate text-sm font-semibold">{line.itemCode} {line.itemName ? `· ${line.itemName}` : ""}</p><p className="text-xs text-muted-foreground">{line.deliveryNote}{line.batchNo ? ` · lot ${line.batchNo}` : ""}</p></div>
+                <p className="text-sm"><span className="text-muted-foreground">Attendu :</span> <strong>{line.remainingQuantity}</strong></p>
                 <Input
                   aria-label={`Quantité comptée ${line.itemCode}`}
                   type="number"
@@ -88,7 +88,7 @@ function ReturnRouteCard({ route, onUpdated }: { route: DistributionRoute; onUpd
           </div>
           {error && <p role="alert" className="mt-3 flex gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-800"><AlertTriangle className="h-4 w-4 shrink-0" />{error}</p>}
           {notice && <p role="status" className="mt-3 flex gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><Check className="h-4 w-4 shrink-0" />{notice}</p>}
-          {canConfirm && <Button onClick={() => void confirm()} disabled={actions.fulfillment || (!allCounted && remainingLines.length > 0)} className="mt-4 w-full bg-blue-700 hover:bg-blue-800 sm:w-auto">
+          {canConfirm && <Button onClick={() => void confirm()} disabled={actions.fulfillment || (!allCounted && remainingLines.length > 0)} className="mt-4 w-full bg-brand-600 hover:bg-brand-700 sm:w-auto">
             {actions.fulfillment ? <LoaderCircle className="animate-spin" /> : <ClipboardCheck />}Confirmer le retour complet
           </Button>}
         </div>
@@ -103,12 +103,12 @@ export function ReturnControlPanel() {
   if (!isLoading && !error && routes.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 sm:p-5" aria-labelledby="return-control-title">
+    <section className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 sm:p-5" aria-labelledby="return-control-title">
       <div className="mb-4 flex items-start gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-100 text-amber-800"><RotateCcw className="h-5 w-5" /></span>
-        <div><h2 id="return-control-title" className="font-bold text-slate-950">Retours à contrôler</h2><p className="text-sm text-slate-600">Recomptage et retour obligatoire du véhicule vers l’entrepôt configuré.</p></div>
+        <span className="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800"><RotateCcw className="h-5 w-5" /></span>
+        <div><h2 id="return-control-title" className="font-semibold text-foreground">Retours à contrôler</h2><p className="text-sm text-slate-600">Recomptage et retour obligatoire du véhicule vers l’entrepôt configuré.</p></div>
       </div>
-      {isLoading && <p className="flex items-center gap-2 text-sm text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Chargement des retours…</p>}
+      {isLoading && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" />Chargement des retours…</p>}
       {error && <p role="alert" className="text-sm text-red-700">{apiErrorMessage(error)}</p>}
       <div className="space-y-3">{routes.map((route) => <ReturnRouteCard key={route.name} route={route} onUpdated={mutate} />)}</div>
     </section>

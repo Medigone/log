@@ -20,59 +20,86 @@ class TestDriverCash(unittest.TestCase):
 	def test_route_return_is_skipped_until_cash_is_validated(self):
 		self.assertFalse(driver_cash.should_post_route_return(frappe._dict({"statut_caisse": "Écart", "livreur": "DRV-1"}), 1200))
 		self.assertFalse(driver_cash.should_post_route_return(frappe._dict({"statut_caisse": "Validée"}), 1200))
-		self.assertFalse(driver_cash.should_post_route_return(frappe._dict({"statut_caisse": "Validée", "livreur": "DRV-1"}), 0))
+		self.assertTrue(driver_cash.should_post_route_return(frappe._dict({"statut_caisse": "Validée", "livreur": "DRV-1"}), 0))
 		self.assertTrue(driver_cash.should_post_route_return(frappe._dict({"statut_caisse": "Validée", "livreur": "DRV-1"}), 1200))
 
-	def test_post_route_return_is_idempotent(self):
-		route = frappe._dict({"name": "LIV-1", "statut_caisse": "Validée", "livreur": "DRV-1"})
-		with (
-			patch.object(driver_cash, "sync_route_declared_cash"),
-			patch.object(driver_cash, "_encaissement_total", return_value=0),
-			patch.object(driver_cash, "_has_encaissement", return_value=False),
-			patch.object(driver_cash.frappe.db, "exists", return_value="MVT-1"),
-		):
-			self.assertIsNone(driver_cash.post_route_return_cash(route, 1500))
-
-	def test_post_route_return_posts_counted_cash_once(self):
+	def test_post_route_return_skips_legacy_without_encaissement(self):
 		route = frappe._dict({"name": "LIV-2", "statut_caisse": "Validée", "livreur": "DRV-1"})
 		with (
 			patch.object(driver_cash, "sync_route_declared_cash"),
 			patch.object(driver_cash, "_encaissement_total", return_value=0),
 			patch.object(driver_cash, "_has_encaissement", return_value=False),
-			patch.object(driver_cash.frappe.db, "exists", return_value=None),
-			patch.object(driver_cash, "post_movement", return_value={"balance": 1500}) as post,
+			patch.object(driver_cash, "post_movement") as post,
 		):
-			result = driver_cash.post_route_return_cash(route, 1500)
-		self.assertEqual(result["balance"], 1500)
-		post.assert_called_once()
-		self.assertEqual(post.call_args.kwargs["amount"], 1500)
-		self.assertEqual(post.call_args.kwargs["movement_type"], "Retour tournée")
+			self.assertIsNone(driver_cash.post_route_return_cash(route, 1500))
+		post.assert_not_called()
 
-	def test_post_route_return_skips_when_counted_matches_declared(self):
+	def test_post_route_return_posts_remise_when_counted_matches_declared(self):
 		route = frappe._dict({"name": "LIV-3", "statut_caisse": "Validée", "livreur": "DRV-1"})
 		with (
 			patch.object(driver_cash, "sync_route_declared_cash"),
 			patch.object(driver_cash, "_encaissement_total", return_value=33700),
 			patch.object(driver_cash, "_has_encaissement", return_value=True),
+			patch.object(driver_cash, "_has_route_handover", return_value=False),
+			patch.object(driver_cash, "handover_reason", return_value="Remise caisse tournée LIV-3"),
+			patch.object(driver_cash, "post_movement", return_value={"balance": 0}) as post,
+		):
+			result = driver_cash.post_route_return_cash(route, 33700)
+		self.assertEqual(result["balance"], 0)
+		post.assert_called_once()
+		self.assertEqual(post.call_args.kwargs["movement_type"], "Remise")
+		self.assertEqual(post.call_args.kwargs["amount"], 33700)
+		self.assertEqual(post.call_args.kwargs["tournee"], "LIV-3")
+		self.assertEqual(post.call_args.kwargs["motif"], "Remise caisse tournée LIV-3")
+
+	def test_post_route_return_skips_remise_when_already_handed_over(self):
+		route = frappe._dict({"name": "LIV-1", "statut_caisse": "Validée", "livreur": "DRV-1"})
+		with (
+			patch.object(driver_cash, "sync_route_declared_cash"),
+			patch.object(driver_cash, "_encaissement_total", return_value=33700),
+			patch.object(driver_cash, "_has_encaissement", return_value=True),
+			patch.object(driver_cash, "_has_route_handover", return_value=True),
 			patch.object(driver_cash, "post_movement") as post,
 		):
 			self.assertIsNone(driver_cash.post_route_return_cash(route, 33700))
 		post.assert_not_called()
 
-	def test_post_route_return_posts_count_difference_as_adjustment(self):
+	def test_post_route_return_posts_count_difference_then_remise(self):
 		route = frappe._dict({"name": "LIV-4", "statut_caisse": "Validée", "livreur": "DRV-1"})
 		with (
 			patch.object(driver_cash, "sync_route_declared_cash"),
 			patch.object(driver_cash, "_encaissement_total", return_value=33700),
 			patch.object(driver_cash, "_has_encaissement", return_value=True),
-			patch.object(driver_cash.frappe.db, "exists", return_value=None),
-			patch.object(driver_cash, "post_movement", return_value={"balance": 34000}) as post,
+			patch.object(driver_cash, "_has_count_adjustment", return_value=False),
+			patch.object(driver_cash, "_has_route_handover", return_value=False),
+			patch.object(driver_cash, "count_difference_reason", return_value="Écart de comptage au retour LIV-4"),
+			patch.object(driver_cash, "handover_reason", return_value="Remise caisse tournée LIV-4"),
+			patch.object(driver_cash, "post_movement", side_effect=[{"balance": 34000}, {"balance": 0}]) as post,
 		):
 			result = driver_cash.post_route_return_cash(route, 34000)
-		self.assertEqual(result["balance"], 34000)
+		self.assertEqual(result["balance"], 0)
+		self.assertEqual(post.call_count, 2)
+		self.assertEqual(post.call_args_list[0].kwargs["movement_type"], "Ajustement")
+		self.assertEqual(post.call_args_list[0].kwargs["amount"], 300)
+		self.assertEqual(post.call_args_list[1].kwargs["movement_type"], "Remise")
+		self.assertEqual(post.call_args_list[1].kwargs["amount"], 34000)
+
+	def test_post_route_return_adjusts_zero_counted_without_remise(self):
+		route = frappe._dict({"name": "LIV-0", "statut_caisse": "Validée", "livreur": "DRV-1"})
+		with (
+			patch.object(driver_cash, "sync_route_declared_cash"),
+			patch.object(driver_cash, "_encaissement_total", return_value=33700),
+			patch.object(driver_cash, "_has_encaissement", return_value=True),
+			patch.object(driver_cash, "_has_count_adjustment", return_value=False),
+			patch.object(driver_cash, "_has_route_handover", return_value=False),
+			patch.object(driver_cash, "count_difference_reason", return_value="Écart de comptage au retour LIV-0"),
+			patch.object(driver_cash, "post_movement", return_value={"balance": 0}) as post,
+		):
+			result = driver_cash.post_route_return_cash(route, 0)
+		self.assertEqual(result["balance"], 0)
 		post.assert_called_once()
 		self.assertEqual(post.call_args.kwargs["movement_type"], "Ajustement")
-		self.assertEqual(post.call_args.kwargs["amount"], 300)
+		self.assertEqual(post.call_args.kwargs["amount"], -33700)
 
 	def test_post_declared_cash_is_idempotent_and_skips_cheques(self):
 		route = frappe._dict({"name": "LIV-5", "livreur": "DRV-1", "statut_caisse": "Sans encaissement"})

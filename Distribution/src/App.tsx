@@ -3,6 +3,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { LoaderCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/toast";
 import { PreparationPage } from "@/features/preparation/PreparationPage";
 import { TodayPage } from "@/features/today/TodayPage";
 import { useDistributionRole } from "@/features/auth/useDistributionRole";
@@ -28,10 +29,10 @@ function getSiteName() {
 
 function LoadingScreen() {
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-50">
-      <div className="text-center text-slate-500">
-        <LoaderCircle className="mx-auto mb-3 h-7 w-7 animate-spin text-blue-700" />
-        <p className="text-sm font-medium">Chargement de Distribution…</p>
+    <div className="grid min-h-screen place-items-center bg-background">
+      <div className="text-center text-muted-foreground">
+        <LoaderCircle className="mx-auto mb-3 size-7 animate-spin text-brand-600" />
+        <p className="t-body font-medium">Chargement de Distribution…</p>
       </div>
     </div>
   );
@@ -40,11 +41,11 @@ function LoadingScreen() {
 function AccessDenied() {
   const { logout } = useFrappeAuth();
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-50 p-6">
-      <div className="max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center">
-        <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-amber-600" />
-        <h1 className="text-xl font-bold text-slate-950">Accès non configuré</h1>
-        <p className="mt-2 text-sm text-slate-500">
+    <div className="grid min-h-screen place-items-center bg-surface-subtle p-6">
+      <div className="max-w-md rounded-xl border border-hairline bg-card p-8 text-center shadow-card">
+        <ShieldAlert className="mx-auto mb-4 size-10 text-amber-600" />
+        <h1 className="t-display text-foreground">Accès non configuré</h1>
+        <p className="mt-2 t-body text-muted-foreground">
           Votre compte doit recevoir un rôle Préparateur, Planificateur, Livreur, Caissier ou Responsable.
         </p>
         <Button className="mt-6" variant="outline" onClick={() => logout().then(() => window.location.reload())}>
@@ -81,7 +82,7 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/today" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><TodayPage /></RoleGuard>} />
         <Route path="/preparation" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><PreparationPage /></RoleGuard>} />
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
-        <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
+        <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="size-7 animate-spin text-brand-600" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
         <Route path="/deliveries" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DeliveriesPage /></RoleGuard>} />
         <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage /></RoleGuard>} />
         <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
@@ -105,7 +106,10 @@ function DistributionContent() {
 export default function App() {
   return (
     <FrappeProvider socketPort={import.meta.env.VITE_SOCKET_PORT} siteName={getSiteName()}>
-      <HashRouter><DistributionContent /></HashRouter>
+      <HashRouter>
+        <DistributionContent />
+        <Toaster />
+      </HashRouter>
     </FrappeProvider>
   );
 }

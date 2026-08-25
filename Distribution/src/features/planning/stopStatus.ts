@@ -1,75 +1,70 @@
+import { TONES, type StatusTone, type ToneStyle } from "@/shared/design/statusTone";
+
 export type StopVisualState = "delivered" | "partial" | "failed" | "active" | "cancelled" | "pending";
 
 export interface StopVisualStyle {
   state: StopVisualState;
+  tone: StatusTone;
   label: string;
   markerClass: string;
   markerSymbol?: string;
   cardClass: string;
   sequenceClass: string;
   badgeClass: string;
+  railClass: string;
   processed: boolean;
 }
 
-const STOP_STYLES: Record<StopVisualState, StopVisualStyle> = {
-  delivered: {
-    state: "delivered",
-    label: "Livré",
-    markerClass: "distribution-map-marker--delivered",
-    markerSymbol: "✓",
-    cardClass: "border-emerald-300 bg-emerald-50/50",
-    sequenceClass: "bg-emerald-600 text-white",
-    badgeClass: "bg-emerald-100 text-emerald-800",
-    processed: true,
-  },
-  partial: {
-    state: "partial",
-    label: "Partiellement livré",
-    markerClass: "distribution-map-marker--partial",
-    markerSymbol: "½",
-    cardClass: "border-amber-300 bg-amber-50/50",
-    sequenceClass: "bg-amber-500 text-white",
-    badgeClass: "bg-amber-100 text-amber-900",
-    processed: true,
-  },
-  failed: {
-    state: "failed",
-    label: "Non livré",
-    markerClass: "distribution-map-marker--failed",
-    markerSymbol: "×",
-    cardClass: "border-red-300 bg-red-50/40",
-    sequenceClass: "bg-red-600 text-white",
-    badgeClass: "bg-red-100 text-red-800",
-    processed: true,
-  },
-  active: {
-    state: "active",
-    label: "En cours",
-    markerClass: "distribution-map-marker--active",
-    cardClass: "border-blue-300 bg-blue-50/40",
-    sequenceClass: "bg-blue-700 text-white",
-    badgeClass: "bg-blue-100 text-blue-800",
-    processed: false,
-  },
+interface StopDefinition {
+  tone: StatusTone;
+  label: string;
+  markerSymbol?: string;
+  processed: boolean;
+  /** Surdéfinit la surface de la tonalité quand l'état demande un rendu propre. */
+  cardClass?: string;
+  sequenceClass?: string;
+}
+
+const STOP_DEFINITIONS: Record<StopVisualState, StopDefinition> = {
+  delivered: { tone: "success", label: "Livré", markerSymbol: "✓", processed: true },
+  partial: { tone: "warning", label: "Partiellement livré", markerSymbol: "½", processed: true },
+  failed: { tone: "danger", label: "Non livré", markerSymbol: "×", processed: true },
+  active: { tone: "info", label: "En cours", processed: false },
   cancelled: {
-    state: "cancelled",
+    tone: "neutral",
     label: "Annulé",
-    markerClass: "distribution-map-marker--cancelled",
     markerSymbol: "×",
+    processed: true,
     cardClass: "border-slate-300 bg-slate-100/70",
     sequenceClass: "bg-slate-500 text-white",
-    badgeClass: "bg-slate-200 text-slate-700",
-    processed: true,
   },
-  pending: {
-    state: "pending",
-    label: "À venir",
-    markerClass: "distribution-map-marker--pending",
-    cardClass: "border-slate-200 bg-white",
-    sequenceClass: "bg-slate-100 text-slate-700",
-    badgeClass: "bg-slate-100 text-slate-700",
-    processed: false,
-  },
+  pending: { tone: "neutral", label: "À venir", processed: false },
+};
+
+function build(state: StopVisualState): StopVisualStyle {
+  const definition = STOP_DEFINITIONS[state];
+  const tone: ToneStyle = TONES[definition.tone];
+  return {
+    state,
+    tone: definition.tone,
+    label: definition.label,
+    markerClass: `distribution-map-marker--${state}`,
+    markerSymbol: definition.markerSymbol,
+    cardClass: definition.cardClass ?? tone.surface,
+    sequenceClass: definition.sequenceClass ?? tone.solid,
+    badgeClass: tone.badge,
+    railClass: tone.rail,
+    processed: definition.processed,
+  };
+}
+
+const STOP_STYLES: Record<StopVisualState, StopVisualStyle> = {
+  delivered: build("delivered"),
+  partial: build("partial"),
+  failed: build("failed"),
+  active: build("active"),
+  cancelled: build("cancelled"),
+  pending: build("pending"),
 };
 
 export function getStopVisualStyle(status: string): StopVisualStyle {

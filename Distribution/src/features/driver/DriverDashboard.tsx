@@ -1,11 +1,23 @@
-import { Banknote, CheckCircle2, ChevronRight, Clock3, LoaderCircle, MapPin, RefreshCw, Route, Wallet } from "lucide-react";
+import {
+  Banknote,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  LoaderCircle,
+  MapPin,
+  RefreshCw,
+  Route,
+  Wallet,
+} from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { apiErrorMessage } from "@/shared/api/distribution";
+import { cashStatusTone, TONES, type StatusTone } from "@/shared/design/statusTone";
+import { formatMoney } from "@/shared/format";
 import type { DriverDashboardData, DriverDashboardNextStop } from "@/shared/types/distribution";
-
-function money(value: number) {
-  return `${new Intl.NumberFormat("fr-DZ", { maximumFractionDigits: 0 }).format(value)} DZD`;
-}
 
 function clock(value?: string | null) {
   if (!value) return "--:--";
@@ -19,17 +31,11 @@ function weekday(value: string) {
   return date.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
 }
 
-function cashTone(status: string) {
-  if (status === "Validée") return "bg-emerald-50 text-emerald-800";
-  if (status === "Écart") return "bg-red-50 text-red-800";
-  if (status === "À contrôler") return "bg-amber-50 text-amber-900";
-  return "bg-slate-100 text-slate-600";
-}
-
 function stopAddress(stop: DriverDashboardNextStop) {
   return stop.address || [stop.commune, stop.wilaya].filter(Boolean).join(", ") || "Adresse non renseignée";
 }
 
+/** Tuile chiffrée, densité terrain : chiffres gros et contrastés. */
 function KpiCard({
   label,
   value,
@@ -40,20 +46,31 @@ function KpiCard({
   label: string;
   value: string;
   hint: string;
-  icon: typeof Wallet;
-  tone: string;
+  icon: ComponentType<{ className?: string }>;
+  tone: StatusTone;
 }) {
+  const style = TONES[tone];
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4">
+    <Card density="touch" className="p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
-        <span className={`grid h-8 w-8 place-items-center rounded-xl ${tone}`}>
-          <Icon className="h-4 w-4" />
+        <p className="t-micro text-muted-foreground">{label}</p>
+        <span className={`grid size-8 place-items-center rounded-xl ${style.badge}`}>
+          <Icon className="size-4" />
         </span>
       </div>
-      <p className="mt-3 text-2xl font-bold tracking-tight text-slate-950">{value}</p>
-      <p className="mt-1 text-xs font-medium text-slate-500">{hint}</p>
-    </article>
+      <p className="num mt-3 text-2xl font-semibold tracking-tight text-foreground">{value}</p>
+      <p className="mt-1 t-meta text-muted-foreground">{hint}</p>
+    </Card>
+  );
+}
+
+/** Paire libellé / valeur dans une carte terrain. */
+function TouchStat({ label, value }: { label: ReactNode; value: ReactNode }) {
+  return (
+    <div className="rounded-xl bg-surface-subtle p-3">
+      <dt className="t-meta text-muted-foreground">{label}</dt>
+      <dd className="num mt-1 font-semibold">{value}</dd>
+    </div>
   );
 }
 
@@ -62,11 +79,11 @@ function DashboardSkeleton() {
     <div className="space-y-4" aria-busy="true" aria-label="Chargement du tableau de bord">
       <div className="grid grid-cols-2 gap-3">
         {Array.from({ length: 4 }, (_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-2xl bg-slate-200/80" />
+          <Skeleton key={index} className="h-28 rounded-touch" />
         ))}
       </div>
-      <div className="h-24 animate-pulse rounded-2xl bg-slate-200/80" />
-      <div className="h-36 animate-pulse rounded-2xl bg-slate-200/80" />
+      <Skeleton className="h-24 rounded-touch" />
+      <Skeleton className="h-36 rounded-touch" />
     </div>
   );
 }
@@ -91,22 +108,29 @@ export function DriverDashboard({
   const planned = kpis?.plannedStops || 0;
   const progress = planned ? Math.round(((kpis?.completedStops || 0) / planned) * 100) : 0;
   const maxDelivered = Math.max(1, ...(week?.days.map((day) => day.deliveredStops) || [0]));
-  const activeRoute = data?.routes.find((route) => ["Publiée", "En cours", "Retour dépôt"].includes(String(route.lifecycle))) || data?.routes[0];
+  const activeRoute =
+    data?.routes.find((route) => ["Publiée", "En cours", "Retour dépôt"].includes(String(route.lifecycle))) ||
+    data?.routes[0];
+  const completed = kpis?.completedStops || 0;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Tableau de bord</p>
-          <h2 className="text-lg font-bold text-slate-950">Votre journée</h2>
+          <p className="t-micro text-brand-700">Tableau de bord</p>
+          <h2 className="t-section text-lg text-foreground">Votre journée</h2>
         </div>
-        <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading} aria-label="Actualiser">
-          {loading ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        <Button variant="outline" onClick={onRefresh} disabled={loading} aria-label="Actualiser">
+          {loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
           Actualiser
         </Button>
       </div>
 
-      {error ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{apiErrorMessage(error)}</div> : null}
+      {error ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          {apiErrorMessage(error)}
+        </div>
+      ) : null}
 
       {loading && !data ? <DashboardSkeleton /> : null}
 
@@ -115,143 +139,146 @@ export function DriverDashboard({
           <section aria-label="Indicateurs du jour" className="grid grid-cols-2 gap-3">
             <KpiCard
               label="Caisse"
-              value={money(cash?.balance || 0)}
-              hint={`Encaissé ${money(kpis?.amountCollected || 0)}`}
+              value={formatMoney(cash?.balance || 0)}
+              hint={`Encaissé ${formatMoney(kpis?.amountCollected || 0)}`}
               icon={Wallet}
-              tone="bg-blue-50 text-blue-700"
+              tone="info"
             />
             <KpiCard
               label="Livraisons"
               value={`${kpis?.deliveredStops || 0} / ${planned}`}
               hint="Effectuées aujourd'hui"
               icon={CheckCircle2}
-              tone="bg-emerald-50 text-emerald-700"
+              tone="success"
             />
             <KpiCard
               label="Arrêts"
-              value={`${kpis?.completedStops || 0} / ${planned}`}
+              value={`${completed} / ${planned}`}
               hint={`${kpis?.remainingStops || 0} restant${(kpis?.remainingStops || 0) > 1 ? "s" : ""}`}
               icon={MapPin}
-              tone="bg-sky-50 text-sky-700"
+              tone="info"
             />
             <KpiCard
               label="Planifié"
-              value={money(kpis?.amountToCollect || 0)}
-              hint={activeRoute ? `${clock(activeRoute.plannedStart)} → ${clock(activeRoute.plannedEnd)}` : "Aucune tournée"}
+              value={formatMoney(kpis?.amountToCollect || 0)}
+              hint={
+                activeRoute ? `${clock(activeRoute.plannedStart)} → ${clock(activeRoute.plannedEnd)}` : "Aucune tournée"
+              }
               icon={Clock3}
-              tone="bg-amber-50 text-amber-700"
+              tone="warning"
             />
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <Card density="touch" className="p-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold">Avancement</h3>
-              <span className="text-sm font-bold text-blue-700">{progress}%</span>
+              <h3 className="t-section">Avancement</h3>
+              <span className="num t-section text-brand-700">{progress}%</span>
             </div>
-            <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-blue-700 transition-all" style={{ width: `${progress}%` }} />
+            <div
+              role="progressbar"
+              aria-label="Arrêts traités"
+              aria-valuemin={0}
+              aria-valuemax={planned}
+              aria-valuenow={completed}
+              className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100"
+            >
+              <div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${progress}%` }} />
             </div>
-            <p className="mt-2 text-xs font-medium text-slate-500">
-              {kpis?.completedStops || 0} arrêt{(kpis?.completedStops || 0) > 1 ? "s" : ""} traité{(kpis?.completedStops || 0) > 1 ? "s" : ""} sur {planned}
+            <p className="mt-2 t-meta text-muted-foreground">
+              {completed} arrêt{completed > 1 ? "s" : ""} traité{completed > 1 ? "s" : ""} sur {planned}
               {kpis?.failedStops ? ` · ${kpis.failedStops} non livré${kpis.failedStops > 1 ? "s" : ""}` : ""}
             </p>
-          </section>
+          </Card>
 
           {activeRoute ? (
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
+            <Card density="touch" className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Planifié aujourd'hui</p>
-                  <h3 className="mt-1 font-bold">{activeRoute.name}</h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="t-micro text-brand-700">Planifié aujourd'hui</p>
+                  <h3 className="mt-1 t-section">{activeRoute.name}</h3>
+                  <p className="num mt-1 t-body text-muted-foreground">
                     {clock(activeRoute.plannedStart)} – {clock(activeRoute.plannedEnd)}
                     {activeRoute.vehicleLabel ? ` · ${activeRoute.vehicleLabel}` : ""}
                   </p>
                 </div>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{activeRoute.lifecycle}</span>
+                <StatusBadge tone="neutral" size="sm">
+                  {activeRoute.lifecycle}
+                </StatusBadge>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <dt className="text-xs font-semibold text-slate-500">Arrêts</dt>
-                  <dd className="mt-1 font-bold">{activeRoute.stopsDone}/{activeRoute.stopsTotal}</dd>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <dt className="text-xs font-semibold text-slate-500">Reste à encaisser</dt>
-                  <dd className="mt-1 font-bold">{money(activeRoute.toCollect)}</dd>
-                </div>
+                <TouchStat label="Arrêts" value={`${activeRoute.stopsDone}/${activeRoute.stopsTotal}`} />
+                <TouchStat label="Reste à encaisser" value={formatMoney(activeRoute.toCollect)} />
               </dl>
-              <Button onClick={() => onOpenRoute()} className="mt-4 h-12 w-full bg-blue-700 hover:bg-blue-800">
+              <Button size="touch" onClick={() => onOpenRoute()} className="mt-4 w-full">
                 Ouvrir la tournée
                 <ChevronRight />
               </Button>
-            </section>
+            </Card>
           ) : (
-            <section className="rounded-2xl border border-slate-200 bg-white p-8 text-center">
-              <Route className="mx-auto h-9 w-9 text-slate-400" />
-              <h3 className="mt-3 font-bold">Aucune tournée publiée</h3>
-              <p className="mt-2 text-sm text-slate-500">Votre solde de caisse reste visible. Actualisez lorsque le planning est prêt.</p>
-            </section>
+            <Card density="touch" className="p-8 text-center">
+              <Route className="mx-auto size-9 text-slate-400" />
+              <h3 className="mt-3 t-section">Aucune tournée publiée</h3>
+              <p className="mt-2 t-body text-muted-foreground">
+                Votre solde de caisse reste visible. Actualisez lorsque le planning est prêt.
+              </p>
+            </Card>
           )}
 
           {nextStop ? (
-            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-              <div className="bg-blue-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-blue-700">Prochain arrêt · {nextStop.sequence}/{planned || nextStop.sequence}</p>
-                <h3 className="mt-1 text-xl font-bold">{nextStop.customerName}</h3>
-                <p className="mt-1 text-sm text-slate-600">{stopAddress(nextStop)}</p>
+            <Card density="touch" className="overflow-hidden p-0">
+              <div className="bg-brand-50 p-4">
+                <p className="t-micro text-brand-700">
+                  Prochain arrêt · {nextStop.sequence}/{planned || nextStop.sequence}
+                </p>
+                <h3 className="mt-1 text-xl font-semibold tracking-tight">{nextStop.customerName}</h3>
+                <p className="mt-1 t-body text-slate-600">{stopAddress(nextStop)}</p>
               </div>
-              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm">
-                <span className="text-slate-500">À encaisser</span>
-                <strong>{money(nextStop.amountToCollect)}</strong>
+              <div className="flex items-center justify-between border-t border-hairline px-4 py-3 text-sm">
+                <span className="text-muted-foreground">À encaisser</span>
+                <strong className="num font-semibold">{formatMoney(nextStop.amountToCollect)}</strong>
               </div>
               <div className="px-4 pb-4">
-                <Button onClick={() => onOpenRoute(nextStop.deliveryNote)} className="h-12 w-full bg-blue-700 hover:bg-blue-800">
+                <Button size="touch" onClick={() => onOpenRoute(nextStop.deliveryNote)} className="w-full">
                   Traiter cet arrêt
                   <ChevronRight />
                 </Button>
               </div>
-            </section>
+            </Card>
           ) : null}
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-4">
+          <Card density="touch" className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-blue-700" />
-                <h3 className="font-bold">Caisse du jour</h3>
+                <Banknote className="size-4 text-brand-600" />
+                <h3 className="t-section">Caisse du jour</h3>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${cashTone(cash?.status || "Sans encaissement")}`}>
+              <StatusBadge tone={cashStatusTone(cash?.status || "Sans encaissement")} size="sm">
                 {cash?.status || "Sans encaissement"}
-              </span>
+              </StatusBadge>
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-xs font-semibold text-slate-500">Espèces déclarées</dt>
-                <dd className="mt-1 font-bold">{money(cash?.declaredCash || 0)}</dd>
-              </div>
-              <div className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-xs font-semibold text-slate-500">Chèques déclarés</dt>
-                <dd className="mt-1 font-bold">{money(cash?.declaredCheques || 0)}</dd>
-              </div>
+              <TouchStat label="Espèces déclarées" value={formatMoney(cash?.declaredCash || 0)} />
+              <TouchStat label="Chèques déclarés" value={formatMoney(cash?.declaredCheques || 0)} />
             </dl>
             {cash?.movements?.length ? (
               <ul className="mt-4 space-y-2">
                 {cash.movements.slice(0, 3).map((movement) => (
                   <li key={movement.name} className="flex items-center justify-between text-sm">
                     <span className="text-slate-600">{movement.type}</span>
-                    <span className="font-semibold">{money(movement.amount)}</span>
+                    <span className="num font-semibold">{formatMoney(movement.amount)}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="mt-4 text-xs text-slate-500">Aucun mouvement de caisse récent.</p>
+              <p className="mt-4 t-meta text-muted-foreground">Aucun mouvement de caisse récent.</p>
             )}
-          </section>
+          </Card>
 
           {week ? (
-            <section className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="font-bold">Cette semaine</h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {week.deliveredStops} livraisons · {week.plannedStops} arrêts planifiés · {money(week.collected)}
+            <Card density="touch" className="p-4">
+              <h3 className="t-section">Cette semaine</h3>
+              <p className="num mt-1 t-body text-muted-foreground">
+                {week.deliveredStops} livraisons · {week.plannedStops} arrêts planifiés · {formatMoney(week.collected)}
               </p>
               <div className="mt-4 flex h-28 items-end gap-2">
                 {week.days.map((day) => {
@@ -261,19 +288,19 @@ export function DriverDashboard({
                     <div key={day.date} className="flex min-w-0 flex-1 flex-col items-center gap-1">
                       <div className="flex h-20 w-full items-end justify-center">
                         <div
-                          className={`w-full max-w-7 rounded-t-md ${isToday ? "bg-blue-700" : "bg-blue-200"}`}
+                          className={`w-full max-w-7 rounded-t-md ${isToday ? "bg-brand-600" : "bg-brand-200"}`}
                           style={{ height: `${height}%` }}
                           title={`${day.deliveredStops} livraisons`}
                         />
                       </div>
-                      <span className={`text-[10px] font-bold uppercase ${isToday ? "text-blue-700" : "text-slate-400"}`}>
+                      <span className={`t-micro ${isToday ? "text-brand-700" : "text-subtle"}`}>
                         {weekday(day.date)}
                       </span>
                     </div>
                   );
                 })}
               </div>
-            </section>
+            </Card>
           ) : null}
         </>
       ) : null}

@@ -38,7 +38,9 @@ describe("PlanningPage", () => {
   it("ouvre le panneau et affecte un BL à une nouvelle tournée", async () => {
     const user = userEvent.setup();
     render(<MemoryRouter><PlanningPage /></MemoryRouter>);
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    const table = screen.getByRole("table", { name: /bons de livraison/i });
+    expect(within(table).getByRole("columnheader", { name: /n° bl/i })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: /statut/i })).toBeInTheDocument();
     expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /planifier/i }));
     const dialog = screen.getByRole("dialog");

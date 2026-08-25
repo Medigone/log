@@ -51,7 +51,7 @@ export function buildRouteLabelsHtml(route: DistributionRoute, selectedStops = r
     .heading { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #cbd5e1; padding-bottom: 3mm; }
     .heading strong { display: block; margin-top: 1mm; font-size: 13pt; }
     .eyebrow, dt { color: #64748b; font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
-    .stop { border-radius: 999px; background: #e8f0f5; color: #315a73; padding: 2mm 3mm; font-size: 8pt; font-weight: 700; }
+    .stop { border-radius: 999px; background: #e3edf3; color: #2e546c; padding: 2mm 3mm; font-size: 8pt; font-weight: 700; }
     .content { display: grid; grid-template-columns: 42mm 1fr; gap: 4mm; padding-top: 4mm; }
     .qr { width: 40mm; height: 40mm; object-fit: contain; }
     h1 { margin: 0 0 2mm; font-size: 12pt; line-height: 1.15; }

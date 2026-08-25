@@ -20,9 +20,14 @@ import {
   Truck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage, useDistributionMutations, useDriverDashboard, useDriverRoutes } from "@/shared/api/distribution";
+import { getStopVisualStyle } from "@/features/planning/stopStatus";
+import { formatMoney } from "@/shared/format";
 import { BrandLogo } from "@/shared/ui/BrandLogo";
 import { clearPendingOperations, confirmOperation, markOperationAttempt, queueOperation, readPendingOperations } from "@/shared/persistence/pendingOperations";
 import type { DeliveryOutcome, EvidenceInput, PaymentInput, RouteStop, StopCompletionPayload, StopCompletionResult } from "@/shared/types/distribution";
@@ -33,6 +38,13 @@ import { validateStopForm, estimatedCollectableAmount } from "@/features/driver/
 type DriverTab = "home" | "route" | "scanner" | "activity";
 
 const FAILURE_REASONS = ["Client absent", "Client fermé", "Adresse introuvable", "Refus client", "Paiement refusé", "Accès impossible", "Autre"];
+
+const DRIVER_TABS = [
+  { value: "home", label: "Accueil", icon: Home },
+  { value: "route", label: "Ma tournée", icon: MapPin },
+  { value: "scanner", label: "Scanner", icon: ScanLine },
+  { value: "activity", label: "Activité", icon: Activity },
+] as const satisfies ReadonlyArray<{ value: DriverTab; label: string; icon: typeof Home }>;
 
 interface SavedStopForm {
   requestId?: string;
@@ -201,15 +213,255 @@ function StopForm({ stop, routeId, routeRevision, onDone, onClose, onPending }: 
     } finally { setSaving(false); }
   };
 
-  return <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/50 p-3 sm:p-6"><section role="dialog" aria-modal="true" aria-label={`Résultat ${stop.deliveryNote}`} className="mx-auto max-w-lg overflow-hidden rounded-2xl bg-slate-50 shadow-2xl"><header className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white p-4"><div><p className="text-xs font-semibold text-blue-700">{stop.deliveryNote}</p><h2 className="font-bold text-slate-950">{stop.customerName}</h2></div><button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-xl" aria-label="Fermer">×</button></header><div className="space-y-5 p-4 pb-28">
-    {error && <div role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{error}</div>}
-    {stop.requiresCustomerGeolocation && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-bold">GPS client à collecter</p><p className="mt-1 text-amber-800">À l’arrivée, enregistrez une position précise à 50 m ou moins. Elle sera conservée pour les prochaines livraisons.</p></div>}
-    <fieldset><legend className="text-sm font-bold text-slate-900">Résultat de l’arrêt</legend><div className="mt-2 grid grid-cols-3 gap-2">{([['delivered', 'Livré'], ['partial', 'Partiel'], ['failed', 'Échec']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setOutcome(value)} className={`h-12 rounded-xl border text-sm font-bold ${outcome === value ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-700"}`}>{label}</button>)}</div></fieldset>
-    {outcome === "partial" && <fieldset><legend className="text-sm font-bold text-slate-900">Quantités livrées maintenant</legend><div className="mt-2 space-y-2">{stop.items?.map((item) => <label key={item.name} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3"><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{item.itemName}</span><span className="text-xs text-slate-500">Reste {item.remainingQuantity}</span></span><Input type="number" min="0" max={item.remainingQuantity} step="any" value={quantities[item.name] ?? ""} onChange={(event) => setQuantities((current) => ({ ...current, [item.name]: Number(event.target.value) }))} className="h-11 w-24" aria-label={`Quantité ${item.itemName}`} /></label>)}</div></fieldset>}
-    {outcome === "failed" && <div className="space-y-3"><label className="block text-sm font-bold text-slate-900">Motif<select value={failureReason} onChange={(event) => setFailureReason(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-3"><option value="">Sélectionner</option>{FAILURE_REASONS.map((reason) => <option key={reason}>{reason}</option>)}</select></label><label className="block text-sm font-bold text-slate-900">Commentaire<Textarea value={comment} onChange={(event) => setComment(event.target.value)} className="mt-2 min-h-24 bg-white" /></label></div>}
-    <section className="rounded-2xl border border-slate-200 bg-white p-4"><h3 className="font-bold text-slate-900">Preuves</h3><Button type="button" variant="outline" onClick={locate} className="mt-3 h-12 w-full"><LocateFixed />{evidence.latitude != null ? "Reprendre la localisation" : stop.requiresCustomerGeolocation ? "Localiser ce client" : "Enregistrer la position GPS"}</Button>{evidence.latitude != null && <p className={`mt-2 text-center text-xs font-semibold ${stop.requiresCustomerGeolocation && (evidence.accuracy == null || evidence.accuracy > 50) ? "text-red-700" : "text-emerald-700"}`}>Précision : {Math.round(evidence.accuracy || 0)} m{stop.requiresCustomerGeolocation && evidence.accuracy != null && evidence.accuracy > 50 ? " · recommencez pour atteindre 50 m ou moins" : ""}</p>}{outcome !== "failed" && <><label className="mt-3 flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-semibold"><Camera className="h-4 w-4" />{evidence.photoData ? "Photo ajoutée" : "Ajouter une photo"}<input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => photo(event.target.files?.[0])} /></label><p className="my-3 text-center text-xs font-semibold text-slate-400">OU</p><SignaturePad onChange={(signatureData) => setEvidence((current) => ({ ...current, signatureData }))} />{evidence.signatureData && <Input value={evidence.signerName || ""} onChange={(event) => setEvidence((current) => ({ ...current, signerName: event.target.value }))} className="mt-3 h-11" placeholder="Nom du signataire" />}</>}</section>
-    {outcome !== "failed" && <section className="rounded-2xl border border-slate-200 bg-white p-4"><label className="flex items-center justify-between"><span><span className="block font-bold text-slate-900">Déclarer un encaissement</span><span className="text-xs text-slate-500">{outcome === "partial" ? `Facture estimée : ${suggestedAmount.toLocaleString("fr-DZ")} DZD sur un BL de ${stop.amountToCollect.toLocaleString("fr-DZ")} DZD · vous pouvez encaisser plus` : `Facture estimée : ${suggestedAmount.toLocaleString("fr-DZ")} DZD · le caissier contrôlera le montant`}</span></span><input type="checkbox" checked={paymentEnabled} onChange={(event) => setPaymentEnabled(event.target.checked)} className="h-5 w-5 accent-blue-700" /></label>{paymentEnabled && <div className="mt-4 space-y-3"><select value={payment.method} onChange={(event) => setPayment((current) => ({ ...current, method: event.target.value as PaymentInput['method'] }))} className="h-12 w-full rounded-xl border border-slate-200 bg-white px-3"><option value="cash">Espèces</option><option value="cheque">Chèque</option></select><Input type="number" min="0" step="0.01" value={payment.amount ?? ""} onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))} className="h-12" placeholder="Montant DZD" />{payment.method === "cheque" && <><Input value={payment.chequeNumber || ""} onChange={(event) => setPayment((current) => ({ ...current, chequeNumber: event.target.value }))} className="h-12" placeholder="Numéro du chèque" /><label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-slate-200"><Camera className="h-4 w-4" />{payment.chequePhotoData ? "Photo du chèque ajoutée" : "Photo du chèque"}<input type="file" accept="image/*" capture="environment" className="sr-only" onChange={(event) => chequePhoto(event.target.files?.[0])} /></label><Input type="date" value={payment.collectionDate || ""} onChange={(event) => setPayment((current) => ({ ...current, collectionDate: event.target.value }))} className="h-12" /></>}</div>}</section>}
-  </div><footer className="fixed inset-x-3 bottom-3 mx-auto flex max-w-lg gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl sm:bottom-6"><Button variant="outline" onClick={onClose} className="h-12 flex-1">Annuler</Button><Button onClick={submit} disabled={saving} className="h-12 flex-[2] bg-blue-700 hover:bg-blue-800">{saving ? <LoaderCircle className="animate-spin" /> : <Check />}Valider l’arrêt</Button></footer></section></div>;
+  return (
+    <Sheet open onOpenChange={(open) => !open && !saving && onClose()}>
+      <SheetContent side="bottom" aria-label={`Résultat ${stop.deliveryNote}`} className="max-h-[95vh] rounded-t-touch">
+        <SheetHeader>
+          <p className="t-meta font-semibold text-brand-700">{stop.deliveryNote}</p>
+          <SheetTitle>{stop.customerName}</SheetTitle>
+        </SheetHeader>
+
+        <SheetBody className="space-y-4 bg-surface-subtle">
+          {error && (
+            <div role="alert" className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {stop.requiresCustomerGeolocation && (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              <p className="font-semibold">GPS client à collecter</p>
+              <p className="mt-1 text-amber-800">
+                À l’arrivée, enregistrez une position précise à 50 m ou moins. Elle sera conservée pour les prochaines
+                livraisons.
+              </p>
+            </div>
+          )}
+
+          <fieldset>
+            <legend className="t-section">Résultat de l’arrêt</legend>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["delivered", "Livré"],
+                  ["partial", "Partiel"],
+                  ["failed", "Échec"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={outcome === value}
+                  onClick={() => setOutcome(value)}
+                  className={`h-14 rounded-touch border text-sm font-semibold transition-colors ${
+                    outcome === value
+                      ? "border-brand-600 bg-brand-600 text-white"
+                      : "border-hairline-strong bg-white text-slate-700"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          {outcome === "partial" && (
+            <fieldset>
+              <legend className="t-section">Quantités livrées maintenant</legend>
+              <div className="mt-2 space-y-2">
+                {stop.items?.map((item) => (
+                  <label
+                    key={item.name}
+                    className="flex items-center gap-3 rounded-touch border border-hairline bg-white p-3"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{item.itemName}</span>
+                      <span className="num t-meta text-muted-foreground">Reste {item.remainingQuantity}</span>
+                    </span>
+                    <Input
+                      type="number"
+                      min="0"
+                      max={item.remainingQuantity}
+                      step="any"
+                      value={quantities[item.name] ?? ""}
+                      onChange={(event) =>
+                        setQuantities((current) => ({ ...current, [item.name]: Number(event.target.value) }))
+                      }
+                      className="num h-12 w-24 text-base"
+                      aria-label={`Quantité ${item.itemName}`}
+                    />
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          {outcome === "failed" && (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="t-section">Motif</span>
+                <NativeSelect
+                  size="touch"
+                  value={failureReason}
+                  onChange={(event) => setFailureReason(event.target.value)}
+                  className="mt-2"
+                >
+                  <option value="">Sélectionner</option>
+                  {FAILURE_REASONS.map((reason) => (
+                    <option key={reason}>{reason}</option>
+                  ))}
+                </NativeSelect>
+              </label>
+              <label className="block">
+                <span className="t-section">Commentaire</span>
+                <Textarea
+                  value={comment}
+                  onChange={(event) => setComment(event.target.value)}
+                  className="mt-2 min-h-24 bg-white"
+                />
+              </label>
+            </div>
+          )}
+
+          <Card density="touch" className="p-4">
+            <h3 className="t-section">Preuves</h3>
+            <Button type="button" variant="outline" size="touch" onClick={locate} className="mt-3 w-full">
+              <LocateFixed />
+              {evidence.latitude != null
+                ? "Reprendre la localisation"
+                : stop.requiresCustomerGeolocation
+                  ? "Localiser ce client"
+                  : "Enregistrer la position GPS"}
+            </Button>
+            {evidence.latitude != null && (
+              <p
+                className={`num mt-2 text-center t-meta font-semibold ${
+                  stop.requiresCustomerGeolocation && (evidence.accuracy == null || evidence.accuracy > 50)
+                    ? "text-red-700"
+                    : "text-emerald-700"
+                }`}
+              >
+                Précision : {Math.round(evidence.accuracy || 0)} m
+                {stop.requiresCustomerGeolocation && evidence.accuracy != null && evidence.accuracy > 50
+                  ? " · recommencez pour atteindre 50 m ou moins"
+                  : ""}
+              </p>
+            )}
+            {outcome !== "failed" && (
+              <>
+                <label className="mt-3 flex h-14 cursor-pointer items-center justify-center gap-2 rounded-touch border border-hairline-strong text-sm font-semibold">
+                  <Camera className="size-4" />
+                  {evidence.photoData ? "Photo ajoutée" : "Ajouter une photo"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="sr-only"
+                    onChange={(event) => photo(event.target.files?.[0])}
+                  />
+                </label>
+                <p className="my-3 text-center t-meta font-semibold text-subtle">OU</p>
+                <SignaturePad onChange={(signatureData) => setEvidence((current) => ({ ...current, signatureData }))} />
+                {evidence.signatureData && (
+                  <Input
+                    value={evidence.signerName || ""}
+                    onChange={(event) => setEvidence((current) => ({ ...current, signerName: event.target.value }))}
+                    className="mt-3 h-12 text-base"
+                    placeholder="Nom du signataire"
+                  />
+                )}
+              </>
+            )}
+          </Card>
+
+          {outcome !== "failed" && (
+            <Card density="touch" className="p-4">
+              <label className="flex items-center justify-between gap-3">
+                <span>
+                  <span className="block t-section">Déclarer un encaissement</span>
+                  <span className="t-meta text-muted-foreground">
+                    {outcome === "partial"
+                      ? `Facture estimée : ${formatMoney(suggestedAmount)} sur un BL de ${formatMoney(stop.amountToCollect)} · vous pouvez encaisser plus`
+                      : `Facture estimée : ${formatMoney(suggestedAmount)} · le caissier contrôlera le montant`}
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={paymentEnabled}
+                  onChange={(event) => setPaymentEnabled(event.target.checked)}
+                  className="size-5 shrink-0 accent-brand-600"
+                />
+              </label>
+              {paymentEnabled && (
+                <div className="mt-4 space-y-3">
+                  <NativeSelect
+                    size="touch"
+                    aria-label="Mode de paiement"
+                    value={payment.method}
+                    onChange={(event) =>
+                      setPayment((current) => ({ ...current, method: event.target.value as PaymentInput["method"] }))
+                    }
+                  >
+                    <option value="cash">Espèces</option>
+                    <option value="cheque">Chèque</option>
+                  </NativeSelect>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={payment.amount ?? ""}
+                    onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))}
+                    className="num h-14 rounded-touch text-base"
+                    placeholder="Montant DZD"
+                  />
+                  {payment.method === "cheque" && (
+                    <>
+                      <Input
+                        value={payment.chequeNumber || ""}
+                        onChange={(event) => setPayment((current) => ({ ...current, chequeNumber: event.target.value }))}
+                        className="h-14 rounded-touch text-base"
+                        placeholder="Numéro du chèque"
+                      />
+                      <label className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-touch border border-hairline-strong text-sm font-semibold">
+                        <Camera className="size-4" />
+                        {payment.chequePhotoData ? "Photo du chèque ajoutée" : "Photo du chèque"}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          className="sr-only"
+                          onChange={(event) => chequePhoto(event.target.files?.[0])}
+                        />
+                      </label>
+                      <Input
+                        type="date"
+                        value={payment.collectionDate || ""}
+                        onChange={(event) =>
+                          setPayment((current) => ({ ...current, collectionDate: event.target.value }))
+                        }
+                        className="h-14 rounded-touch text-base"
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+            </Card>
+          )}
+        </SheetBody>
+
+        <SheetFooter className="gap-2">
+          <Button variant="outline" size="touch" onClick={onClose} className="flex-1">
+            Annuler
+          </Button>
+          <Button size="touch" onClick={submit} disabled={saving} className="flex-[2]">
+            {saving ? <LoaderCircle className="animate-spin" /> : <Check />}
+            Valider l’arrêt
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
 }
 
 export function DriverApp() {
@@ -319,16 +571,368 @@ export function DriverApp() {
     } catch (returnError) { setMessage(apiErrorMessage(returnError)); }
   };
 
-  return <div className="mx-auto min-h-screen max-w-xl bg-slate-50 pb-24 text-slate-950"><header className="bg-blue-700 px-4 pb-6 pt-5 text-white"><div className="flex items-center justify-between"><div className="rounded-xl bg-white px-3 py-2"><BrandLogo className="h-8 w-auto" alt="IntraPro Distribution" /></div><button type="button" onClick={() => logout().then(() => window.location.reload())} aria-label="Se déconnecter" className="grid h-10 w-10 place-items-center rounded-xl bg-white/10"><LogOut className="h-4 w-4" /></button></div>{tab === "home" ? <div className="mt-6"><p className="text-xs font-semibold uppercase tracking-wide text-blue-200">Tableau de bord</p><h1 className="mt-1 text-2xl font-bold">Aujourd’hui</h1><p className="mt-2 text-sm text-blue-100">{new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}{dashboardData?.message?.driver?.vehicle ? ` · ${dashboardData.message.driver.vehicle}` : ""}{dashboardData?.message?.routes[0]?.lifecycle ? ` · ${dashboardData.message.routes[0].lifecycle}` : ""}</p></div> : routeData ? <div className="mt-6"><div className="flex items-end justify-between"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-200">Ma tournée</p><h1 className="mt-1 text-2xl font-bold">{routeData.name}</h1></div><span className="rounded-full bg-white/15 px-3 py-1 text-xs font-bold">{routeData.lifecycle}</span></div><p className="mt-2 text-sm text-blue-100">{routeData.stops.length} arrêts · {routeData.totalQuantity} articles</p></div> : null}</header><main className="space-y-4 p-4">
-    {message && <div role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">{message}</div>}
-    {pendingCount > 0 && <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3"><p className="text-sm font-semibold text-amber-900">{pendingCount} opération(s) en attente</p><div className="flex gap-2"><Button variant="ghost" size="sm" onClick={discardPending}>Ignorer</Button><Button variant="outline" size="sm" onClick={() => void retryPending()}><RefreshCw />Réessayer</Button></div></div>}
-    {tab !== "home" && error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{apiErrorMessage(error)}</div>}
-    {tab === "home" && <DriverDashboard data={dashboardData?.message} loading={dashboardLoading} error={dashboardError} onRefresh={() => void mutateDashboard()} onOpenRoute={openRoute} />}
-    {tab !== "home" && isLoading && <div className="grid min-h-64 place-items-center"><LoaderCircle className="h-7 w-7 animate-spin text-blue-700" /></div>}
-    {tab !== "home" && !isLoading && !routeData && <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center"><Truck className="mx-auto h-9 w-9 text-slate-400" /><h2 className="mt-3 font-bold">Aucune tournée publiée</h2><p className="mt-2 text-sm text-slate-500">Actualisez lorsque le planning est prêt.</p><Button variant="outline" onClick={() => mutate()} className="mt-5 h-11"><RefreshCw />Actualiser</Button></div>}
-    {tab !== "home" && routes.length > 1 && <label className="block rounded-2xl border border-slate-200 bg-white p-4 text-sm font-bold">Tournée du jour<select value={routeData?.name || ""} onChange={(event) => setSelectedRouteId(event.target.value)} className="mt-2 h-12 w-full rounded-xl border border-slate-200 bg-white px-3 font-semibold">{routes.map((route) => <option key={route.name} value={route.name}>{route.plannedStart?.slice(11, 16) || "--:--"} · {route.name} · {route.lifecycle}</option>)}</select></label>}
-    {routeData && tab === "route" && <>{routeData.lifecycle === "Publiée" && !routeData.acknowledged && <Button onClick={acknowledge} disabled={actions.saving} className="h-14 w-full rounded-2xl bg-blue-700 text-base hover:bg-blue-800"><Check />Accepter la révision {routeData.publishedRevision}</Button>}{routeData.lifecycle === "Publiée" && routeData.acknowledged && <Button onClick={start} disabled={actions.saving} className="h-14 w-full rounded-2xl bg-emerald-600 text-base hover:bg-emerald-700"><Play />Vérifier, charger et démarrer</Button>}{routeData.lifecycle === "Retour dépôt" && <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold text-amber-950">Retour au dépôt requis</h2><p className="mt-1 text-sm text-amber-800">{routeData.stock.remainingQuantity} article(s) doivent être remis à l’entrepôt. Le transfert sera confirmé après recomptage.</p>{routeData.stock.status === "Retour requis" ? <Button onClick={declareReturn} disabled={actions.fulfillment} className="mt-4 h-12 w-full bg-amber-600 hover:bg-amber-700"><Truck />Déclarer mon retour</Button> : <p className="mt-3 rounded-xl bg-white p-3 text-sm font-semibold text-amber-900">Retour déclaré · contrôle entrepôt en attente</p>}</section>}{nextStop && <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white"><div className="bg-blue-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-blue-700">Prochain arrêt · {nextStop.sequence}/{routeData.stops.length}</p><h2 className="mt-1 text-xl font-bold">{nextStop.customerName}</h2><p className="mt-1 text-sm text-slate-600">{nextStop.address || [nextStop.commune, nextStop.wilaya].filter(Boolean).join(", ")}</p>{nextStop.requiresCustomerGeolocation && <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900"><LocateFixed className="h-3.5 w-3.5" />GPS client à collecter</p>}</div><div className="grid grid-cols-2 gap-2 p-4"><a href={directionUrl(nextStop)} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center gap-2 rounded-xl bg-blue-700 text-sm font-bold text-white"><Navigation className="h-4 w-4" />Navigation</a><a href={`tel:${nextStop.phone || ""}`} className={`flex h-12 items-center justify-center gap-2 rounded-xl border text-sm font-bold ${nextStop.phone ? "border-slate-200 text-slate-800" : "pointer-events-none border-slate-100 text-slate-300"}`}><Phone className="h-4 w-4" />Appeler</a></div><div className="border-t border-slate-100 p-4"><div className="flex items-center justify-between text-sm"><span className="text-slate-500">À encaisser</span><strong>{nextStop.amountToCollect.toLocaleString("fr-DZ")} DZD</strong></div><Button onClick={() => setSelectedStop(nextStop)} disabled={routeData.lifecycle !== "En cours"} className="mt-4 h-12 w-full bg-blue-700 hover:bg-blue-800">Traiter cet arrêt<ChevronRight /></Button></div></section>}<section className="rounded-2xl border border-slate-200 bg-white p-4"><h2 className="font-bold">Tous les arrêts</h2><ol className="mt-3 space-y-2">{routeData.stops.map((stop, index) => { const completed = ["Livré", "Partiellement Livré", "Non Livré"].includes(stop.status); return <li key={stop.deliveryNote}><button type="button" disabled={routeData.lifecycle !== "En cours" || completed} onClick={() => setSelectedStop(stop)} className="flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left disabled:opacity-60"><span className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold ${completed ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{completed ? <Check className="h-4 w-4" /> : index + 1}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{stop.customerName}</span><span className="block text-xs text-slate-500">{stop.deliveryNote}{stop.requiresCustomerGeolocation ? " · GPS à collecter" : ""}</span></span><span className="text-xs font-semibold text-slate-500">{stop.status}</span></button></li>; })}</ol></section></>}
-    {routeData && tab === "scanner" && <section className="rounded-2xl border border-slate-200 bg-white p-5 text-center"><span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-blue-700"><ScanLine className="h-7 w-7" /></span><h2 className="mt-4 text-xl font-bold">Scanner un BL</h2><p className="mt-2 text-sm text-slate-500">Saisissez ou scannez l’identifiant imprimé sur le bon.</p><Input autoFocus value={scanValue} onChange={(event) => setScanValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") scan(); }} className="mt-5 h-14 text-center text-lg font-bold" placeholder="BL-00001" /><Button onClick={scan} className="mt-3 h-12 w-full bg-blue-700 hover:bg-blue-800"><ScanLine />Vérifier le bon</Button></section>}
-    {routeData && tab === "activity" && <section className="rounded-2xl border border-slate-200 bg-white p-4"><div className="flex items-center gap-2"><Activity className="h-5 w-5 text-blue-700" /><h2 className="font-bold">Activité</h2></div><div className="mt-4 space-y-3">{routeData.stops.filter((stop) => ["Livré", "Non Livré", "Partiellement Livré"].includes(stop.status)).map((stop) => <div key={stop.deliveryNote} className="flex items-center gap-3 border-b border-slate-100 pb-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-slate-100"><CircleDollarSign className="h-4 w-4 text-slate-600" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold">{stop.customerName}</span><span className="text-xs text-slate-500">{stop.deliveryNote}</span></span><span className="text-xs font-bold text-slate-600">{stop.status}</span></div>)}{!routeData.stops.some((stop) => ["Livré", "Non Livré", "Partiellement Livré"].includes(stop.status)) && <p className="py-8 text-center text-sm text-slate-500">Aucune activité pour le moment.</p>}</div></section>}
-  </main><nav aria-label="Navigation livreur" className="fixed inset-x-0 bottom-0 z-40 mx-auto grid h-20 max-w-xl grid-cols-4 border-t border-slate-200 bg-white px-2 pb-[env(safe-area-inset-bottom)]">{([{ value: 'home', label: 'Accueil', icon: Home }, { value: 'route', label: 'Ma tournée', icon: MapPin }, { value: 'scanner', label: 'Scanner', icon: ScanLine }, { value: 'activity', label: 'Activité', icon: Activity }] as const).map((item) => { const Icon = item.icon; return <button key={item.value} type="button" onClick={() => setTab(item.value)} className={`flex flex-col items-center justify-center gap-1 text-[11px] font-bold ${tab === item.value ? "text-blue-700" : "text-slate-400"}`}><Icon className="h-5 w-5" />{item.label}</button>; })}</nav>{selectedStop && routeData && <StopForm stop={selectedStop} routeId={routeData.name} routeRevision={routeData.revision} onDone={async (result) => { const parts = ["Arrêt validé."]; if (result.accounting?.salesInvoice) parts.push(`Facture ${result.accounting.salesInvoice} créée.`); if (result.customerLocationUpdated) parts.push("Localisation client enregistrée."); setMessage(parts.join(" ")); await refresh(); }} onClose={() => setSelectedStop(undefined)} onPending={() => setPendingCount(readPendingOperations().length)} />}</div>;
+  return (
+    <div className="mx-auto min-h-screen max-w-xl bg-surface-subtle pb-24 text-foreground">
+      <header className="bg-brand-600 px-4 pb-6 pt-5 text-white">
+        <div className="flex items-center justify-between">
+          <div className="rounded-xl bg-white px-3 py-2">
+            <BrandLogo className="h-8 w-auto" alt="IntraPro Distribution" />
+          </div>
+          <button
+            type="button"
+            onClick={() => logout().then(() => window.location.reload())}
+            aria-label="Se déconnecter"
+            className="grid size-11 place-items-center rounded-xl bg-white/10 transition-colors hover:bg-white/20"
+          >
+            <LogOut className="size-4" />
+          </button>
+        </div>
+
+        {tab === "home" ? (
+          <div className="mt-6">
+            <p className="t-micro text-brand-100">Tableau de bord</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">Aujourd’hui</h1>
+            <p className="mt-2 t-body text-brand-100">
+              {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+              {dashboardData?.message?.driver?.vehicle ? ` · ${dashboardData.message.driver.vehicle}` : ""}
+              {dashboardData?.message?.routes[0]?.lifecycle ? ` · ${dashboardData.message.routes[0].lifecycle}` : ""}
+            </p>
+          </div>
+        ) : routeData ? (
+          <div className="mt-6">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="t-micro text-brand-100">Ma tournée</p>
+                <h1 className="mt-1 text-2xl font-semibold tracking-tight">{routeData.name}</h1>
+              </div>
+              <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-semibold">{routeData.lifecycle}</span>
+            </div>
+            <p className="num mt-2 t-body text-brand-100">
+              {routeData.stops.length} arrêts · {routeData.totalQuantity} articles
+            </p>
+          </div>
+        ) : null}
+      </header>
+
+      <main className="space-y-4 p-4">
+        {message && (
+          <div role="status" className="rounded-xl border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
+            {message}
+          </div>
+        )}
+
+        {pendingCount > 0 && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <p className="num text-sm font-semibold text-amber-900">{pendingCount} opération(s) en attente</p>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={discardPending}>
+                Ignorer
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void retryPending()}>
+                <RefreshCw />
+                Réessayer
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {tab !== "home" && error && (
+          <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            {apiErrorMessage(error)}
+          </div>
+        )}
+
+        {tab === "home" && (
+          <DriverDashboard
+            data={dashboardData?.message}
+            loading={dashboardLoading}
+            error={dashboardError}
+            onRefresh={() => void mutateDashboard()}
+            onOpenRoute={openRoute}
+          />
+        )}
+
+        {tab !== "home" && isLoading && (
+          <div className="grid min-h-64 place-items-center">
+            <LoaderCircle className="size-7 animate-spin text-brand-600" />
+          </div>
+        )}
+
+        {tab !== "home" && !isLoading && !routeData && (
+          <Card density="touch" className="p-8 text-center">
+            <Truck className="mx-auto size-9 text-subtle" />
+            <h2 className="mt-3 t-section">Aucune tournée publiée</h2>
+            <p className="mt-2 t-body text-muted-foreground">Actualisez lorsque le planning est prêt.</p>
+            <Button variant="outline" size="touch" onClick={() => mutate()} className="mt-5">
+              <RefreshCw />
+              Actualiser
+            </Button>
+          </Card>
+        )}
+
+        {tab !== "home" && routes.length > 1 && (
+          <Card density="touch" className="block p-4">
+            <label className="block">
+              <span className="t-section">Tournée du jour</span>
+              <NativeSelect
+                size="touch"
+                className="mt-2"
+                value={routeData?.name || ""}
+                onChange={(event) => setSelectedRouteId(event.target.value)}
+              >
+                {routes.map((route) => (
+                  <option key={route.name} value={route.name}>
+                    {route.plannedStart?.slice(11, 16) || "--:--"} · {route.name} · {route.lifecycle}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+          </Card>
+        )}
+
+        {routeData && tab === "route" && (
+          <>
+            {routeData.lifecycle === "Publiée" && !routeData.acknowledged && (
+              <Button size="touch" onClick={acknowledge} disabled={actions.saving} className="w-full">
+                <Check />
+                Accepter la révision {routeData.publishedRevision}
+              </Button>
+            )}
+
+            {routeData.lifecycle === "Publiée" && routeData.acknowledged && (
+              <Button
+                size="touch"
+                onClick={start}
+                disabled={actions.saving}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800"
+              >
+                <Play />
+                Vérifier, charger et démarrer
+              </Button>
+            )}
+
+            {routeData.lifecycle === "Retour dépôt" && (
+              <section className="rounded-touch border border-amber-200 bg-amber-50 p-4">
+                <h2 className="t-section text-amber-950">Retour au dépôt requis</h2>
+                <p className="mt-1 t-body text-amber-800">
+                  <span className="num">{routeData.stock.remainingQuantity}</span> article(s) doivent être remis à
+                  l’entrepôt. Le transfert sera confirmé après recomptage.
+                </p>
+                {routeData.stock.status === "Retour requis" ? (
+                  <Button
+                    size="touch"
+                    onClick={declareReturn}
+                    disabled={actions.fulfillment}
+                    className="mt-4 w-full bg-amber-600 hover:bg-amber-700 active:bg-amber-800"
+                  >
+                    <Truck />
+                    Déclarer mon retour
+                  </Button>
+                ) : (
+                  <p className="mt-3 rounded-xl bg-white p-3 text-sm font-medium text-amber-900">
+                    Retour déclaré · contrôle entrepôt en attente
+                  </p>
+                )}
+              </section>
+            )}
+
+            {nextStop && (
+              <Card density="touch" className="overflow-hidden p-0">
+                <div className="bg-brand-50 p-4">
+                  <p className="t-micro text-brand-700">
+                    Prochain arrêt · {nextStop.sequence}/{routeData.stops.length}
+                  </p>
+                  <h2 className="mt-1 text-xl font-semibold tracking-tight">{nextStop.customerName}</h2>
+                  <p className="mt-1 t-body text-slate-600">
+                    {nextStop.address || [nextStop.commune, nextStop.wilaya].filter(Boolean).join(", ")}
+                  </p>
+                  {nextStop.requiresCustomerGeolocation && (
+                    <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
+                      <LocateFixed className="size-3.5" />
+                      GPS client à collecter
+                    </p>
+                  )}
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-4">
+                  <a
+                    href={directionUrl(nextStop)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex h-14 items-center justify-center gap-2 rounded-touch bg-brand-600 text-sm font-semibold text-white"
+                  >
+                    <Navigation className="size-4" />
+                    Navigation
+                  </a>
+                  <a
+                    href={`tel:${nextStop.phone || ""}`}
+                    className={`flex h-14 items-center justify-center gap-2 rounded-touch border text-sm font-semibold ${
+                      nextStop.phone
+                        ? "border-hairline-strong text-slate-800"
+                        : "pointer-events-none border-hairline text-subtle"
+                    }`}
+                  >
+                    <Phone className="size-4" />
+                    Appeler
+                  </a>
+                </div>
+                <div className="border-t border-hairline p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">À encaisser</span>
+                    <strong className="num font-semibold">{formatMoney(nextStop.amountToCollect)}</strong>
+                  </div>
+                  <Button
+                    size="touch"
+                    onClick={() => setSelectedStop(nextStop)}
+                    disabled={routeData.lifecycle !== "En cours"}
+                    className="mt-4 w-full"
+                  >
+                    Traiter cet arrêt
+                    <ChevronRight />
+                  </Button>
+                </div>
+              </Card>
+            )}
+
+            <Card density="touch" className="p-4">
+              <h2 className="t-section">Tous les arrêts</h2>
+              <ol className="mt-3 space-y-2">
+                {routeData.stops.map((stop, index) => {
+                  const visual = getStopVisualStyle(stop.status);
+                  const completed = ["Livré", "Partiellement Livré", "Non Livré"].includes(stop.status);
+                  return (
+                    <li key={stop.deliveryNote}>
+                      <button
+                        type="button"
+                        disabled={routeData.lifecycle !== "En cours" || completed}
+                        onClick={() => setSelectedStop(stop)}
+                        className="flex w-full items-center gap-3 rounded-xl border border-hairline p-3 text-left transition-colors disabled:opacity-60"
+                      >
+                        <span
+                          className={`num grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${
+                            completed ? visual.sequenceClass : "bg-surface-subtle text-slate-600"
+                          }`}
+                        >
+                          {completed ? visual.markerSymbol || <Check className="size-4" /> : index + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">{stop.customerName}</span>
+                          <span className="block t-meta text-muted-foreground">
+                            {stop.deliveryNote}
+                            {stop.requiresCustomerGeolocation ? " · GPS à collecter" : ""}
+                          </span>
+                        </span>
+                        <span className={`t-meta font-semibold ${completed ? visual.badgeClass.split(" ")[1] : "text-muted-foreground"}`}>
+                          {stop.status}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </Card>
+          </>
+        )}
+
+        {routeData && tab === "scanner" && (
+          <Card density="touch" className="p-5 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-touch bg-brand-50 text-brand-700">
+              <ScanLine className="size-7" />
+            </span>
+            <h2 className="mt-4 text-xl font-semibold tracking-tight">Scanner un BL</h2>
+            <p className="mt-2 t-body text-muted-foreground">
+              Saisissez ou scannez l’identifiant imprimé sur le bon.
+            </p>
+            <Input
+              autoFocus
+              value={scanValue}
+              onChange={(event) => setScanValue(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") scan();
+              }}
+              className="num mt-5 h-14 rounded-touch text-center text-lg font-semibold"
+              placeholder="BL-00001"
+            />
+            <Button size="touch" onClick={scan} className="mt-3 w-full">
+              <ScanLine />
+              Vérifier le bon
+            </Button>
+          </Card>
+        )}
+
+        {routeData && tab === "activity" && (
+          <Card density="touch" className="p-4">
+            <div className="flex items-center gap-2">
+              <Activity className="size-5 text-brand-600" />
+              <h2 className="t-section">Activité</h2>
+            </div>
+            <div className="mt-4 space-y-3">
+              {routeData.stops
+                .filter((stop) => ["Livré", "Non Livré", "Partiellement Livré"].includes(stop.status))
+                .map((stop) => {
+                  const visual = getStopVisualStyle(stop.status);
+                  return (
+                    <div key={stop.deliveryNote} className="flex items-center gap-3 border-b border-hairline pb-3">
+                      <span className={`grid size-9 shrink-0 place-items-center rounded-full ${visual.badgeClass}`}>
+                        <CircleDollarSign className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{stop.customerName}</span>
+                        <span className="t-meta text-muted-foreground">{stop.deliveryNote}</span>
+                      </span>
+                      <span className="t-meta font-semibold text-slate-600">{stop.status}</span>
+                    </div>
+                  );
+                })}
+              {!routeData.stops.some((stop) => ["Livré", "Non Livré", "Partiellement Livré"].includes(stop.status)) && (
+                <p className="py-8 text-center t-body text-muted-foreground">Aucune activité pour le moment.</p>
+              )}
+            </div>
+          </Card>
+        )}
+      </main>
+
+      <nav
+        aria-label="Navigation livreur"
+        className="fixed inset-x-0 bottom-0 z-40 mx-auto grid h-20 max-w-xl grid-cols-4 border-t border-hairline bg-white px-2 pb-[env(safe-area-inset-bottom)]"
+      >
+        {DRIVER_TABS.map((item) => {
+          const Icon = item.icon;
+          const active = tab === item.value;
+          return (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => setTab(item.value)}
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-colors ${
+                active ? "text-brand-700" : "text-subtle"
+              }`}
+            >
+              <span className={`grid h-7 w-12 place-items-center rounded-full ${active ? "bg-brand-50" : ""}`}>
+                <Icon className="size-5" />
+              </span>
+              {item.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {selectedStop && routeData && (
+        <StopForm
+          stop={selectedStop}
+          routeId={routeData.name}
+          routeRevision={routeData.revision}
+          onDone={async (result) => {
+            const parts = ["Arrêt validé."];
+            if (result.accounting?.salesInvoice) parts.push(`Facture ${result.accounting.salesInvoice} créée.`);
+            if (result.customerLocationUpdated) parts.push("Localisation client enregistrée.");
+            setMessage(parts.join(" "));
+            await refresh();
+          }}
+          onClose={() => setSelectedStop(undefined)}
+          onPending={() => setPendingCount(readPendingOperations().length)}
+        />
+      )}
+    </div>
+  );
 }
