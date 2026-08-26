@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import frappe
@@ -265,6 +266,36 @@ class TestDistributionFulfillment(unittest.TestCase):
 			fulfillment._settle_delivery_notes_after_return(route)
 		realign.assert_called_once_with(dn, route)
 		cancel.assert_not_called()
+
+	def test_complete_empty_route_return_skips_when_goods_remain(self):
+		route = frappe._dict(
+			statut_chargement="Retour requis",
+			lignes_chargement=[frappe._dict(loaded_qty=3, delivered_qty=1, returned_qty=0)],
+		)
+		self.assertFalse(fulfillment.complete_empty_route_return(route, persist=False))
+		self.assertEqual(route.statut_chargement, "Retour requis")
+		self.assertEqual(route.total_quantite_restante, 2)
+
+	def test_complete_empty_route_return_closes_when_nothing_left(self):
+		route = frappe._dict(
+			name="LIV-1",
+			statut_chargement="Retour requis",
+			etat_planification="Retour dépôt",
+			lignes_chargement=[frappe._dict(loaded_qty=2, delivered_qty=2, returned_qty=0)],
+			save=Mock(),
+		)
+		with (
+			patch.object(fulfillment, "_settle_delivery_notes_after_return") as settle,
+			patch.object(fulfillment, "now_datetime", return_value="2026-08-26 12:00:00"),
+			patch.object(fulfillment.frappe, "get_all", return_value=[]),
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="prep@example.com")),
+		):
+			self.assertTrue(fulfillment.complete_empty_route_return(route))
+		settle.assert_called_once_with(route)
+		self.assertEqual(route.statut_chargement, "Retourné")
+		self.assertEqual(route.etat_planification, "Contrôle caisse")
+		self.assertEqual(route.statut_caisse, "Sans encaissement")
+		route.save.assert_called_once_with(ignore_permissions=True)
 
 
 if __name__ == "__main__":

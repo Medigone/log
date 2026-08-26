@@ -84,7 +84,7 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
         <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="size-7 animate-spin text-brand-600" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
         <Route path="/deliveries" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DeliveriesPage /></RoleGuard>} />
-        <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage /></RoleGuard>} />
+        <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage canLinkRoutes={user.role !== "preparateur"} /></RoleGuard>} />
         <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><DriverCashPage canAdjust={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/" element={<Navigate to={defaultRoute(user.role)} replace />} />

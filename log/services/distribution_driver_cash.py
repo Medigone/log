@@ -263,8 +263,6 @@ def post_route_return_cash(route, counted_cash: float) -> dict[str, Any] | None:
 
 def list_cash_boxes() -> list[dict[str, Any]]:
 	drivers = frappe.get_all("Livreur", fields=["name", "nom", "active"], order_by="nom asc")
-	for driver in drivers:
-		sync_driver_declared_cash(driver.name)
 	boxes = {
 		row.livreur: row
 		for row in frappe.get_all(

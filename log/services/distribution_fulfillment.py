@@ -256,6 +256,27 @@ def refresh_route_stock_totals(route):
 	route.total_quantite_restante = sum(_line_remaining(line) for line in lines)
 
 
+def complete_empty_route_return(route, *, persist: bool = True) -> bool:
+	"""Clôture le retour véhicule s'il ne reste aucune marchandise à ramener."""
+	refresh_route_stock_totals(route)
+	if flt(route.get("total_quantite_restante")) > 0:
+		return False
+	if route.get("statut_chargement") == "Retourné":
+		return True
+	_settle_delivery_notes_after_return(route)
+	route.statut_chargement = "Retourné"
+	route.date_confirmation_retour = route.get("date_confirmation_retour") or now_datetime()
+	route.retour_confirme_par = route.get("retour_confirme_par") or frappe.session.user
+	route.etat_planification = "Contrôle caisse"
+	payments = frappe.get_all("Paiement Client", filters={"livraison": route.name}, pluck="name") if route.get("name") else []
+	route.statut_caisse = "À contrôler" if payments else "Sans encaissement"
+	for payment in payments:
+		frappe.db.set_value("Paiement Client", payment, "statut_controle", "À contrôler", update_modified=False)
+	if persist and hasattr(route, "save"):
+		route.save(ignore_permissions=True)
+	return True
+
+
 def route_stock_summary(route) -> dict[str, Any]:
 	refresh_route_stock_totals(route)
 	lines = route.get("lignes_chargement") or []
@@ -573,6 +594,8 @@ def _settle_delivery_notes_after_return(route):
 def confirm_route_return(route, counted_lines: list[dict[str, Any]]) -> dict[str, Any]:
 	if route.get("stock_entry_retour") and frappe.db.get_value("Stock Entry", route.stock_entry_retour, "docstatus") == 1:
 		return {"success": True, "stock": route_stock_summary(route)}
+	if complete_empty_route_return(route):
+		return {"success": True, "stock": route_stock_summary(route), "stockEntry": None}
 	if route.get("statut_chargement") not in {"Retour déclaré", "Exception"}:
 		frappe.throw(_("Le livreur doit d'abord déclarer son retour."))
 

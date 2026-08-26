@@ -128,11 +128,14 @@ export interface RecentPickList {
   delivery_notes: string[];
 }
 
-export function usePreparationQueue() {
+export function usePreparationQueue(options?: { live?: boolean }) {
   return useFrappeGetCall<FrappeMessage<SalesOrderRow[]>>(
     "log.pick_list_ops.get_sales_orders_to_pick",
     { limit: 200 },
     "distribution-preparation-queue",
+    options?.live
+      ? { refreshInterval: 10_000, refreshWhenHidden: false, refreshWhenOffline: false, revalidateOnFocus: true }
+      : undefined,
   );
 }
 

@@ -11,6 +11,10 @@ function isoDate(offsetDays = 0) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
+export function hasGoodsToReturn(route: Pick<DistributionRoute, "stock">) {
+  return (route.stock?.remainingQuantity || 0) > 0;
+}
+
 function ReturnRouteCard({ route, onUpdated }: { route: DistributionRoute; onUpdated: () => Promise<unknown> }) {
   const actions = useDistributionMutations();
   const [open, setOpen] = useState(false);
@@ -99,7 +103,10 @@ function ReturnRouteCard({ route, onUpdated }: { route: DistributionRoute; onUpd
 
 export function ReturnControlPanel() {
   const { data, error, isLoading, mutate } = useReturnRoutes(isoDate(-30), isoDate(7));
-  const routes = useMemo(() => data?.message || [], [data?.message]);
+  const routes = useMemo(
+    () => (data?.message || []).filter(hasGoodsToReturn),
+    [data?.message],
+  );
   if (!isLoading && !error && routes.length === 0) return null;
 
   return (

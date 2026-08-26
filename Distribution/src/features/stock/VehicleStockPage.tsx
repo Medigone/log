@@ -1,44 +1,124 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, LoaderCircle, Package, RefreshCw, Search, Truck } from "lucide-react";
+import { Link } from "react-router-dom";
+import { AlertTriangle, LoaderCircle, Package, RefreshCw, Search, Truck, Warehouse } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { KpiTile } from "@/components/ui/kpi-tile";
+import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
 import { apiErrorMessage, useVehicleStocks } from "@/shared/api/distribution";
+import { routeLifecycleTone, vehicleStatusTone, vehicleStockTone } from "@/shared/design/statusTone";
 import { formatQuantity } from "@/shared/format";
-import type { VehicleStockLine } from "@/shared/types/distribution";
+import { cn } from "@/lib/utils";
+import type { VehicleStock, VehicleStockLine } from "@/shared/types/distribution";
 
-export function VehicleStockPage() {
+type StockFocus = "all" | "route" | "loaded" | "empty" | "missing" | "inactive";
+
+function isActiveVehicle(vehicle: VehicleStock) {
+  return vehicle.active !== false;
+}
+
+function onRoute(vehicle: VehicleStock) {
+  return vehicle.activeRoutes.length > 0;
+}
+
+function isLoaded(vehicle: VehicleStock) {
+  return vehicle.totalQuantity > 0;
+}
+
+function isEmpty(vehicle: VehicleStock) {
+  return vehicle.totalQuantity <= 0 && !vehicle.missingWarehouse;
+}
+
+function stockLabel(vehicle: VehicleStock) {
+  if (!isActiveVehicle(vehicle)) return "Inactif";
+  if (vehicle.missingWarehouse) return "Entrepôt manquant";
+  if (onRoute(vehicle)) return "En tournée";
+  if (isLoaded(vehicle)) return "Chargé";
+  return "Vide";
+}
+
+function matchesFocus(vehicle: VehicleStock, focus: StockFocus) {
+  if (focus === "route") return onRoute(vehicle);
+  if (focus === "loaded") return isLoaded(vehicle);
+  if (focus === "empty") return isEmpty(vehicle);
+  if (focus === "missing") return vehicle.missingWarehouse;
+  if (focus === "inactive") return !isActiveVehicle(vehicle);
+  return isActiveVehicle(vehicle);
+}
+
+function matchesSearch(vehicle: VehicleStock, query: string) {
+  if (!query) return true;
+  return [
+    vehicle.label,
+    vehicle.registration,
+    vehicle.warehouse,
+    vehicle.status,
+    vehicle.name,
+    ...vehicle.activeRoutes.flatMap((route) => [route.routeId, route.driver, route.driverName]),
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLocaleLowerCase("fr").includes(query));
+}
+
+function VehicleStockSkeleton() {
+  return (
+    <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]" aria-hidden="true">
+      <div className="space-y-2">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} className="h-[108px] w-full rounded-lg" />
+        ))}
+      </div>
+      <Skeleton className="h-72 w-full rounded-lg" />
+    </div>
+  );
+}
+
+export function VehicleStockPage({ canLinkRoutes = false }: { canLinkRoutes?: boolean }) {
   const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
+  const [focus, setFocus] = useState<StockFocus>("all");
   const [itemSearch, setItemSearch] = useState("");
   const { data, error, isLoading, mutate } = useVehicleStocks();
   const vehicles = useMemo(() => data?.message || [], [data?.message]);
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return vehicles;
-    return vehicles.filter((vehicle) =>
-      [vehicle.label, vehicle.registration, vehicle.warehouse, vehicle.status]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query)),
-    );
-  }, [search, vehicles]);
-  const vehicle = filtered.find((row) => row.name === selected) || vehicles.find((row) => row.name === selected);
-  const lines = useMemo(() => {
-    const query = itemSearch.trim().toLowerCase();
-    const source = vehicle?.lines || [];
-    if (!query) return source;
-    return source.filter((line) =>
-      [line.itemCode, line.itemName, line.uom].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)),
-    );
-  }, [itemSearch, vehicle]);
+  const query = search.trim().toLocaleLowerCase("fr");
+
+  const totals = useMemo(
+    () => ({
+      onRoute: vehicles.filter(onRoute).length,
+      loaded: vehicles.filter(isLoaded).length,
+      empty: vehicles.filter(isEmpty).length,
+      missing: vehicles.filter((row) => row.missingWarehouse).length,
+    }),
+    [vehicles],
+  );
+
+  const filtered = useMemo(
+    () => vehicles.filter((row) => matchesFocus(row, focus) && matchesSearch(row, query)),
+    [focus, query, vehicles],
+  );
 
   useEffect(() => {
     if (filtered.length && !filtered.some((row) => row.name === selected)) setSelected(filtered[0].name);
     if (!filtered.length) setSelected("");
   }, [filtered, selected]);
+
+  const vehicle = filtered.find((row) => row.name === selected) || vehicles.find((row) => row.name === selected);
+  const activeRoute = vehicle?.activeRoutes[0];
+  const lines = useMemo(() => {
+    const haystack = itemSearch.trim().toLocaleLowerCase("fr");
+    const source = vehicle?.lines || [];
+    if (!haystack) return source;
+    return source.filter((line) =>
+      [line.itemCode, line.itemName, line.uom].filter(Boolean).some((value) => String(value).toLocaleLowerCase("fr").includes(haystack)),
+    );
+  }, [itemSearch, vehicle]);
 
   const columns: Array<DataTableColumn<VehicleStockLine>> = [
     {
@@ -71,12 +151,31 @@ export function VehicleStockPage() {
     },
   ];
 
+  const routeChip = (routeId: string, className?: string) =>
+    canLinkRoutes ? (
+      <Link
+        to={`/planning/routes/${encodeURIComponent(routeId)}`}
+        className={cn("num font-medium text-brand-700 hover:underline", className)}
+        onClick={(event) => event.stopPropagation()}
+      >
+        {routeId}
+      </Link>
+    ) : (
+      <span className={cn("num text-muted-foreground", className)}>{routeId}</span>
+    );
+
   return (
     <>
       <PageHeader
         eyebrow="Stock physique"
         title="Stock des véhicules"
-        description="Quantités réellement présentes dans l’entrepôt de chaque camion, actualisées toutes les 10 secondes."
+        description="Stock physique des camions, à jour toutes les 10 secondes."
+        meta={
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+            <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
+            Live 10 s
+          </span>
+        }
         actions={
           <Button variant="outline" onClick={() => void mutate()} disabled={isLoading}>
             {isLoading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
@@ -85,13 +184,69 @@ export function VehicleStockPage() {
         }
       />
 
-      <label className="block">
-        <span className="sr-only">Rechercher un véhicule</span>
-        <span className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Rechercher un véhicule, une plaque ou un entrepôt…" className="pl-9" />
-        </span>
-      </label>
+      <section aria-label="Indicateurs du stock véhicules" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile
+          icon={Truck}
+          tone={totals.onRoute ? "info" : "neutral"}
+          label="En tournée"
+          value={isLoading && !vehicles.length ? "—" : totals.onRoute}
+          hint="Camions sur le terrain →"
+          onClick={() => setFocus("route")}
+          className={focus === "route" ? "border-brand-300 bg-brand-50/50" : undefined}
+        />
+        <KpiTile
+          icon={Package}
+          tone={totals.loaded ? "success" : "neutral"}
+          label="Chargés"
+          value={isLoading && !vehicles.length ? "—" : totals.loaded}
+          hint="Articles dans le camion →"
+          onClick={() => setFocus("loaded")}
+          className={focus === "loaded" ? "border-brand-300 bg-brand-50/50" : undefined}
+        />
+        <KpiTile
+          icon={Warehouse}
+          tone="neutral"
+          label="Vides"
+          value={isLoading && !vehicles.length ? "—" : totals.empty}
+          hint="Entrepôt sans article →"
+          onClick={() => setFocus("empty")}
+          className={focus === "empty" ? "border-brand-300 bg-brand-50/50" : undefined}
+        />
+        <KpiTile
+          icon={AlertTriangle}
+          tone={totals.missing ? "warning" : "neutral"}
+          label="Entrepôt manquant"
+          value={isLoading && !vehicles.length ? "—" : totals.missing}
+          hint={totals.missing ? "À configurer →" : "Tous rattachés →"}
+          onClick={() => setFocus("missing")}
+          className={focus === "missing" ? "border-brand-300 bg-brand-50/50" : undefined}
+        />
+      </section>
+
+      <Toolbar>
+        <ToolbarField label="Rechercher" className="min-w-56 flex-1">
+          <span className="relative block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Véhicule, plaque, livreur ou tournée…"
+              className="pl-9"
+              aria-label="Rechercher un véhicule"
+            />
+          </span>
+        </ToolbarField>
+        <ToolbarField label="État" className="w-52">
+          <NativeSelect aria-label="État" value={focus} onChange={(event) => setFocus(event.target.value as StockFocus)}>
+            <option value="all">Tous (actifs)</option>
+            <option value="route">En tournée</option>
+            <option value="loaded">Chargé</option>
+            <option value="empty">Vide</option>
+            <option value="missing">Entrepôt manquant</option>
+            <option value="inactive">Inactifs</option>
+          </NativeSelect>
+        </ToolbarField>
+      </Toolbar>
 
       {error && (
         <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -100,11 +255,7 @@ export function VehicleStockPage() {
         </p>
       )}
 
-      {isLoading && !vehicles.length && (
-        <div className="grid min-h-48 place-items-center">
-          <LoaderCircle className="size-7 animate-spin text-brand-600" />
-        </div>
-      )}
+      {isLoading && !vehicles.length && <VehicleStockSkeleton />}
 
       {!isLoading && vehicles.length === 0 && (
         <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
@@ -117,29 +268,43 @@ export function VehicleStockPage() {
       )}
 
       {vehicles.length > 0 && (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-          <section className="space-y-2">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
+          <section className="space-y-2 lg:max-h-[calc(100vh-18rem)] lg:overflow-y-auto lg:pr-1">
             {filtered.map((row) => {
               const active = row.name === selected;
+              const inactive = !isActiveVehicle(row);
               return (
                 <button
                   key={row.name}
                   type="button"
                   onClick={() => setSelected(row.name)}
                   aria-pressed={active}
-                  className={`w-full rounded-lg border p-4 text-left shadow-card transition-colors ${active ? "border-brand-300 bg-brand-50" : "border-hairline bg-card hover:border-hairline-strong"}`}
+                  className={cn(
+                    "w-full rounded-lg border p-4 text-left shadow-card transition-colors",
+                    active ? "border-brand-300 bg-brand-50" : "border-hairline bg-card hover:border-hairline-strong",
+                    inactive && "opacity-70",
+                  )}
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <p className="t-section text-foreground">{row.label}</p>
-                      <p className="t-meta text-muted-foreground">{row.warehouse || "Entrepôt manquant"}{row.status ? ` · ${row.status}` : ""}</p>
+                      <p className="truncate t-meta text-muted-foreground">
+                        {row.registration || row.name}
+                      </p>
                     </div>
-                    <Package className={`size-5 shrink-0 ${active ? "text-brand-600" : "text-slate-400"}`} />
+                    <StatusBadge tone={vehicleStockTone(row)} size="sm">
+                      {stockLabel(row)}
+                    </StatusBadge>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-2 text-xs font-medium">
-                    <span className="num rounded-full bg-surface-subtle px-2.5 py-1 text-slate-700">{formatQuantity(row.totalQuantity)} art.</span>
-                    <span className="num rounded-full bg-surface-subtle px-2.5 py-1 text-slate-700">{row.itemCount} ligne{row.itemCount > 1 ? "s" : ""}</span>
-                    {row.activeRoutes[0] && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">{row.activeRoutes[0].routeId}</span>}
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-medium">
+                    <span className="num rounded-full bg-surface-subtle px-2.5 py-1 text-slate-700">
+                      {formatQuantity(row.totalQuantity)} art. · {row.itemCount} ligne{row.itemCount > 1 ? "s" : ""}
+                    </span>
+                    {row.activeRoutes[0] && (
+                      <span className="num rounded-full bg-brand-50 px-2.5 py-1 text-brand-800">
+                        {row.activeRoutes[0].routeId}
+                      </span>
+                    )}
                   </div>
                 </button>
               );
@@ -156,15 +321,30 @@ export function VehicleStockPage() {
             {vehicle && (
               <div className="space-y-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="t-section">{vehicle.label}</h2>
-                    <p className="t-body text-muted-foreground">{vehicle.warehouse || "Aucun entrepôt n’est associé à ce véhicule."}</p>
-                  </div>
-                  {vehicle.activeRoutes[0] && (
-                    <p className="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-                      {vehicle.activeRoutes[0].routeId} · {vehicle.activeRoutes[0].lifecycle}
-                      {vehicle.activeRoutes[0].driverName ? ` · ${vehicle.activeRoutes[0].driverName}` : ""}
+                  <div className="min-w-0">
+                    <h2 className="t-display">{vehicle.label}</h2>
+                    <p className="t-body text-muted-foreground">
+                      {vehicle.warehouse || "Aucun entrepôt n’est associé à ce véhicule."}
                     </p>
+                    {vehicle.status && (
+                      <StatusBadge tone={vehicleStatusTone(vehicle.status)} size="sm" className="mt-2">
+                        {vehicle.status}
+                      </StatusBadge>
+                    )}
+                  </div>
+                  {activeRoute && (
+                    <div className="rounded-lg border border-hairline bg-surface-subtle px-3 py-2 text-right">
+                      <p className="t-micro text-muted-foreground">Tournée active</p>
+                      <p className="mt-0.5">{routeChip(activeRoute.routeId)}</p>
+                      <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
+                        <StatusBadge tone={routeLifecycleTone(activeRoute.lifecycle)} size="sm">
+                          {activeRoute.lifecycle}
+                        </StatusBadge>
+                        {activeRoute.driverName && (
+                          <span className="t-meta text-muted-foreground">{activeRoute.driverName}</span>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
                 {vehicle.missingWarehouse && (
@@ -174,7 +354,12 @@ export function VehicleStockPage() {
                 )}
                 <label className="block">
                   <span className="sr-only">Filtrer les articles</span>
-                  <Input value={itemSearch} onChange={(event) => setItemSearch(event.target.value)} placeholder="Filtrer un article…" />
+                  <Input
+                    value={itemSearch}
+                    onChange={(event) => setItemSearch(event.target.value)}
+                    placeholder="Filtrer un article…"
+                    aria-label="Filtrer les articles"
+                  />
                 </label>
                 {!vehicle.lines.length && !vehicle.missingWarehouse && (
                   <div className="rounded-md border border-dashed border-hairline-strong">
@@ -191,6 +376,7 @@ export function VehicleStockPage() {
                     columns={columns}
                     rows={lines}
                     rowKey={(line) => `${line.itemCode}-${line.uom || ""}`}
+                    rowTone={(line) => (line.quantity > 0 ? "success" : "neutral")}
                     maxHeight="max-h-[55vh]"
                     empty={
                       <p className="py-8 text-center t-body text-muted-foreground">

@@ -1555,12 +1555,15 @@ def _refresh_route_lifecycle(route):
 		for row in route.bons_de_livraison
 	]
 	if statuses and all(status in TERMINAL_STOP_STATES for status in statuses):
-		route.etat_planification = "Retour dépôt"
-		route.statut_chargement = "Retour requis"
 		for row in route.bons_de_livraison:
 			dn = frappe.get_doc("Delivery Note", row.bon_de_livraison)
 			planning_status = "Terminé" if dn.docstatus == 1 else "En attente retour"
 			_set_delivery_note_assignment(dn, route, planning_status)
+		from log.services.distribution_fulfillment import complete_empty_route_return
+
+		if not complete_empty_route_return(route, persist=False):
+			route.etat_planification = "Retour dépôt"
+			route.statut_chargement = "Retour requis"
 	# Nested DN/payment writes can bump Livraison.modified in the same request.
 	_refresh_document_timestamp(route)
 	route.save(ignore_permissions=True)
@@ -1678,8 +1681,10 @@ def declare_route_return(route_id, expected_revision=None, request_id=None):
 	}
 	if not statuses or not statuses.issubset(TERMINAL_STOP_STATES):
 		frappe.throw(_("Tous les arrêts doivent avoir un résultat avant le retour."))
-	from log.services.distribution_fulfillment import declare_route_return as declare_return
+	from log.services.distribution_fulfillment import complete_empty_route_return, declare_route_return as declare_return
 
+	if complete_empty_route_return(route):
+		return _serialize_route(frappe.get_doc("Livraison", route.name))
 	declare_return(route)
 	if route.meta.has_field("last_return_request_id"):
 		frappe.db.set_value("Livraison", route.name, "last_return_request_id", request_id or None, update_modified=False)
@@ -1705,16 +1710,20 @@ def get_return_routes(date_from=None, date_to=None):
 	start = getdate(date_from or add_days(today(), -7))
 	end = getdate(date_to or today())
 	return [
-		_serialize_route(frappe.get_doc("Livraison", row.name))
-		for row in frappe.get_all(
-			"Livraison",
-			filters={
-				"date_liv": ["between", [start, end]],
-				"statut_chargement": ["in", ["Retour requis", "Retour déclaré", "Exception"]],
-			},
-			fields=["name"],
-			order_by="date_liv asc, modified asc",
+		route
+		for route in (
+			_serialize_route(frappe.get_doc("Livraison", row.name))
+			for row in frappe.get_all(
+				"Livraison",
+				filters={
+					"date_liv": ["between", [start, end]],
+					"statut_chargement": ["in", ["Retour requis", "Retour déclaré", "Exception"]],
+				},
+				fields=["name"],
+				order_by="date_liv asc, modified asc",
+			)
 		)
+		if flt((route.get("stock") or {}).get("remainingQuantity")) > 0
 	]
 
 

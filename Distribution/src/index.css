@@ -263,3 +263,28 @@ textarea:focus-visible,
   background: var(--color-brand-900);
   font-size: 19px;
 }
+
+.distribution-map-vehicle,
+.distribution-map-vehicle span {
+  background: transparent;
+  border: 0;
+}
+
+.distribution-map-vehicle span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 3px solid white;
+  border-radius: 9999px;
+  background: var(--color-brand-600);
+  color: white;
+  font-size: 16px;
+  box-shadow: 0 3px 12px rgb(15 23 42 / 35%);
+}
+
+.distribution-map-vehicle--live span {
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--color-brand-600) 28%, transparent),
+    0 3px 12px rgb(15 23 42 / 35%);
+}

@@ -174,6 +174,66 @@ class TestDriverCash(unittest.TestCase):
 		self.assertEqual(result["balance"], -300)
 		self.assertEqual(created[0].montant, -500)
 
+	def test_list_cash_boxes_does_not_sync_every_driver(self):
+		drivers = [
+			frappe._dict({"name": "DRV-1", "nom": "Karim", "active": 1}),
+			frappe._dict({"name": "DRV-2", "nom": "Nadir", "active": 1}),
+		]
+		existing = [
+			frappe._dict({"name": "CAISSE-DRV-1", "livreur": "DRV-1", "nom_livreur": "Karim", "solde": 1500, "date_derniere_maj": "2026-08-25"}),
+			frappe._dict({"name": "CAISSE-DRV-2", "livreur": "DRV-2", "nom_livreur": "Nadir", "solde": -80, "date_derniere_maj": "2026-08-25"}),
+		]
+
+		def fake_get_all(doctype, **kwargs):
+			if doctype == "Livreur":
+				return drivers
+			if doctype == "Caisse Livreur":
+				return existing
+			return []
+
+		with (
+			patch.object(driver_cash.frappe, "get_all", side_effect=fake_get_all),
+			patch.object(driver_cash, "sync_driver_declared_cash") as sync,
+			patch.object(driver_cash, "ensure_cash_box") as ensure,
+		):
+			payload = driver_cash.list_cash_boxes()
+
+		sync.assert_not_called()
+		ensure.assert_not_called()
+		self.assertEqual([row["driverName"] for row in payload], ["Karim", "Nadir"])
+		self.assertEqual(payload[0]["balance"], 1500)
+		self.assertEqual(payload[1]["balance"], -80)
+		self.assertTrue(payload[0]["active"])
+
+	def test_list_cash_boxes_creates_missing_box_without_syncing_routes(self):
+		drivers = [frappe._dict({"name": "DRV-3", "nom": "Samir", "active": 0})]
+		created = frappe._dict({
+			"name": "CAISSE-DRV-3",
+			"livreur": "DRV-3",
+			"nom_livreur": "Samir",
+			"solde": 0,
+			"date_derniere_maj": None,
+		})
+
+		def fake_get_all(doctype, **kwargs):
+			if doctype == "Livreur":
+				return drivers
+			return []
+
+		with (
+			patch.object(driver_cash.frappe, "get_all", side_effect=fake_get_all),
+			patch.object(driver_cash, "sync_driver_declared_cash") as sync,
+			patch.object(driver_cash, "ensure_cash_box", return_value="CAISSE-DRV-3") as ensure,
+			patch.object(driver_cash.frappe.db, "get_value", return_value=created),
+		):
+			payload = driver_cash.list_cash_boxes()
+
+		sync.assert_not_called()
+		ensure.assert_called_once_with("DRV-3")
+		self.assertEqual(payload[0]["driverName"], "Samir")
+		self.assertEqual(payload[0]["balance"], 0)
+		self.assertFalse(payload[0]["active"])
+
 	def test_adjustment_requires_reason_and_rejects_unknown_type(self):
 		with (
 			patch.object(driver_cash, "_", side_effect=lambda message, *args: message),

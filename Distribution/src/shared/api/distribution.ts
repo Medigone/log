@@ -37,12 +37,20 @@ export function apiErrorMessage(error: unknown): string {
   return "Une erreur inattendue est survenue.";
 }
 
-export function usePlanningBoard(dateFrom: string, dateTo = dateFrom, filters: PlanningFilters = {}) {
+export function usePlanningBoard(
+  dateFrom: string,
+  dateTo = dateFrom,
+  filters: PlanningFilters = {},
+  options?: { live?: boolean },
+) {
   const filterKey = JSON.stringify(filters);
   return useFrappeGetCall<FrappeMessage<PlanningBoard>>(
     "log.api.distribution.get_planning_board",
     { date_from: dateFrom, date_to: dateTo, filters: filterKey },
     `distribution-planning-${dateFrom}-${dateTo}-${filterKey}`,
+    options?.live
+      ? { refreshInterval: 10_000, refreshWhenHidden: false, refreshWhenOffline: false, revalidateOnFocus: true }
+      : undefined,
   );
 }
 
@@ -105,6 +113,12 @@ export function useDriverCashBoxes() {
     "log.api.distribution.get_driver_cash_boxes",
     {},
     "distribution-driver-cash-boxes",
+    {
+      refreshInterval: 15_000,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: true,
+    },
   );
 }
 

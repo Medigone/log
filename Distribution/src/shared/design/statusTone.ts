@@ -107,3 +107,42 @@ export function cashStatusTone(status: string): StatusTone {
   if (status === "À contrôler") return "warning";
   return "neutral";
 }
+
+/** Solde d'une caisse livreur. */
+export function cashBalanceTone(balance: number): StatusTone {
+  if (balance < 0) return "danger";
+  if (balance > 0) return "warning";
+  return "neutral";
+}
+
+/** Type de mouvement de caisse livreur. */
+export function cashMovementTone(type: string): StatusTone {
+  if (type === "Encaissement" || type === "Avance") return "success";
+  if (type === "Remise" || type === "Retour tournée") return "warning";
+  if (type === "Ajustement") return "info";
+  return "neutral";
+}
+
+interface VehicleStockToneInput {
+  active?: boolean;
+  missingWarehouse?: boolean;
+  totalQuantity?: number;
+  activeRoutes?: unknown[];
+}
+
+/** Occupation opérationnelle d'un camion (tournée, chargé, vide, entrepôt). */
+export function vehicleStockTone(vehicle: VehicleStockToneInput): StatusTone {
+  if (vehicle.active === false) return "neutral";
+  if (vehicle.missingWarehouse) return "warning";
+  if (vehicle.activeRoutes?.length) return "info";
+  if ((vehicle.totalQuantity || 0) > 0) return "success";
+  return "neutral";
+}
+
+/** Statut parc du véhicule. */
+export function vehicleStatusTone(status?: string): StatusTone {
+  if (status === "Disponible") return "success";
+  if (status === "En maintenance") return "warning";
+  if (status === "Hors service") return "danger";
+  return "neutral";
+}

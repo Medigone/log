@@ -259,6 +259,9 @@ def _create_cash_exception(route, reason: str):
 
 
 def validate_reconciliation(route, payload: dict[str, Any], *, approved_by_responsible: bool = False) -> dict[str, Any]:
+	from log.services.distribution_fulfillment import complete_empty_route_return
+
+	complete_empty_route_return(route)
 	if route.get("statut_chargement") != "Retourné":
 		frappe.throw(_("Le retour de stock doit être confirmé avant le contrôle de caisse."))
 	current = reconciliation(route)

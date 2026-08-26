@@ -711,7 +711,7 @@ export function DriverApp() {
               </Button>
             )}
 
-            {routeData.lifecycle === "Retour dépôt" && (
+            {routeData.lifecycle === "Retour dépôt" && (routeData.stock?.remainingQuantity || 0) > 0 && (
               <section className="rounded-touch border border-amber-200 bg-amber-50 p-4">
                 <h2 className="t-section text-amber-950">Retour au dépôt requis</h2>
                 <p className="mt-1 t-body text-amber-800">
