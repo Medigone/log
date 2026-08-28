@@ -61,6 +61,12 @@ export interface RouteOptimizationProposal {
   optimized: RouteOptimizationMetrics;
 }
 
+export interface RouteStopTax {
+  description: string;
+  rate?: number;
+  taxAmount: number;
+}
+
 export interface RouteStop {
   deliveryNote: string;
   salesOrder?: string;
@@ -75,6 +81,9 @@ export interface RouteStop {
   totalQuantity: number;
   amountCollected: number;
   amountToCollect: number;
+  netTotal?: number;
+  grandTotal?: number;
+  taxes?: RouteStopTax[];
   payments: StopPayment[];
   salesInvoice?: string;
   invoiceStatus: "Non créée" | "Créée" | "Erreur" | "Sans objet" | string;
@@ -182,6 +191,7 @@ export type PlanningStatus =
   | "Non planifié"
   | "Planifié"
   | "Publié"
+  | "En retard"
   | "À revalider"
   | "À repréparer"
   | "En cours"
@@ -207,6 +217,8 @@ export interface PlanningFilters {
   route?: string;
   wilaya?: string;
   alertsOnly?: boolean;
+  /** Ignore the planning date window and return every route. */
+  allDates?: boolean;
 }
 
 export interface PlanningAlert {
@@ -572,4 +584,165 @@ export interface DriverDashboardData {
   routes: DriverDashboardRoute[];
   nextStop: DriverDashboardNextStop | null;
   week: DriverDashboardWeek;
+}
+
+export type ActivityTone = "danger" | "warning" | "info" | "success";
+
+export interface ActivityAlert {
+  id: string;
+  tone: ActivityTone;
+  title: string;
+  detail: string;
+  target?: string;
+}
+
+export interface ActivityNowItem {
+  id: string;
+  kind: "pick" | "load" | "return" | "route" | "cash" | string;
+  title: string;
+  detail: string;
+  tone: ActivityTone;
+  target?: string;
+}
+
+export interface ActivityPickList {
+  name: string;
+  modified?: string | null;
+  salesOrderCount: number;
+  remainingQty: number;
+}
+
+export interface ActivityPreparation {
+  toPick: number;
+  overdue: number;
+  today: number;
+  later: number;
+  inProgressPickLists: number;
+  remainingQty: number;
+  shortageOrders: number;
+  pickLists: ActivityPickList[];
+}
+
+export interface ActivityFulfillmentRoute {
+  name: string;
+  date?: string | null;
+  lifecycle?: string;
+  driverName?: string | null;
+  vehicle?: string | null;
+  vehicleLabel?: string | null;
+  loadingStatus?: string;
+}
+
+export interface ActivityFulfillment {
+  toLoad: number;
+  loaded: number;
+  returnsPending: number;
+  toLoadRoutes: ActivityFulfillmentRoute[];
+  returnRoutes: ActivityFulfillmentRoute[];
+}
+
+export interface ActivityLiveStop {
+  deliveryNote: string;
+  customer?: string;
+  customerName: string;
+  status: string;
+  sequence: number;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export interface ActivityLiveRoute {
+  name: string;
+  date: string;
+  lifecycle: RouteLifecycle;
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  driver?: string | null;
+  driverName?: string | null;
+  vehicle?: string | null;
+  vehicleLabel?: string | null;
+  loadingStatus?: string;
+  cashStatus?: string;
+  depot?: RouteDepot | null;
+  routing?: { geometry?: RouteGeometry | null } | null;
+  stops: ActivityLiveStop[];
+  doneStops: number;
+  remainingStops: number;
+  failedStops: number;
+  nextStop?: { deliveryNote: string; customerName: string; status: string } | null;
+}
+
+export interface ActivityFleet {
+  published: number;
+  inProgress: number;
+  returning: number;
+  doneStops: number;
+  remainingStops: number;
+  failedStops: number;
+  liveRoutes: ActivityLiveRoute[];
+}
+
+export interface ActivityPlanning {
+  unassigned: number;
+  overdue: number;
+}
+
+export interface ActivityDispatchNote {
+  deliveryNote: string;
+  customerName?: string | null;
+  requestedDate?: string | null;
+  lifecycle: string;
+  planningStatus?: string;
+  routeId?: string | null;
+  routeDate?: string | null;
+  routeLifecycle?: string | null;
+  loadingStatus?: string | null;
+}
+
+export interface ActivityDispatch {
+  ready: number;
+  unassigned: number;
+  waitingLoad: number;
+  overdue: number;
+  notes: ActivityDispatchNote[];
+}
+
+export interface ActivityStock {
+  onRoute: number;
+  loaded: number;
+  empty: number;
+  missingWarehouse: number;
+}
+
+export interface ActivityPayments {
+  toControl: number;
+  discrepancies: number;
+  declaredToday: number;
+  pendingPayments: number;
+  driverCashTotal: number;
+  driverCashBoxes: number;
+}
+
+export interface ActivityPipeline {
+  toPrepare: number;
+  toPlan: number;
+  toDispatch: number;
+  live: number;
+  returning: number;
+  cashier: number;
+}
+
+export interface ActivityDashboardData {
+  date: string;
+  role: DistributionRole | string;
+  pipeline?: ActivityPipeline;
+  preparation?: ActivityPreparation;
+  fulfillment?: ActivityFulfillment;
+  fleet?: ActivityFleet;
+  planning?: ActivityPlanning;
+  dispatch?: ActivityDispatch;
+  stock?: ActivityStock;
+  payments?: ActivityPayments;
+  alerts?: ActivityAlert[];
+  now?: ActivityNowItem[];
 }

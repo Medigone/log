@@ -5,7 +5,7 @@ import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-
 import { Link } from "react-router-dom";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { fleetColor, vehiclePosition, type MapPoint } from "@/features/today/fleetProgress";
-import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
+import type { ActivityLiveRoute, ActivityLiveStop, DistributionRoute, RouteStop } from "@/shared/types/distribution";
 
 const ALGIERS: MapPoint = [36.7525, 3.042];
 
@@ -18,7 +18,7 @@ function FitFleetBounds({ points }: { points: MapPoint[] }) {
   return null;
 }
 
-function stopIcon(stop: RouteStop, color: string) {
+function stopIcon(stop: ActivityLiveStop | RouteStop, color: string) {
   const visual = getStopVisualStyle(stop.status);
   return divIcon({
     className: `distribution-map-marker ${visual.markerClass}`,
@@ -37,12 +37,19 @@ function vehicleIcon(color: string, live: boolean) {
   });
 }
 
-function routePoints(route: DistributionRoute): MapPoint[] {
-  return route.routing.geometry?.coordinates.map(([longitude, latitude]) => [latitude, longitude] as MapPoint) || [];
+function routePoints(route: FleetMapRoute): MapPoint[] {
+  return route.routing?.geometry?.coordinates.map(([longitude, latitude]) => [latitude, longitude] as MapPoint) || [];
 }
 
+export type FleetMapRoute = Pick<ActivityLiveRoute, "name" | "lifecycle" | "stops"> & {
+  driverName?: string | null;
+  vehicleLabel?: string | null;
+  depot?: ActivityLiveRoute["depot"];
+  routing?: ActivityLiveRoute["routing"] | DistributionRoute["routing"] | null;
+};
+
 interface FleetMapProps {
-  routes: DistributionRoute[];
+  routes: FleetMapRoute[];
 }
 
 export function FleetMap({ routes }: FleetMapProps) {
@@ -76,7 +83,7 @@ export function FleetMap({ routes }: FleetMapProps) {
           const line = routePoints(route);
           const vehicle = vehiclePosition(route);
           const progressStops = route.stops.filter(
-            (stop): stop is RouteStop & { latitude: number; longitude: number } =>
+            (stop): stop is ActivityLiveStop & { latitude: number; longitude: number } =>
               typeof stop.latitude === "number" && typeof stop.longitude === "number",
           );
           return (

@@ -41,6 +41,35 @@ def can_transition_route(current: str, target: str) -> bool:
 	return target in ROUTE_TRANSITIONS.get(current, set())
 
 
+LOADED_STOP_STATUSES = {"Enlevé", "Non Livré"}
+
+
+def load_verification_error(route_notes: set[str], verified: set[str]) -> str | None:
+	if not route_notes:
+		return "La tournée ne contient aucun bon de livraison."
+	if verified != route_notes:
+		return "Vérifiez tous les bons de livraison avant le chargement."
+	return None
+
+
+def start_without_load_error(*, loaded: bool) -> str | None:
+	if not loaded:
+		return "Chargez la marchandise dans le véhicule avant de démarrer la tournée."
+	return None
+
+
+def complete_stop_gate_error(*, route_state: str, loaded: bool, stop_status: str) -> str | None:
+	if route_state != "En cours":
+		return "La tournée doit être démarrée avant de valider un arrêt."
+	if not loaded:
+		return "Chargez la marchandise dans le véhicule avant de livrer."
+	if stop_status in {"Livré", "Partiellement Livré"}:
+		return None
+	if stop_status not in LOADED_STOP_STATUSES:
+		return "Ce bon n'a pas été chargé. Vérifiez et chargez la tournée avant de livrer."
+	return None
+
+
 def is_repeated_request(last_request_id: str | None, request_id: str) -> bool:
 	return bool(last_request_id and last_request_id == request_id)
 

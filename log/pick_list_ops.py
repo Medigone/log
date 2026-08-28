@@ -300,6 +300,7 @@ def serialize_pick_list(doc):
 		"locations": locations,
 		"grouped": grouped,
 		"sales_orders": sales_orders,
+		"delivery_notes": _serialize_linked_delivery_notes(doc.name),
 	}
 
 
@@ -318,11 +319,21 @@ def serialize_pick_session(docs):
 			bucket["stock_qty"] += flt(location.get("stock_qty"))
 			bucket["picked_qty"] += flt(location.get("picked_qty"))
 			bucket["locations"].append(location)
+	notes = []
+	seen = set()
+	for pick_list in serialized:
+		for note in pick_list.get("delivery_notes") or []:
+			name = note.get("name")
+			if not name or name in seen:
+				continue
+			seen.add(name)
+			notes.append(note)
 	return {
 		"name": "SESSION-" + "-".join(item["name"] for item in serialized),
 		"pick_lists": serialized,
 		"sales_orders": list(dict.fromkeys(so for item in serialized for so in item["sales_orders"])),
 		"grouped": list(grouped_map.values()),
+		"delivery_notes": notes,
 	}
 
 
@@ -333,6 +344,10 @@ def _get_delivery_note_names(pick_list_name):
 		fields=["parent"],
 	)
 	return list(dict.fromkeys(row.parent for row in rows))
+
+
+def _serialize_linked_delivery_notes(pick_list_name):
+	return [serialize_delivery_note(frappe.get_doc("Delivery Note", name)) for name in _get_delivery_note_names(pick_list_name)]
 
 
 def _copy_log_fields_from_sales_order(dn):

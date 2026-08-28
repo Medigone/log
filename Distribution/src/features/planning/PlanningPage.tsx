@@ -44,6 +44,7 @@ const PLANNING_STATUSES: PlanningStatus[] = [
   "Non planifié",
   "Planifié",
   "Publié",
+  "En retard",
   "À revalider",
   "À repréparer",
   "En cours",
@@ -67,6 +68,12 @@ function timePart(value?: string) {
   return value?.match(/(?:T|\s)(\d{2}:\d{2})/)?.[1] || "";
 }
 
+function defaultPlannedDate(assignment: DeliveryNoteAssignment) {
+  const planned = assignment.plannedDate || assignment.requestedDate || "";
+  const today = localDate();
+  return !planned || planned < today ? today : planned;
+}
+
 interface EditorProps {
   assignment: DeliveryNoteAssignment;
   routes: DistributionRoute[];
@@ -79,16 +86,22 @@ interface EditorProps {
 function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSaved }: EditorProps) {
   const source = routes.find((route) => route.name === assignment.route);
   const isNewAssignment = !assignment.route;
-  const [date, setDate] = useState(assignment.plannedDate || localDate());
+  const [date, setDate] = useState(defaultPlannedDate(assignment));
   const [start, setStart] = useState(timePart(assignment.plannedStart) || "08:00");
   const [end, setEnd] = useState(timePart(assignment.plannedEnd) || "12:00");
   const [driver, setDriver] = useState(assignment.driver || "");
   const [vehicle, setVehicle] = useState(assignment.vehicle || "");
   const [targetRouteId, setTargetRouteId] = useState(assignment.route || "");
-  const [position, setPosition] = useState(String(assignment.sequence || 1));
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");
   const actions = useDistributionMutations();
+  const resourcesChanged =
+    !isNewAssignment &&
+    (date !== (assignment.plannedDate || "") ||
+      driver !== (assignment.driver || "") ||
+      vehicle !== (assignment.vehicle || "") ||
+      start !== (timePart(assignment.plannedStart) || "08:00") ||
+      end !== (timePart(assignment.plannedEnd) || "12:00"));
   const compatible = routes.filter(
     (route) =>
       !["En cours", "Terminée", "Annulée"].includes(route.lifecycle) &&
@@ -96,7 +109,8 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
       route.driver === driver &&
       route.vehicle === vehicle &&
       timePart(route.plannedStart) === start &&
-      timePart(route.plannedEnd) === end,
+      timePart(route.plannedEnd) === end &&
+      (!resourcesChanged || route.name !== assignment.route),
   );
 
   useEffect(() => {
@@ -109,23 +123,27 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
       return;
     }
     const target = compatible.find((route) => route.name === targetRouteId);
-    if (!isNewAssignment && (source?.lifecycle === "Publiée" || target?.lifecycle === "Publiée") && !reason.trim()) {
-      setError("Le motif est obligatoire lorsqu’une tournée publiée est modifiée.");
+    const touchesPublished = source?.lifecycle === "Publiée" || target?.lifecycle === "Publiée";
+    if (!isNewAssignment && touchesPublished && !reason.trim()) {
+      setError("Le motif est obligatoire lorsqu’une tournée publiée est reprogrammée.");
       return;
     }
-    if (compatible.length > 1 && !targetRouteId) {
+    if (isNewAssignment && compatible.length > 1 && !targetRouteId) {
       setError("Plusieurs tournées compatibles existent : choisissez la destination.");
       return;
     }
+    let nextTargetId: string | undefined;
+    if (target && target.name !== source?.name) nextTargetId = target.name;
+    else if (!resourcesChanged) nextTargetId = source?.name;
     const payload: AssignmentChange = {
       deliveryNote: assignment.deliveryNote,
-      targetRouteId: target?.name,
+      targetRouteId: nextTargetId,
       plannedDate: date,
       plannedStart: `${date}T${start}:00`,
       plannedEnd: `${date}T${end}:00`,
       driver,
       vehicle,
-      position: isNewAssignment ? 1 : Math.max(Number(position) || 1, 1),
+      position: isNewAssignment ? 1 : Math.max(assignment.sequence || 1, 1),
       reason: isNewAssignment ? undefined : reason.trim() || undefined,
       expectedSourceRevision: source?.revision,
       expectedTargetRevision: target && target.name !== source?.name ? target.revision : undefined,
@@ -142,7 +160,8 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
   };
 
   const resetTarget = () => setTargetRouteId("");
-  const title = isNewAssignment ? "Planifier la livraison" : "Modifier l’affectation";
+  const title = isNewAssignment ? "Planifier la livraison" : "Reprogrammer la livraison";
+  const dateMin = date && date < localDate() ? date : localDate();
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -164,11 +183,12 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
             </div>
           )}
 
-          <label className={isNewAssignment ? "flex flex-col gap-1.5 sm:col-span-2" : "flex flex-col gap-1.5"}>
+          <label className="flex flex-col gap-1.5 sm:col-span-2">
             <span className="t-micro text-muted-foreground">Date planifiée</span>
             <Input
               type="date"
-              min={localDate()}
+              aria-label="Date planifiée"
+              min={dateMin}
               value={date}
               onChange={(event) => {
                 setDate(event.target.value);
@@ -177,17 +197,11 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
             />
           </label>
 
-          {!isNewAssignment && (
-            <label className="flex flex-col gap-1.5">
-              <span className="t-micro text-muted-foreground">Position</span>
-              <Input type="number" min="1" value={position} onChange={(event) => setPosition(event.target.value)} />
-            </label>
-          )}
-
           <label className="flex flex-col gap-1.5">
             <span className="t-micro text-muted-foreground">Départ</span>
             <Input
               type="time"
+              aria-label="Départ"
               value={start}
               onChange={(event) => {
                 setStart(event.target.value);
@@ -200,6 +214,7 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
             <span className="t-micro text-muted-foreground">Fin</span>
             <Input
               type="time"
+              aria-label="Fin"
               value={end}
               onChange={(event) => {
                 setEnd(event.target.value);
@@ -211,6 +226,7 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
           <label className="flex flex-col gap-1.5">
             <span className="t-micro text-muted-foreground">Livreur</span>
             <NativeSelect
+              aria-label="Livreur"
               value={driver}
               onChange={(event) => {
                 const nextDriver = event.target.value;
@@ -236,6 +252,7 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
           <label className="flex flex-col gap-1.5">
             <span className="t-micro text-muted-foreground">Véhicule</span>
             <NativeSelect
+              aria-label="Véhicule"
               value={vehicle}
               onChange={(event) => {
                 setVehicle(event.target.value);
@@ -259,6 +276,7 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
                 <label className="flex flex-col gap-1.5 sm:col-span-2">
                   <span className="t-micro text-amber-700">Tournée</span>
                   <NativeSelect
+                    aria-label="Tournée"
                     value={targetRouteId}
                     onChange={(event) => setTargetRouteId(event.target.value)}
                     className="border-amber-300"
@@ -285,23 +303,34 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
             </>
           ) : (
             <>
-              <label className="flex flex-col gap-1.5 sm:col-span-2">
-                <span className="t-micro text-muted-foreground">Tournée compatible</span>
-                <NativeSelect value={targetRouteId} onChange={(event) => setTargetRouteId(event.target.value)}>
-                  <option value="">Créer automatiquement une tournée brouillon</option>
-                  {compatible.map((route) => (
-                    <option key={route.name} value={route.name}>
-                      {route.name} · {route.stops.length} arrêt(s) · rév. {route.revision}
-                    </option>
-                  ))}
-                </NativeSelect>
-                <span className="t-meta text-muted-foreground">
-                  Si plusieurs tournées correspondent, choisissez explicitement la destination.
-                </span>
-              </label>
+              {compatible.length > 0 && (
+                <label className="flex flex-col gap-1.5 sm:col-span-2">
+                  <span className="t-micro text-muted-foreground">Tournée existante</span>
+                  <NativeSelect
+                    aria-label="Tournée existante"
+                    value={targetRouteId}
+                    onChange={(event) => setTargetRouteId(event.target.value)}
+                  >
+                    <option value="">Mettre à jour ou créer automatiquement</option>
+                    {compatible.map((route) => (
+                      <option key={route.name} value={route.name}>
+                        {route.name} · {route.stops.length} arrêt(s) · rév. {route.revision}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </label>
+              )}
+              <div className="rounded-md border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900 sm:col-span-2">
+                <strong className="font-semibold">Reprogrammation</strong>
+                <p className="mt-1 text-brand-800">
+                  Si ce BL est le seul arrêt, la tournée actuelle est mise à jour (date, livreur, véhicule). Sinon, le
+                  BL est déplacé vers une nouvelle tournée brouillon.
+                </p>
+              </div>
               <label className="flex flex-col gap-1.5 sm:col-span-2">
                 <span className="t-micro text-muted-foreground">Motif</span>
                 <Textarea
+                  aria-label="Motif"
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   placeholder="Obligatoire pour une tournée publiée"
@@ -318,7 +347,7 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
           </Button>
           <Button size="lg" onClick={submit} disabled={actions.saving}>
             {actions.saving ? <LoaderCircle className="animate-spin" /> : <Check />}
-            {isNewAssignment ? "Enregistrer la planification" : "Enregistrer l’affectation"}
+            {isNewAssignment ? "Enregistrer la planification" : "Enregistrer la reprogrammation"}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -328,13 +357,17 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
 
 export function PlanningPage() {
   const navigate = useNavigate();
-  const [dateFrom, setDateFrom] = useState(localDate());
-  const [dateTo, setDateTo] = useState(localDate(6));
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [filters, setFilters] = useState<PlanningFilters>({});
   const [editing, setEditing] = useState<DeliveryNoteAssignment>();
   const [notice, setNotice] = useState("");
   const [failure, setFailure] = useState("");
-  const { data, error, isLoading, mutate } = usePlanningBoard(dateFrom, dateTo, filters);
+  const boardFilters = useMemo(
+    () => (!dateFrom && !dateTo ? { ...filters, allDates: true } : filters),
+    [dateFrom, dateTo, filters],
+  );
+  const { data, error, isLoading, mutate } = usePlanningBoard(dateFrom, dateTo, boardFilters);
   const actions = useDistributionMutations();
   const board = data?.message;
   const rows = useMemo(() => board?.assignments || [], [board?.assignments]);
@@ -342,7 +375,7 @@ export function PlanningPage() {
     () => ({
       total: rows.length,
       unplanned: rows.filter((row) => !row.route).length,
-      invalid: rows.filter((row) => ["À revalider", "À repréparer", "Exception"].includes(row.planningStatus)).length,
+      invalid: rows.filter((row) => ["À revalider", "À repréparer", "Exception", "En retard"].includes(row.planningStatus)).length,
       published: board?.routes.filter((route) => ["Publiée", "En cours"].includes(route.lifecycle)).length || 0,
     }),
     [board?.routes, rows],
@@ -415,7 +448,11 @@ export function PlanningPage() {
       hideBelow: "lg",
       numeric: true,
       sortValue: (row) => row.requestedDate || "",
-      cell: (row) => <span className="text-muted-foreground">{row.requestedDate || "—"}</span>,
+      cell: (row) => (
+        <span className={row.planningStatus === "En retard" ? "font-medium text-red-700" : "text-muted-foreground"}>
+          {row.requestedDate || "—"}
+        </span>
+      ),
     },
     {
       id: "plannedDate",
@@ -466,7 +503,7 @@ export function PlanningPage() {
             disabled={LOCKED_STATUSES.includes(row.planningStatus)}
           >
             {row.route ? <Pencil /> : <CalendarPlus />}
-            {row.route ? "Modifier" : "Planifier"}
+            {row.route ? "Reprogrammer" : "Planifier"}
           </Button>
           {row.planningStatus === "À repréparer" && (
             <Button size="sm" onClick={() => void reprepare(row)}>
@@ -512,10 +549,10 @@ export function PlanningPage() {
 
       <Toolbar>
         <ToolbarField label="Du" className="w-36">
-          <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          <Input type="date" aria-label="Du" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
         </ToolbarField>
         <ToolbarField label="Au" className="w-36">
-          <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          <Input type="date" aria-label="Au" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
         </ToolbarField>
         <ToolbarField label="Recherche" className="min-w-56 flex-1">
           <Input
@@ -594,8 +631,8 @@ export function PlanningPage() {
           empty={
             <EmptyState
               icon={CalendarDays}
-              title="Aucun BL dans cette plage"
-              description="Élargissez les dates ou retirez certains filtres."
+              title="Aucun BL à afficher"
+              description="Aucun bon ne correspond aux filtres actuels."
             />
           }
         />
@@ -603,7 +640,7 @@ export function PlanningPage() {
 
       <section className="space-y-3">
         <div>
-          <h2 className="t-section">Tournées de la période</h2>
+          <h2 className="t-section">{dateFrom || dateTo ? "Tournées de la période" : "Tournées"}</h2>
           <p className="t-body text-muted-foreground">
             Ouvrez une tournée pour vérifier ses détails avant de la publier.
           </p>

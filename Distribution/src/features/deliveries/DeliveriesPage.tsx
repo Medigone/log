@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, ArrowRight, CheckCircle2, MapPin, Route, Truck } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, MapPin, RotateCcw, Route, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -10,7 +10,7 @@ import { KpiTile } from "@/components/ui/kpi-tile";
 import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
+import { Toolbar, ToolbarField, ToolbarSpacer } from "@/components/ui/toolbar";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { FleetMap } from "@/features/today/FleetMap";
 import { fleetColor, isLiveRoute, stopProgress } from "@/features/today/fleetProgress";
@@ -25,6 +25,13 @@ type KpiFocus = "all" | "live" | "delivered" | "failed";
 function localDate() {
   const value = new Date();
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateLabel(value: string) {
+  if (!value) return "";
+  const parsed = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("fr-FR");
 }
 
 function matchesSearch(route: DistributionRoute, query: string) {
@@ -59,10 +66,14 @@ export function DeliveriesPage() {
   const [search, setSearch] = useState("");
   const [kpi, setKpi] = useState<KpiFocus>("all");
   const [selected, setSelected] = useState<string>();
-  const live = date === today;
-  const { data, error, isLoading } = usePlanningBoard(date, date, {}, { live });
+  const allDates = !date;
+  const live = Boolean(date) && date === today;
+  const { data, error, isLoading } = usePlanningBoard(date || today, date || today, allDates ? { allDates: true } : {}, {
+    live,
+  });
   const routes = data?.message.routes || [];
   const query = search.trim().toLocaleLowerCase("fr");
+  const filtersActive = Boolean(date || lifecycle || driver || search || kpi !== "all");
 
   const deliveredStops = routes.flatMap((route) => route.stops).filter((stop) => getStopVisualStyle(stop.status).state === "delivered").length;
   const failedStops = routes.flatMap((route) => route.stops).filter((stop) => getStopVisualStyle(stop.status).state === "failed").length;
@@ -92,6 +103,26 @@ export function DeliveriesPage() {
     setKpi(focus);
     setLifecycle("");
   };
+
+  const clearFilters = () => {
+    setDate("");
+    setLifecycle("");
+    setDriver("");
+    setSearch("");
+    setKpi("all");
+  };
+
+  const emptyTitle = routes.length ? "Aucune tournée pour ces filtres" : date ? "Aucune tournée ce jour" : "Aucune tournée";
+  const emptyDescription = routes.length
+    ? "Modifiez la recherche ou le cycle de vie."
+    : date
+      ? "Changez de date ou préparez un nouveau planning."
+      : "Publiez un planning pour suivre les livraisons.";
+  const emptyMapDescription = routes.length
+    ? "Élargissez les filtres pour afficher la carte."
+    : date
+      ? "Changez de date ou publiez un planning."
+      : "Publiez un planning pour afficher la carte.";
 
   const routeColumns: Array<DataTableColumn<DistributionRoute>> = [
     {
@@ -214,7 +245,11 @@ export function DeliveriesPage() {
       <PageHeader
         eyebrow="Suivi opérationnel"
         title="Livraisons"
-        description={`Avancement des tournées du ${new Date(`${date}T00:00:00`).toLocaleDateString("fr-FR")}.`}
+        description={
+          date
+            ? `Avancement des tournées du ${formatDateLabel(date)}.`
+            : "Avancement de toutes les tournées."
+        }
         meta={
           live ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
@@ -266,6 +301,15 @@ export function DeliveriesPage() {
             placeholder="Tournée, client, BL…"
           />
         </ToolbarField>
+        {filtersActive && (
+          <>
+            <ToolbarSpacer />
+            <Button type="button" variant="ghost" onClick={clearFilters}>
+              <RotateCcw />
+              Réinitialiser
+            </Button>
+          </>
+        )}
       </Toolbar>
 
       {error && (
@@ -278,7 +322,7 @@ export function DeliveriesPage() {
         <KpiTile
           icon={Route}
           tone="info"
-          label="Tournées du jour"
+          label={date ? "Tournées du jour" : "Tournées"}
           value={isLoading ? "—" : routes.length}
           hint="Toutes les tournées →"
           onClick={() => applyKpi("all")}
@@ -321,8 +365,8 @@ export function DeliveriesPage() {
             ) : (
               <EmptyState
                 icon={Truck}
-                title={routes.length ? "Aucune tournée pour ces filtres" : "Aucune tournée ce jour"}
-                description={routes.length ? "Élargissez les filtres pour afficher la carte." : "Changez de date ou publiez un planning."}
+                title={emptyTitle}
+                description={emptyMapDescription}
                 action={<Button variant="outline" onClick={() => navigate("/planning")}>Ouvrir le planning</Button>}
               />
             )}
@@ -382,8 +426,8 @@ export function DeliveriesPage() {
             empty={
               <EmptyState
                 icon={Route}
-                title={routes.length ? "Aucune tournée pour ces filtres" : "Aucune tournée ce jour"}
-                description={routes.length ? "Modifiez la recherche ou le cycle de vie." : "Changez de date ou préparez un nouveau planning."}
+                title={emptyTitle}
+                description={emptyDescription}
               />
             }
           />

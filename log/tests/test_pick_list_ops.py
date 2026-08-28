@@ -28,7 +28,7 @@ class TestPickListSerialization(unittest.TestCase):
 		self.assertEqual(result[0]["custom_commune"], "COM-00979")
 		self.assertEqual(result[0]["custom_commune_nom"], "Alger Centre")
 
-	def test_session_groups_expose_locations(self):
+	def _pick_list_doc(self, **overrides):
 		location = frappe._dict(
 			name="PLI-1",
 			item_code="ART-1",
@@ -55,11 +55,26 @@ class TestPickListSerialization(unittest.TestCase):
 			parent_warehouse=None,
 			locations=[location],
 		)
+		doc.update(overrides)
+		return doc
 
-		session = serialize_pick_session([doc])
+	@patch("log.pick_list_ops._get_delivery_note_names", return_value=[])
+	def test_session_groups_expose_locations(self, _names):
+		session = serialize_pick_session([self._pick_list_doc()])
 
 		self.assertEqual(session["grouped"][0]["locations"][0]["name"], "PLI-1")
 		self.assertNotIn("rows", session["grouped"][0])
+		self.assertEqual(session["delivery_notes"], [])
+
+	@patch("log.pick_list_ops.serialize_delivery_note", return_value={"name": "DN-1", "customer_name": "Client Test"})
+	@patch("log.pick_list_ops.frappe.get_doc")
+	@patch("log.pick_list_ops._get_delivery_note_names", return_value=["DN-1"])
+	def test_submitted_session_exposes_delivery_notes(self, _names, get_doc, _serialize_dn):
+		session = serialize_pick_session([self._pick_list_doc(docstatus=1, status="Completed")])
+
+		self.assertEqual([note["name"] for note in session["delivery_notes"]], ["DN-1"])
+		self.assertEqual(session["pick_lists"][0]["delivery_notes"][0]["name"], "DN-1")
+		get_doc.assert_called_once_with("Delivery Note", "DN-1")
 
 
 class TestPickListStockGuard(unittest.TestCase):

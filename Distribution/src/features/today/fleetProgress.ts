@@ -1,5 +1,5 @@
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
-import type { DistributionException, DistributionRoute, RouteLifecycle, RouteStop } from "@/shared/types/distribution";
+import type { ActivityLiveRoute, ActivityLiveStop, DistributionException, RouteLifecycle } from "@/shared/types/distribution";
 
 export const LIVE_ROUTE_STATES: RouteLifecycle[] = ["Publiée", "En cours", "Retour dépôt"];
 
@@ -23,15 +23,22 @@ export interface DashboardAlert {
   target?: string;
 }
 
-export function isLiveRoute(route: DistributionRoute) {
-  return LIVE_ROUTE_STATES.includes(route.lifecycle);
+type ProgressRoute = Pick<ActivityLiveRoute, "lifecycle" | "stops" | "depot"> & {
+  alerts?: string[];
+  vehicleLabel?: string | null;
+  driverName?: string | null;
+  name: string;
+};
+
+export function isLiveRoute(route: { lifecycle: RouteLifecycle | string }) {
+  return LIVE_ROUTE_STATES.includes(route.lifecycle as RouteLifecycle);
 }
 
 export function fleetColor(index: number) {
   return FLEET_COLORS[index % FLEET_COLORS.length];
 }
 
-export function stopProgress(route: DistributionRoute): RouteProgress {
+export function stopProgress(route: { stops: Array<{ status: string }> }): RouteProgress {
   const total = route.stops.length;
   const done = route.stops.filter((stop) => getStopVisualStyle(stop.status).processed).length;
   const failed = route.stops.filter((stop) => getStopVisualStyle(stop.status).state === "failed").length;
@@ -44,26 +51,26 @@ export function stopProgress(route: DistributionRoute): RouteProgress {
   };
 }
 
-export function nextPendingStop(route: DistributionRoute): RouteStop | undefined {
+export function nextPendingStop(route: { stops: ActivityLiveStop[] }): ActivityLiveStop | undefined {
   return [...route.stops]
     .sort((left, right) => left.sequence - right.sequence)
     .find((stop) => !getStopVisualStyle(stop.status).processed);
 }
 
-export function lastProcessedStop(route: DistributionRoute): RouteStop | undefined {
+export function lastProcessedStop(route: { stops: ActivityLiveStop[] }): ActivityLiveStop | undefined {
   return [...route.stops]
     .filter((stop) => getStopVisualStyle(stop.status).processed)
     .sort((left, right) => left.sequence - right.sequence)
     .at(-1);
 }
 
-function pointFromStop(stop?: RouteStop): MapPoint | null {
+function pointFromStop(stop?: { latitude?: number | null; longitude?: number | null }): MapPoint | null {
   if (stop?.latitude == null || stop.longitude == null) return null;
   return [stop.latitude, stop.longitude];
 }
 
 /** Position affichée du véhicule : prochain arrêt, dernier traité, sinon dépôt. */
-export function vehiclePosition(route: DistributionRoute): MapPoint | null {
+export function vehiclePosition(route: ProgressRoute): MapPoint | null {
   if (route.lifecycle === "Retour dépôt" && route.depot) {
     return [route.depot.latitude, route.depot.longitude];
   }
@@ -74,7 +81,7 @@ export function vehiclePosition(route: DistributionRoute): MapPoint | null {
 }
 
 export function collectDashboardAlerts(
-  routes: DistributionRoute[],
+  routes: ProgressRoute[],
   exceptions: DistributionException[],
 ): DashboardAlert[] {
   const alerts: DashboardAlert[] = exceptions.map((exception) => ({

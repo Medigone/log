@@ -17,15 +17,18 @@ from log.api.distribution_rules import (
 	capacity_error,
 	capacity_warning,
 	change_reason_required,
+	complete_stop_gate_error,
 	completion_errors,
 	driver_owns_route,
 	has_assignment_conflict,
 	has_any_role,
 	is_repeated_request,
 	intervals_overlap,
+	load_verification_error,
 	planning_status_for_route,
 	parse_gps_value,
 	revision_matches,
+	start_without_load_error,
 	stop_status,
 )
 from log.services.routing import (
@@ -42,8 +45,11 @@ DRIVER_ROLES = {"Livreur", "Responsable", "System Manager"}
 PREPARATION_ROLES = {"Préparateur", "Responsable", "System Manager"}
 CASHIER_ROLES = {"Caissier", "Responsable", "System Manager"}
 STOCK_ROLES = PLANNING_ROLES | PREPARATION_ROLES
+ACTIVITY_ROLES = PLANNING_ROLES | PREPARATION_ROLES
 ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours", "Retour dépôt", "Contrôle caisse")
 TERMINAL_STOP_STATES = {"Livré", "Partiellement Livré", "Non Livré", "Annulé"}
+OPEN_PLANNING_FOR_OVERDUE = {"Non planifié", "Planifié", "Publié"}
+DELIVERED_STOP_STATES = {"Livré", "Annulé"}
 FAILURE_REASONS = {
 	"Client absent",
 	"Client fermé",
@@ -383,11 +389,43 @@ def _schedule_conflicts(route, *, published_only: bool = False) -> list[str]:
 	return conflicts
 
 
+def _row_value(row: Any, key: str, default: Any = None) -> Any:
+	if isinstance(row, dict):
+		return row.get(key, default)
+	if hasattr(row, "get"):
+		return row.get(key, default)
+	return getattr(row, key, default)
+
+
+def _serialize_note_amounts(doc) -> dict[str, Any]:
+	taxes = []
+	for tax in doc.get("taxes") or []:
+		amount = flt(_row_value(tax, "tax_amount"))
+		if abs(amount) < 0.000001:
+			continue
+		taxes.append(
+			{
+				"description": str(_row_value(tax, "description") or _row_value(tax, "account_head") or "Taxe").strip(),
+				"rate": flt(_row_value(tax, "rate")),
+				"taxAmount": amount,
+			}
+		)
+	grand_total = flt(doc.get("grand_total"))
+	if not cint(doc.get("disable_rounded_total")) and doc.get("rounded_total") not in (None, ""):
+		grand_total = flt(doc.get("rounded_total"))
+	return {
+		"netTotal": flt(doc.get("net_total")),
+		"taxes": taxes,
+		"grandTotal": grand_total,
+	}
+
+
 def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 	details = _customer_details(doc.customer)
 	commune_id = doc.get("custom_commune")
 	commune_label = frappe.db.get_value("Commune", commune_id, "nom") if commune_id else None
 	paid, payments = _payment_summary(doc.name)
+	amounts = _serialize_note_amounts(doc)
 	items = []
 	for item in doc.items or []:
 		delivered = flt(item.get("custom_quantite_livree"))
@@ -420,7 +458,10 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 		"requiresCustomerGeolocation": bool(details.get("requiresCustomerGeolocation", True)),
 		"totalQuantity": remaining_quantity,
 		"amountCollected": paid,
-		"amountToCollect": max(flt(doc.grand_total) - paid, 0),
+		"amountToCollect": max(flt(amounts["grandTotal"]) - paid, 0),
+		"netTotal": amounts["netTotal"],
+		"grandTotal": amounts["grandTotal"],
+		"taxes": amounts["taxes"],
 		"payments": payments,
 		"salesInvoice": doc.get("custom_sales_invoice"),
 		"invoiceStatus": doc.get("custom_statut_facturation") or "Non créée",
@@ -595,26 +636,55 @@ def _sync_delivery_note_assignment(route):
 		_set_delivery_note_assignment(frappe.get_doc("Delivery Note", row.bon_de_livraison), route)
 
 
-@frappe.whitelist()
-def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
-	_require(PLANNING_ROLES)
-	_require_schema()
-	start_date = getdate(date_from or date or today())
-	end_date = getdate(date_to or date or add_days(start_date, 6))
+def _board_date_range(date_from=None, date_to=None, date=None, all_dates=False):
+	if all_dates:
+		return None, None
+	date_from = date_from or None
+	date_to = date_to or None
+	date = date or None
+	if not date_from and not date_to and not date:
+		return None, None
+	start_date = getdate(date_from or date or date_to)
+	end_date = getdate(date_to or date or date_from)
 	if end_date < start_date:
 		frappe.throw(_("La date de fin doit être postérieure à la date de début."))
 	if (end_date - start_date).days > 62:
 		frappe.throw(_("La plage de planification ne peut pas dépasser 63 jours."))
+	return start_date, end_date
+
+
+def planning_display_status(row: dict[str, Any], day=None) -> str:
+	status = row.get("planningStatus") or "Non planifié"
+	if status not in OPEN_PLANNING_FOR_OVERDUE:
+		return status
+	if (row.get("status") or "") in DELIVERED_STOP_STATES:
+		return status
+	due = row.get("requestedDate") or row.get("plannedDate")
+	if due and getdate(due) < getdate(day or today()):
+		return "En retard"
+	return status
+
+
+@frappe.whitelist()
+def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
+	_require(PLANNING_ROLES)
+	_require_schema()
 	filter_data = _payload(filters) if filters else {}
+	start_date, end_date = _board_date_range(
+		date_from, date_to, date, all_dates=bool(filter_data.get("allDates"))
+	)
+	route_filters: dict[str, Any] = {"docstatus": ["<", 2]}
+	if start_date and end_date:
+		route_filters["date_liv"] = ["between", [start_date, end_date]]
+	order_by = (
+		"date_liv asc, depart_prevu asc, creation asc"
+		if start_date
+		else "date_liv desc, depart_prevu desc, creation desc"
+	)
 
 	routes = [
 		_serialize_route(frappe.get_doc("Livraison", row.name))
-		for row in frappe.get_all(
-			"Livraison",
-			filters={"date_liv": ["between", [start_date, end_date]], "docstatus": ["<", 2]},
-			fields=["name"],
-			order_by="date_liv asc, depart_prevu asc, creation asc",
-		)
+		for row in frappe.get_all("Livraison", filters=route_filters, fields=["name"], order_by=order_by)
 	]
 	assigned = {
 		stop["deliveryNote"]
@@ -639,7 +709,10 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 			dn = frappe.get_doc("Delivery Note", name)
 			requested = getdate(dn.get("custom_date_de_livraison")) if dn.get("custom_date_de_livraison") else None
 			planning_status = dn.get("custom_statut_planification") or "Non planifié"
-			if not (requested and start_date <= requested <= end_date) and planning_status not in {
+			in_window = True
+			if start_date and end_date:
+				in_window = bool(requested and start_date <= requested <= end_date)
+			if not in_window and planning_status not in {
 				"À revalider",
 				"À repréparer",
 				"Exception",
@@ -675,6 +748,8 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 		for stop in route["stops"]
 	]
 	assignments.extend({**stop, "route": None, "driver": None, "vehicle": None, "routeLifecycle": None, "plannedStart": None, "plannedEnd": None, "routeRevision": 0} for stop in unassigned)
+	for row in assignments:
+		row["planningStatus"] = planning_display_status(row)
 
 	def matches(row):
 		search = str(filter_data.get("search") or "").strip().lower()
@@ -698,8 +773,8 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 		limit=100,
 	)
 	return {
-		"dateFrom": str(start_date),
-		"dateTo": str(end_date),
+		"dateFrom": str(start_date) if start_date else "",
+		"dateTo": str(end_date) if end_date else "",
 		"unassigned": unassigned,
 		"assignments": assignments,
 		"routes": routes,
@@ -1092,6 +1167,67 @@ def _compatible_route(data: dict[str, Any], source_name: str | None = None):
 	return doc
 
 
+def _same_datetime(left, right) -> bool:
+	if not left and not right:
+		return True
+	if not left or not right:
+		return False
+	return get_datetime(left) == get_datetime(right)
+
+
+def _requested_slot(data: dict[str, Any], fallback=None):
+	date_value = getdate(data.get("plannedDate") or (fallback.date_liv if fallback else today()))
+	start = get_datetime(data.get("plannedStart")) if data.get("plannedStart") else (get_datetime(fallback.depart_prevu) if fallback and fallback.depart_prevu else None)
+	end = get_datetime(data.get("plannedEnd")) if data.get("plannedEnd") else (get_datetime(fallback.fin_prevue) if fallback and fallback.fin_prevue else None)
+	driver = data.get("driver") or (fallback.livreur if fallback else None)
+	vehicle = data.get("vehicle") or (fallback.vehicule if fallback else None)
+	return date_value, start, end, driver, vehicle
+
+
+def _resources_changed(route, data: dict[str, Any]) -> bool:
+	date_value, start, end, driver, vehicle = _requested_slot(data, route)
+	return (
+		str(getdate(route.date_liv)) != str(date_value)
+		or str(route.livreur or "") != str(driver or "")
+		or str(route.vehicule or "") != str(vehicle or "")
+		or not _same_datetime(route.depart_prevu, start)
+		or not _same_datetime(route.fin_prevue, end)
+	)
+
+
+def _apply_route_slot(route, data: dict[str, Any]):
+	date_value, start, end, driver, vehicle = _requested_slot(data, route)
+	if not all((start, end, driver, vehicle)):
+		frappe.throw(_("La date, le créneau, le livreur et le véhicule sont obligatoires."))
+	if end <= start or getdate(start) != date_value:
+		frappe.throw(_("Le créneau demandé est invalide."))
+	route.date_liv = date_value
+	route.depart_prevu = start
+	route.fin_prevue = end
+	route.livreur = driver
+	route.vehicule = vehicle
+	_preserve_selected_route_vehicle(route)
+
+
+def _route_stop_names(route) -> list[str]:
+	names = []
+	for row in route.bons_de_livraison or []:
+		name = row.get("bon_de_livraison") if isinstance(row, dict) else row.bon_de_livraison
+		if name:
+			names.append(name)
+	return names
+
+
+def should_update_source_in_place(source, data: dict[str, Any], delivery_note: str) -> bool:
+	if not source:
+		return False
+	requested_id = str(data.get("targetRouteId") or "").strip()
+	if requested_id and requested_id != source.name:
+		return False
+	stops = _route_stop_names(source)
+	return stops == [delivery_note] and _resources_changed(source, data)
+
+
 @frappe.whitelist()
 def schedule_delivery_note(payload):
 	"""Create the first planning assignment for an unassigned Delivery Note."""
@@ -1137,6 +1273,27 @@ def reassign_delivery_note(payload):
 	if source and not revision_matches(cint(source.revision), data.get("expectedSourceRevision")):
 		frappe.throw(_("La tournée source a été modifiée. Actualisez le planning."))
 
+	if should_update_source_in_place(source, data, delivery_note):
+		before = _route_snapshot(source)
+		_apply_route_slot(source, data)
+		_bump_route_revision(source, reason)
+		source.save(ignore_permissions=True)
+		_set_delivery_note_assignment(dn, source)
+		after = _route_snapshot(source)
+		_record_assignment_history(
+			delivery_note,
+			"Réaffectation",
+			before,
+			after,
+			reason=reason,
+			revision=source.revision,
+		)
+		return {
+			"assignment": _stop_from_dn(frappe.get_doc("Delivery Note", delivery_note), 1),
+			"route": _serialize_route(source),
+			"warning": _validate_capacity(source, for_publication=False),
+		}
+
 	target = _compatible_route(data, source.name if source else None)
 	if _route_state(target) not in {"Brouillon", "Publiée"}:
 		frappe.throw(_("La tournée de destination n'est plus modifiable."))
@@ -1147,13 +1304,8 @@ def reassign_delivery_note(payload):
 
 	before = _route_snapshot(source)
 	if source and target.name == source.name:
-		requested = {
-			"date": str(getdate(data.get("plannedDate") or source.date_liv)),
-			"driver": data.get("driver") or source.livreur,
-			"vehicle": data.get("vehicle") or source.vehicule,
-		}
-		if requested != {"date": str(source.date_liv), "driver": source.livreur, "vehicle": source.vehicule}:
-			frappe.throw(_("Sélectionnez une autre tournée pour modifier les ressources de ce BL."))
+		if _resources_changed(source, data):
+			frappe.throw(_("Ce BL n'est pas le seul arrêt : choisissez une autre tournée ou laissez-en créer une."))
 		rows = list(source.bons_de_livraison)
 		row = next(item for item in rows if item.bon_de_livraison == delivery_note)
 		rows.remove(row)
@@ -1233,6 +1385,19 @@ def get_driver_dashboard(date=None):
 
 
 @frappe.whitelist()
+def get_activity_dashboard(date=None):
+	_require(ACTIVITY_ROLES)
+	_require_schema()
+	user = get_current_distribution_user()
+	role = user.get("role")
+	if role not in {"preparateur", "planificateur", "responsable"}:
+		frappe.throw(_("Vous n'avez pas accès à cette opération."), frappe.PermissionError)
+	from log.services.distribution_activity_dashboard import build_activity_dashboard
+
+	return build_activity_dashboard(role=role, date=date)
+
+
+@frappe.whitelist()
 def get_driver_route(route_id=None):
 	"""Compatibilité avec le premier frontend Distribution."""
 	if route_id:
@@ -1271,6 +1436,58 @@ def acknowledge_route(route_id, revision):
 	return _serialize_route(doc)
 
 
+def _as_note_set(value: Any) -> set[str]:
+	if isinstance(value, str):
+		try:
+			value = json.loads(value)
+		except json.JSONDecodeError:
+			value = [part.strip() for part in value.split(",") if part.strip()]
+	if not isinstance(value, (list, tuple, set)):
+		return set()
+	return {str(item).strip() for item in value if str(item).strip()}
+
+
+def _route_delivery_notes(doc) -> set[str]:
+	return {str(row.bon_de_livraison).strip() for row in (doc.bons_de_livraison or []) if row.bon_de_livraison}
+
+
+def _assert_revision_accepted(doc):
+	if cint(doc.revision_acceptee) != cint(doc.revision_publiee) or cint(doc.revision_publiee) != cint(doc.revision):
+		frappe.throw(_("Acceptez la dernière révision de la tournée avant le départ."))
+
+
+def _route_is_loaded(doc) -> bool:
+	return bool(doc.get("stock_entry_chargement")) or str(doc.get("statut_chargement") or "") == "Chargé"
+
+
+@frappe.whitelist()
+def load_route(route_id, expected_revision=None, verified_delivery_notes=None, request_id=None):
+	_require(DRIVER_ROLES)
+	_require_schema()
+	_lock_route(route_id)
+	doc = frappe.get_doc("Livraison", route_id)
+	_assert_driver_route(doc)
+	request_id = str(request_id or "").strip()
+	if _route_is_loaded(doc) and _route_state(doc) in {"Publiée", "En cours"}:
+		return _serialize_route(doc)
+	if _route_state(doc) != "Publiée":
+		frappe.throw(_("Seule une tournée publiée peut être chargée."))
+	_assert_revision_accepted(doc)
+	if expected_revision not in (None, "") and cint(expected_revision) != cint(doc.revision):
+		frappe.throw(_("La tournée a été révisée. Actualisez-la avant le chargement."))
+	mismatch = load_verification_error(_route_delivery_notes(doc), _as_note_set(verified_delivery_notes))
+	if mismatch:
+		frappe.throw(_(mismatch))
+	for row in doc.bons_de_livraison or []:
+		_lock_delivery_note(row.bon_de_livraison)
+	from log.services.distribution_fulfillment import load_route_stock
+
+	load_route_stock(doc)
+	_refresh_document_timestamp(doc)
+	doc.save(ignore_permissions=True)
+	return _serialize_route(doc)
+
+
 @frappe.whitelist()
 def start_route(route_id, expected_revision=None, request_id=None):
 	_require(DRIVER_ROLES)
@@ -1281,19 +1498,16 @@ def start_route(route_id, expected_revision=None, request_id=None):
 	request_id = str(request_id or "").strip()
 	if request_id and doc.get("last_start_request_id") == request_id and _route_state(doc) == "En cours":
 		return _serialize_route(doc)
-	if _route_state(doc) == "En cours" and doc.get("stock_entry_chargement"):
+	if _route_state(doc) == "En cours" and _route_is_loaded(doc):
 		return _serialize_route(doc)
 	if not can_transition_route(_route_state(doc), "En cours"):
 		frappe.throw(_("Seule une tournée publiée peut être démarrée."))
-	if cint(doc.revision_acceptee) != cint(doc.revision_publiee) or cint(doc.revision_publiee) != cint(doc.revision):
-		frappe.throw(_("Acceptez la dernière révision de la tournée avant le départ."))
+	_assert_revision_accepted(doc)
 	if expected_revision not in (None, "") and cint(expected_revision) != cint(doc.revision):
-		frappe.throw(_("La tournée a été révisée. Actualisez-la avant le chargement."))
-	for row in doc.bons_de_livraison or []:
-		_lock_delivery_note(row.bon_de_livraison)
-	from log.services.distribution_fulfillment import load_route_stock
-
-	load_route_stock(doc)
+		frappe.throw(_("La tournée a été révisée. Actualisez-la avant le départ."))
+	unloaded = start_without_load_error(loaded=_route_is_loaded(doc))
+	if unloaded:
+		frappe.throw(_(unloaded))
 	doc.etat_planification = "En cours"
 	doc.date_depart = now_datetime()
 	if doc.meta.has_field("last_start_request_id"):
@@ -1582,13 +1796,18 @@ def complete_delivery_stop(payload):
 	_assert_driver_route(route)
 	if data.get("routeRevision") not in (None, "") and cint(data.get("routeRevision")) != cint(route.revision):
 		frappe.throw(_("La tournée a été révisée. Actualisez-la avant de valider cet arrêt."))
-	if _route_state(route) != "En cours":
-		frappe.throw(_("La tournée doit être démarrée avant de valider un arrêt."))
 	delivery_note = data.get("deliveryNote")
 	if delivery_note not in {row.bon_de_livraison for row in route.bons_de_livraison}:
 		frappe.throw(_("Ce bon de livraison n'appartient pas à la tournée."), frappe.PermissionError)
 	_lock_delivery_note(delivery_note)
 	doc = frappe.get_doc("Delivery Note", delivery_note)
+	gate = complete_stop_gate_error(
+		route_state=_route_state(route),
+		loaded=_route_is_loaded(route),
+		stop_status=str(doc.get("custom_statut") or ""),
+	)
+	if gate:
+		frappe.throw(_(gate))
 	if is_repeated_request(doc.get("custom_last_delivery_request_id"), request_id):
 		return {
 			"success": True,

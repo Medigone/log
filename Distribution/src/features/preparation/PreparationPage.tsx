@@ -4,7 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { KpiTile } from "@/components/ui/kpi-tile";
+import { NativeSelect } from "@/components/ui/native-select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -27,6 +32,7 @@ import {
   applyBarcodeScan,
   getPickGroupLocations,
   type DeliveryNoteResult,
+  type PickGroup,
   type SalesOrderRow,
 } from "@/shared/api/preparation";
 import { ReturnControlPanel } from "@/features/preparation/ReturnControlPanel";
@@ -42,7 +48,8 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { StatusTone } from "@/shared/design/statusTone";
+import { pickLineTone, type StatusTone } from "@/shared/design/statusTone";
+import { cn } from "@/lib/utils";
 import { formatQuantity } from "@/shared/format";
 
 function priority(date?: string): { label: string; tone: StatusTone } {
@@ -67,6 +74,54 @@ function localIsoDate(date: Date) {
 }
 
 const formatQty = formatQuantity;
+
+type LineFocus = "all" | "remaining" | "complete" | "variance";
+
+function groupPickedQty(group: PickGroup, picked: Record<string, number>) {
+  return getPickGroupLocations(group).reduce(
+    (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
+    0,
+  );
+}
+
+function pickLineLabel(pickedQty: number, requested: number) {
+  if (pickedQty === requested) return "Complet";
+  if (pickedQty > requested) return "Écart";
+  return "Restant";
+}
+
+function matchesLineFocus(pickedQty: number, requested: number, focus: LineFocus) {
+  if (focus === "remaining") return pickedQty < requested;
+  if (focus === "complete") return pickedQty === requested;
+  if (focus === "variance") return pickedQty !== requested;
+  return true;
+}
+
+function matchesLineSearch(group: PickGroup, query: string) {
+  if (!query) return true;
+  return [
+    group.item_code,
+    group.item_name,
+    group.warehouse,
+    ...getPickGroupLocations(group).map((location) => location.sales_order),
+  ]
+    .filter(Boolean)
+    .some((value) => String(value).toLocaleLowerCase("fr").includes(query));
+}
+
+function PickSessionSkeleton() {
+  return (
+    <div className="space-y-4" aria-hidden="true">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Skeleton key={index} className="h-[92px] w-full rounded-lg" />
+        ))}
+      </div>
+      <Skeleton className="h-14 w-full rounded-lg" />
+      <Skeleton className="h-48 w-full rounded-lg" />
+    </div>
+  );
+}
 
 function stockShortages(order: SalesOrderRow) {
   return order.stock_shortages || [];
@@ -478,6 +533,8 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const [scanMessage, setScanMessage] = useState("");
   const [scanError, setScanError] = useState("");
   const [lastScannedKey, setLastScannedKey] = useState("");
+  const [search, setSearch] = useState("");
+  const [focus, setFocus] = useState<LineFocus>("all");
   const scanInputRef = useRef<HTMLInputElement>(null);
   const confirmBlButtonRef = useRef<HTMLButtonElement>(null);
   const groupRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -502,13 +559,37 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
 
   const grouped = session?.grouped || [];
   const blCount = session?.sales_orders?.length || pickLists.length;
-  const varianceGroups = grouped.filter((group) => {
-    const pickedTotal = getPickGroupLocations(group).reduce(
-      (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
-      0,
-    );
-    return pickedTotal !== group.stock_qty;
+  const submitted = pickLists.length > 0 && pickLists.every((item) => item.docstatus === 1);
+  const query = search.trim().toLocaleLowerCase("fr");
+  const varianceGroups = grouped.filter((group) => groupPickedQty(group, picked) !== group.stock_qty);
+  const totals = {
+    requested: grouped.reduce((sum, group) => sum + group.stock_qty, 0),
+    picked: grouped.reduce((sum, group) => sum + groupPickedQty(group, picked), 0),
+    remaining: grouped.reduce((sum, group) => sum + Math.max(0, group.stock_qty - groupPickedQty(group, picked)), 0),
+    variance: varianceGroups.length,
+  };
+  const filteredGroups = grouped.filter((group) => {
+    const pickedQty = groupPickedQty(group, picked);
+    return matchesLineFocus(pickedQty, group.stock_qty, focus) && matchesLineSearch(group, query);
   });
+  const notes = createdNotes.length
+    ? createdNotes
+    : session?.delivery_notes?.length
+      ? session.delivery_notes
+      : pickLists.flatMap((pickList) => pickList.delivery_notes || []);
+  const title =
+    pickLists.length === 1
+      ? pickLists[0].name
+      : pickLists.length > 1
+        ? `${pickLists.length} listes de prélèvement`
+        : pickListNames.length === 1
+          ? pickListNames[0]
+          : "Session de préparation";
+  const description = submitted
+    ? "Liste soumise. Les bons de livraison sont ci-dessous."
+    : reviewing
+      ? "Vérifiez les écarts avant de créer les BL."
+      : "Scannez les articles, puis passez au contrôle.";
 
   useEffect(() => {
     if (confirmingBl) confirmBlButtonRef.current?.focus();
@@ -592,23 +673,35 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   return (
     <div className="space-y-5">
       <PageHeader
+        eyebrow="Entrepôt"
         breadcrumb={
           <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
             <ArrowLeft />
             Commandes
           </Button>
         }
-        title="Session de préparation"
+        title={title}
         meta={
           session ? (
-            <StatusBadge tone={pickLists.every((item) => item.docstatus === 1) ? "success" : "info"}>
-              {pickLists.every((item) => item.docstatus === 1)
-                ? "Soumise"
-                : `${pickLists.length} ${pickLists.length > 1 ? "listes de prélèvement" : "liste de prélèvement"}`}
+            <StatusBadge tone={submitted ? "success" : "info"}>
+              {submitted ? "Soumise" : "Brouillon"}
             </StatusBadge>
           ) : undefined
         }
-        description="Scannez les articles pour compter les quantités, puis créez les bons de livraison."
+        description={description}
+        actions={
+          draftOpen && !reviewing ? (
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={fillRequested}>
+                Tout prélever
+              </Button>
+              <Button size="sm" onClick={() => setReviewing(true)} disabled={submitting || saving || isLoading}>
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Contrôle final
+              </Button>
+            </div>
+          ) : undefined
+        }
       />
 
       <Tabs value={currentStep} aria-label="Étapes de préparation">
@@ -648,141 +741,222 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between space-y-0">
-          <CardTitle className="text-base">
-            Lignes groupées à prélever ({session?.sales_orders?.length || 0} commande
-            {(session?.sales_orders?.length || 0) > 1 ? "s" : ""})
-          </CardTitle>
-          {pickLists.some((item) => item.docstatus === 0) && (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={fillRequested}>
-                Tout prélever
-              </Button>
-              <Button size="sm" onClick={() => setReviewing(true)} disabled={submitting || saving || isLoading}>
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Contrôle final
-              </Button>
-            </div>
-          )}
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {!reviewing && draftOpen && (
-            <form onSubmit={handleScan} className="sticky top-0 z-10 space-y-2 rounded-lg border border-brand-200 bg-brand-50/80 p-3 backdrop-blur">
-              <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                <ScanBarcode className="h-4 w-4" />
-                Code-barres article
-              </label>
-              <Input
-                id="pick-scan-barcode"
-                ref={scanInputRef}
-                value={scanValue}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                autoFocus
-                disabled={scanning || submitting || saving}
-                placeholder="Scanner puis Entrée"
-                onChange={(event) => setScanValue(event.target.value)}
-              />
-              <p className={`text-xs ${scanError ? "text-red-700" : "text-slate-600"}`} aria-live="polite">
-                {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack) jusqu’à la quantité demandée."}
-              </p>
-            </form>
-          )}
-          {isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-          {!isLoading && grouped.length === 0 && (
-            <p className="text-sm text-muted-foreground">Aucune ligne dans cette liste de prélèvement.</p>
-          )}
-          {!reviewing && grouped.map((group) => (
-            <div
-              key={`${group.item_code}-${group.warehouse}`}
-              ref={(node) => {
-                groupRefs.current[`${group.item_code}-${group.warehouse || ""}`] = node;
-              }}
-              className={`rounded-lg border p-3 space-y-2 ${lastScannedKey === `${group.item_code}-${group.warehouse || ""}` ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300" : ""}`}
-            >
-              <div>
-                <div className="font-medium text-sm">
-                  {group.item_code} · {group.item_name}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {group.warehouse || "Entrepôt non défini"} · demandé {group.stock_qty} {group.uom || ""}
-                </div>
-              </div>
-              {getPickGroupLocations(group).map((loc) => (
-                <div key={loc.name} className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-muted-foreground truncate">{loc.sales_order}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {loc.stock_qty} {loc.stock_uom || loc.uom}
-                    </span>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={loc.stock_qty}
-                      step="any"
-                      className="w-24 h-8"
-                      disabled={pickLists.find((item) => item.name === loc.pick_list)?.docstatus !== 0}
-                      value={picked[loc.name] ?? loc.picked_qty ?? 0}
-                      onChange={(e) =>
-                        setPicked((prev) => {
-                          const next = { ...prev, [loc.name]: Number(e.target.value) };
-                          pickedRef.current = next;
-                          return next;
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-          {reviewing && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                <div className="flex gap-3">
-                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
-                  <div>
-                    <h3 className="font-semibold text-amber-900">Vérifiez les écarts avant création des BL</h3>
-                    <p className="mt-1 text-sm text-amber-800">
-                      Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              {grouped.map((group) => {
-                const pickedTotal = getPickGroupLocations(group).reduce(
-                  (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
-                  0,
-                );
-                const difference = pickedTotal - group.stock_qty;
+      {isLoading && !grouped.length && <PickSessionSkeleton />}
+
+      {(!isLoading || grouped.length > 0) && (
+        <>
+          <section aria-label="Progression du prélèvement" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <KpiTile
+              icon={Package}
+              tone="neutral"
+              label="Demandé"
+              value={isLoading && !grouped.length ? "—" : formatQty(totals.requested)}
+              hint="Quantité à prélever →"
+              onClick={() => setFocus("all")}
+              className={focus === "all" ? "border-brand-300 bg-brand-50/50" : undefined}
+            />
+            <KpiTile
+              icon={CheckCircle}
+              tone={totals.picked > 0 ? "success" : "neutral"}
+              label="Prélevé"
+              value={isLoading && !grouped.length ? "—" : formatQty(totals.picked)}
+              hint="Déjà scannée →"
+              onClick={() => setFocus("complete")}
+              className={focus === "complete" ? "border-brand-300 bg-brand-50/50" : undefined}
+            />
+            <KpiTile
+              icon={ScanBarcode}
+              tone={totals.remaining > 0 ? "warning" : "neutral"}
+              label="Restant"
+              value={isLoading && !grouped.length ? "—" : formatQty(totals.remaining)}
+              hint="Encore à scanner →"
+              onClick={() => setFocus("remaining")}
+              className={focus === "remaining" ? "border-brand-300 bg-brand-50/50" : undefined}
+            />
+            <KpiTile
+              icon={AlertTriangle}
+              tone={totals.variance ? "warning" : "neutral"}
+              label="Écarts"
+              value={isLoading && !grouped.length ? "—" : totals.variance}
+              hint={totals.variance ? "Lignes à vérifier →" : "Aucun écart →"}
+              onClick={() => setFocus("variance")}
+              className={focus === "variance" ? "border-brand-300 bg-brand-50/50" : undefined}
+            />
+          </section>
+
+          <Toolbar>
+            <ToolbarField label="Rechercher" className="min-w-56 flex-1">
+              <span className="relative block">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Article, entrepôt ou commande…"
+                  className="pl-9"
+                  aria-label="Rechercher un article"
+                />
+              </span>
+            </ToolbarField>
+            <ToolbarField label="État" className="w-44">
+              <NativeSelect aria-label="État" value={focus} onChange={(event) => setFocus(event.target.value as LineFocus)}>
+                <option value="all">Tous</option>
+                <option value="remaining">Restant</option>
+                <option value="complete">Complet</option>
+                <option value="variance">Écart</option>
+              </NativeSelect>
+            </ToolbarField>
+          </Toolbar>
+
+          <Card>
+            <CardHeader className="space-y-0">
+              <CardTitle className="text-base">
+                {submitted ? "Lignes prélevées" : "Lignes groupées à prélever"} ({session?.sales_orders?.length || 0} commande
+                {(session?.sales_orders?.length || 0) > 1 ? "s" : ""})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!reviewing && draftOpen && (
+                <form onSubmit={handleScan} className="sticky top-0 z-10 space-y-2 rounded-lg border border-brand-200 bg-brand-50/80 p-3 backdrop-blur">
+                  <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                    <ScanBarcode className="h-4 w-4" />
+                    Code-barres article
+                  </label>
+                  <Input
+                    id="pick-scan-barcode"
+                    ref={scanInputRef}
+                    value={scanValue}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    autoFocus
+                    disabled={scanning || submitting || saving}
+                    placeholder="Scanner puis Entrée"
+                    onChange={(event) => setScanValue(event.target.value)}
+                  />
+                  <p className={`text-xs ${scanError ? "text-red-700" : "text-slate-600"}`} aria-live="polite">
+                    {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack) jusqu’à la quantité demandée."}
+                  </p>
+                </form>
+              )}
+              {!isLoading && grouped.length === 0 && (
+                <EmptyState
+                  icon={Package}
+                  title="Aucune ligne"
+                  description="Cette liste de prélèvement ne contient aucun article."
+                />
+              )}
+              {!reviewing && !filteredGroups.length && grouped.length > 0 && (
+                <p className="rounded-lg border border-dashed border-hairline-strong bg-card p-4 t-body text-muted-foreground">
+                  Aucun article ne correspond à la recherche.
+                </p>
+              )}
+              {!reviewing && filteredGroups.map((group) => {
+                const pickedQty = groupPickedQty(group, picked);
+                const groupKey = `${group.item_code}-${group.warehouse || ""}`;
                 return (
-                  <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-hairline p-4 sm:grid-cols-[1fr_auto_auto_auto]">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{group.item_code} · {group.item_name}</p>
-                      <p className="text-xs text-muted-foreground">{group.warehouse || "Emplacement non défini"}</p>
+                  <div
+                    key={`${group.item_code}-${group.warehouse}`}
+                    ref={(node) => {
+                      groupRefs.current[groupKey] = node;
+                    }}
+                    className={cn(
+                      "space-y-2 rounded-lg border p-3",
+                      lastScannedKey === groupKey && "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm">
+                          {group.item_code} · {group.item_name}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {group.warehouse || "Entrepôt non défini"} · {formatQty(pickedQty)} / {formatQty(group.stock_qty)} {group.uom || ""}
+                        </div>
+                      </div>
+                      <StatusBadge tone={pickLineTone(pickedQty, group.stock_qty)} size="sm">
+                        {pickLineLabel(pickedQty, group.stock_qty)}
+                      </StatusBadge>
                     </div>
-                    <p className="text-sm"><span className="block text-xs text-muted-foreground">Demandé</span><strong>{group.stock_qty}</strong></p>
-                    <p className="text-sm"><span className="block text-xs text-muted-foreground">Prélevé</span><strong>{pickedTotal}</strong></p>
-                    <p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}>
-                      <span className="block text-xs">Écart</span>
-                      <strong>{difference > 0 ? "+" : ""}{difference}</strong>
-                    </p>
+                    {getPickGroupLocations(group).map((loc) => {
+                      const locationDraft = pickLists.find((item) => item.name === loc.pick_list)?.docstatus === 0;
+                      const locationQty = picked[loc.name] ?? loc.picked_qty ?? 0;
+                      return (
+                        <div key={loc.name} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="truncate text-muted-foreground">{loc.sales_order}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="num text-xs text-muted-foreground">
+                              {formatQty(loc.stock_qty)} {loc.stock_uom || loc.uom}
+                            </span>
+                            {locationDraft ? (
+                              <Input
+                                type="number"
+                                min={0}
+                                max={loc.stock_qty}
+                                step="any"
+                                className="h-8 w-24"
+                                value={locationQty}
+                                onChange={(e) =>
+                                  setPicked((prev) => {
+                                    const next = { ...prev, [loc.name]: Number(e.target.value) };
+                                    pickedRef.current = next;
+                                    return next;
+                                  })
+                                }
+                              />
+                            ) : (
+                              <span className="num w-24 text-right font-semibold">{formatQty(locationQty)}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button>
-                <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving}>
-                  <CheckCircle />
-                  Confirmer et créer les BL
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+              {reviewing && (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+                      <div>
+                        <h3 className="font-semibold text-amber-900">Vérifiez les écarts avant création des BL</h3>
+                        <p className="mt-1 text-sm text-amber-800">
+                          Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  {grouped.map((group) => {
+                    const pickedTotal = groupPickedQty(group, picked);
+                    const difference = pickedTotal - group.stock_qty;
+                    return (
+                      <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-hairline p-4 sm:grid-cols-[1fr_auto_auto_auto]">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{group.item_code} · {group.item_name}</p>
+                          <p className="text-xs text-muted-foreground">{group.warehouse || "Emplacement non défini"}</p>
+                        </div>
+                        <p className="text-sm"><span className="block text-xs text-muted-foreground">Demandé</span><strong>{formatQty(group.stock_qty)}</strong></p>
+                        <p className="text-sm"><span className="block text-xs text-muted-foreground">Prélevé</span><strong>{formatQty(pickedTotal)}</strong></p>
+                        <p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                          <span className="block text-xs">Écart</span>
+                          <strong>{difference > 0 ? "+" : ""}{formatQty(difference)}</strong>
+                        </p>
+                      </div>
+                    );
+                  })}
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button>
+                    <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving}>
+                      <CheckCircle />
+                      Confirmer et créer les BL
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <Dialog open={confirmingBl} onOpenChange={(open) => !open && !submitting && !saving && setConfirmingBl(false)}>
         <DialogContent>
@@ -831,13 +1005,13 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         </DialogContent>
       </Dialog>
 
-      {createdNotes.length > 0 && (
+      {notes.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Bons créés ({createdNotes.length})</CardTitle>
+            <CardTitle className="text-base">Bons créés ({notes.length})</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {createdNotes.map((note) => (
+            {notes.map((note) => (
               <div key={note.name} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div>
                   <div className="font-medium text-sm">{note.name}</div>

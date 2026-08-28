@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { DriverDashboard } from "@/features/driver/DriverDashboard";
 import type { DriverDashboardData } from "@/shared/types/distribution";
 
@@ -86,45 +85,48 @@ const emptyDashboard: DriverDashboardData = {
 };
 
 describe("DriverDashboard", () => {
-  it("affiche les KPI caisse, livraisons, arrêts et le planifié", () => {
-    render(<DriverDashboard data={dashboard} loading={false} onRefresh={vi.fn()} onOpenRoute={vi.fn()} />);
+  it("affiche les KPI caisse, livraisons, arrêts et le planifié sans le prochain arrêt", () => {
+    render(
+      <DriverDashboard
+        data={dashboard}
+        loading={false}
+        onRefresh={vi.fn()}
+        completedStops={[{ deliveryNote: "DN-1", customerName: "Client A", status: "Livré" }]}
+      />,
+    );
 
-    expect(screen.getByRole("heading", { name: /votre journée/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /caisse et activité/i })).toBeInTheDocument();
     expect(screen.getByText("Caisse")).toBeInTheDocument();
     expect(screen.getByText(/45[\s\u00a0\u202f]?000/)).toBeInTheDocument();
     expect(screen.getByText("6 / 12")).toBeInTheDocument();
     expect(screen.getByText("7 / 12")).toBeInTheDocument();
     expect(screen.getByText(/5 restants/i)).toBeInTheDocument();
     expect(screen.getAllByText(/68[\s\u00a0\u202f]?000/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Épicerie Nord")).toBeInTheDocument();
+    expect(screen.queryByText("Épicerie Nord")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /traiter cet arrêt/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /ouvrir la tournée/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Client A")).toBeInTheDocument();
     expect(screen.getByText("À contrôler")).toBeInTheDocument();
     expect(screen.getByText(/42 livraisons/i)).toBeInTheDocument();
   });
 
-  it("garde le solde visible sans tournée et ouvre la tournée depuis le CTA", async () => {
-    const user = userEvent.setup();
-    const onOpenRoute = vi.fn();
-    const { rerender } = render(
-      <DriverDashboard data={emptyDashboard} loading={false} onRefresh={vi.fn()} onOpenRoute={onOpenRoute} />,
-    );
+  it("garde le solde visible sans tournée", () => {
+    render(<DriverDashboard data={emptyDashboard} loading={false} onRefresh={vi.fn()} />);
 
     expect(screen.getByText(/aucune tournée publiée/i)).toBeInTheDocument();
     expect(screen.getByText(/45[\s\u00a0\u202f]?000/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /ouvrir la tournée/i })).not.toBeInTheDocument();
-
-    rerender(<DriverDashboard data={dashboard} loading={false} onRefresh={vi.fn()} onOpenRoute={onOpenRoute} />);
-    await user.click(screen.getByRole("button", { name: /traiter cet arrêt/i }));
-    expect(onOpenRoute).toHaveBeenCalledWith("DN-8");
+    expect(screen.getByText(/aucun arrêt traité/i)).toBeInTheDocument();
   });
 
   it("affiche l’erreur et un skeleton pendant le chargement", () => {
     const { rerender } = render(
-      <DriverDashboard loading onRefresh={vi.fn()} onOpenRoute={vi.fn()} error="Réseau indisponible" />,
+      <DriverDashboard loading onRefresh={vi.fn()} error="Réseau indisponible" />,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("Réseau indisponible");
-    expect(screen.getByLabelText(/chargement du tableau de bord/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/chargement du bilan/i)).toBeInTheDocument();
 
-    rerender(<DriverDashboard data={dashboard} loading={false} onRefresh={vi.fn()} onOpenRoute={vi.fn()} />);
-    expect(screen.queryByLabelText(/chargement du tableau de bord/i)).not.toBeInTheDocument();
+    rerender(<DriverDashboard data={dashboard} loading={false} onRefresh={vi.fn()} />);
+    expect(screen.queryByLabelText(/chargement du bilan/i)).not.toBeInTheDocument();
   });
 });

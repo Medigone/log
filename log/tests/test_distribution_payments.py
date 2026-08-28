@@ -2,6 +2,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import frappe
+
 from log.api import distribution
 from log import paiement_hooks
 
@@ -75,6 +77,30 @@ class TestDistributionPaymentSummary(unittest.TestCase):
 		db.set_value.assert_called_once()
 		self.assertEqual(db.set_value.call_args.args[0], "Livraison")
 		self.assertEqual(db.set_value.call_args.kwargs.get("update_modified"), False)
+
+	def test_serialize_note_amounts_includes_taxes_and_grand_total(self):
+		doc = frappe._dict(
+			net_total=9600,
+			grand_total=11232,
+			rounded_total=11232,
+			disable_rounded_total=0,
+			taxes=[frappe._dict(description="VAT 17% @ 17.0", rate=17, tax_amount=1632, account_head="TVA")],
+		)
+		amounts = distribution._serialize_note_amounts(doc)
+		self.assertEqual(amounts["netTotal"], 9600)
+		self.assertEqual(amounts["grandTotal"], 11232)
+		self.assertEqual(amounts["taxes"][0]["description"], "VAT 17% @ 17.0")
+		self.assertEqual(amounts["taxes"][0]["taxAmount"], 1632)
+
+	def test_serialize_note_amounts_uses_rounded_total_from_delivery_note(self):
+		doc = frappe._dict(
+			net_total=1000,
+			grand_total=1190.4,
+			rounded_total=1190,
+			disable_rounded_total=0,
+			taxes=[frappe._dict(description="TVA 19%", rate=19, tax_amount=190.4)],
+		)
+		self.assertEqual(distribution._serialize_note_amounts(doc)["grandTotal"], 1190)
 
 
 if __name__ == "__main__":

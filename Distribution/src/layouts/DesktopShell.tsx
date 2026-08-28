@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useFrappeAuth } from "frappe-react-sdk";
 import {
-  CalendarDays,
+  LayoutDashboard,
   Banknote,
   ClipboardCheck,
   LogOut,
@@ -28,7 +28,7 @@ interface DesktopShellProps {
 interface NavItem {
   to: string;
   label: string;
-  icon: typeof CalendarDays;
+  icon: typeof LayoutDashboard;
   roles: DistributionRole[];
 }
 
@@ -37,7 +37,7 @@ const EXPANDED_WIDTH = "w-60";
 const COLLAPSED_WIDTH = "w-[4.5rem]";
 
 const navItems: NavItem[] = [
-  { to: "/today", label: "Aujourd’hui", icon: CalendarDays, roles: ["planificateur", "responsable"] },
+  { to: "/today", label: "Tableau de bord", icon: LayoutDashboard, roles: ["preparateur", "planificateur", "responsable"] },
   { to: "/preparation", label: "Préparation", icon: ClipboardCheck, roles: ["preparateur", "responsable"] },
   { to: "/planning", label: "Planification", icon: Route, roles: ["planificateur", "responsable"] },
   { to: "/deliveries", label: "Livraisons", icon: Truck, roles: ["planificateur", "responsable"] },

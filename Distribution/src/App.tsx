@@ -59,7 +59,6 @@ function AccessDenied() {
 function defaultRoute(role: string) {
   if (role === "livreur") return "/driver";
   if (role === "caissier") return "/cashier";
-  if (role === "preparateur") return "/preparation";
   return "/today";
 }
 
@@ -79,7 +78,7 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
   return (
     <DesktopShell user={user}>
       <Routes>
-        <Route path="/today" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><TodayPage /></RoleGuard>} />
+        <Route path="/today" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><TodayPage role={user.role} /></RoleGuard>} />
         <Route path="/preparation" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><PreparationPage /></RoleGuard>} />
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
         <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="size-7 animate-spin text-brand-600" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />

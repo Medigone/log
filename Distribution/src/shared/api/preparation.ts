@@ -45,6 +45,7 @@ export interface PickGroup {
   item_name?: string;
   warehouse?: string;
   stock_qty: number;
+  picked_qty?: number;
   uom?: string;
   locations: PickLocation[];
   /** Compatibilité avec les anciennes réponses de session antérieures au correctif. */
@@ -94,21 +95,6 @@ export function applyBarcodeScan(
   return { ok: false, reason: "already_complete" };
 }
 
-export interface PickListData {
-  name: string;
-  docstatus: number;
-  locations: PickLocation[];
-  grouped: PickGroup[];
-  sales_orders: string[];
-}
-
-export interface PickSessionData {
-  name: string;
-  pick_lists: PickListData[];
-  grouped: PickGroup[];
-  sales_orders: string[];
-}
-
 export interface DeliveryNoteResult {
   name: string;
   customer_name?: string;
@@ -117,6 +103,23 @@ export interface DeliveryNoteResult {
   image?: string;
   custom_statut?: string;
   status?: string;
+}
+
+export interface PickListData {
+  name: string;
+  docstatus: number;
+  locations: PickLocation[];
+  grouped: PickGroup[];
+  sales_orders: string[];
+  delivery_notes?: DeliveryNoteResult[];
+}
+
+export interface PickSessionData {
+  name: string;
+  pick_lists: PickListData[];
+  grouped: PickGroup[];
+  sales_orders: string[];
+  delivery_notes?: DeliveryNoteResult[];
 }
 
 export interface RecentPickList {

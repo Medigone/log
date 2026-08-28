@@ -34,6 +34,7 @@ const sampleRoutes = [
 ];
 
 const mocks = vi.hoisted(() => ({
+  filters: {} as Record<string, unknown>,
   board: {
     drivers: [{ name: "DRV-1", label: "Karim", active: true }],
     vehicles: [{ name: "VEH-1", label: "Camion A", active: true }],
@@ -45,7 +46,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
-  usePlanningBoard: () => ({ data: { message: mocks.board }, error: undefined, isLoading: false }),
+  usePlanningBoard: (_from: string, _to?: string, filters: Record<string, unknown> = {}) => {
+    mocks.filters = filters;
+    return { data: { message: mocks.board }, error: undefined, isLoading: false };
+  },
 }));
 
 vi.mock("@/features/today/FleetMap", () => ({
@@ -65,6 +69,7 @@ function renderPage() {
 describe("DeliveriesPage", () => {
   beforeEach(() => {
     mocks.board.routes = structuredClone(sampleRoutes);
+    mocks.filters = {};
   });
 
   it("affiche les KPI, la carte et sélectionne une tournée", () => {
@@ -121,5 +126,33 @@ describe("DeliveriesPage", () => {
 
     expect(screen.getAllByText("Aucune tournée ce jour").length).toBeGreaterThan(0);
     expect(screen.queryByText("Aucune tournée pour ces filtres")).not.toBeInTheDocument();
+  });
+
+  it("affiche toutes les tournées quand la date est effacée", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.clear(screen.getByLabelText("Date"));
+
+    expect(screen.queryByText(/invalid date/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Avancement de toutes les tournées.")).toBeInTheDocument();
+    expect(mocks.filters).toEqual({ allDates: true });
+    expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^tournées /i })).toHaveTextContent("2");
+  });
+
+  it("réinitialise les filtres et réaffiche toutes les tournées", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.selectOptions(screen.getByLabelText("Cycle de vie"), "Terminée");
+    expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /réinitialiser/i }));
+    expect(screen.getByText("Avancement de toutes les tournées.")).toBeInTheDocument();
+    expect(mocks.filters).toEqual({ allDates: true });
+    expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Cycle de vie")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /réinitialiser/i })).not.toBeInTheDocument();
   });
 });

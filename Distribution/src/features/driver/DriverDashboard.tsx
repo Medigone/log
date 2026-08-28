@@ -1,7 +1,6 @@
 import {
   Banknote,
   CheckCircle2,
-  ChevronRight,
   Clock3,
   LoaderCircle,
   MapPin,
@@ -16,8 +15,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { apiErrorMessage } from "@/shared/api/distribution";
 import { cashStatusTone, TONES, type StatusTone } from "@/shared/design/statusTone";
+import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { formatMoney } from "@/shared/format";
-import type { DriverDashboardData, DriverDashboardNextStop } from "@/shared/types/distribution";
+import type { DriverDashboardData, RouteStop } from "@/shared/types/distribution";
 
 function clock(value?: string | null) {
   if (!value) return "--:--";
@@ -29,10 +29,6 @@ function weekday(value: string) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
-}
-
-function stopAddress(stop: DriverDashboardNextStop) {
-  return stop.address || [stop.commune, stop.wilaya].filter(Boolean).join(", ") || "Adresse non renseignée";
 }
 
 /** Tuile chiffrée, densité terrain : chiffres gros et contrastés. */
@@ -76,7 +72,7 @@ function TouchStat({ label, value }: { label: ReactNode; value: ReactNode }) {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-4" aria-busy="true" aria-label="Chargement du tableau de bord">
+    <div className="space-y-4" aria-busy="true" aria-label="Chargement du bilan">
       <div className="grid grid-cols-2 gap-3">
         {Array.from({ length: 4 }, (_, index) => (
           <Skeleton key={index} className="h-28 rounded-touch" />
@@ -93,18 +89,17 @@ export function DriverDashboard({
   loading,
   error,
   onRefresh,
-  onOpenRoute,
+  completedStops = [],
 }: {
   data?: DriverDashboardData;
   loading: boolean;
   error?: unknown;
   onRefresh: () => void;
-  onOpenRoute: (deliveryNote?: string) => void;
+  completedStops?: Array<Pick<RouteStop, "deliveryNote" | "customerName" | "status">>;
 }) {
   const kpis = data?.kpis;
   const cash = data?.cash;
   const week = data?.week;
-  const nextStop = data?.nextStop;
   const planned = kpis?.plannedStops || 0;
   const progress = planned ? Math.round(((kpis?.completedStops || 0) / planned) * 100) : 0;
   const maxDelivered = Math.max(1, ...(week?.days.map((day) => day.deliveredStops) || [0]));
@@ -117,8 +112,8 @@ export function DriverDashboard({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="t-micro text-brand-700">Tableau de bord</p>
-          <h2 className="t-section text-lg text-foreground">Votre journée</h2>
+          <p className="t-micro text-brand-700">Bilan</p>
+          <h2 className="t-section text-lg text-foreground">Caisse et activité</h2>
         </div>
         <Button variant="outline" onClick={onRefresh} disabled={loading} aria-label="Actualiser">
           {loading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
@@ -194,7 +189,7 @@ export function DriverDashboard({
             <Card density="touch" className="p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="t-micro text-brand-700">Planifié aujourd'hui</p>
+                  <p className="t-micro text-brand-700">Tournée du jour</p>
                   <h3 className="mt-1 t-section">{activeRoute.name}</h3>
                   <p className="num mt-1 t-body text-muted-foreground">
                     {clock(activeRoute.plannedStart)} – {clock(activeRoute.plannedEnd)}
@@ -209,10 +204,6 @@ export function DriverDashboard({
                 <TouchStat label="Arrêts" value={`${activeRoute.stopsDone}/${activeRoute.stopsTotal}`} />
                 <TouchStat label="Reste à encaisser" value={formatMoney(activeRoute.toCollect)} />
               </dl>
-              <Button size="touch" onClick={() => onOpenRoute()} className="mt-4 w-full">
-                Ouvrir la tournée
-                <ChevronRight />
-              </Button>
             </Card>
           ) : (
             <Card density="touch" className="p-8 text-center">
@@ -223,28 +214,6 @@ export function DriverDashboard({
               </p>
             </Card>
           )}
-
-          {nextStop ? (
-            <Card density="touch" className="overflow-hidden p-0">
-              <div className="bg-brand-50 p-4">
-                <p className="t-micro text-brand-700">
-                  Prochain arrêt · {nextStop.sequence}/{planned || nextStop.sequence}
-                </p>
-                <h3 className="mt-1 text-xl font-semibold tracking-tight">{nextStop.customerName}</h3>
-                <p className="mt-1 t-body text-slate-600">{stopAddress(nextStop)}</p>
-              </div>
-              <div className="flex items-center justify-between border-t border-hairline px-4 py-3 text-sm">
-                <span className="text-muted-foreground">À encaisser</span>
-                <strong className="num font-semibold">{formatMoney(nextStop.amountToCollect)}</strong>
-              </div>
-              <div className="px-4 pb-4">
-                <Button size="touch" onClick={() => onOpenRoute(nextStop.deliveryNote)} className="w-full">
-                  Traiter cet arrêt
-                  <ChevronRight />
-                </Button>
-              </div>
-            </Card>
-          ) : null}
 
           <Card density="touch" className="p-4">
             <div className="flex items-center justify-between">
@@ -271,6 +240,31 @@ export function DriverDashboard({
               </ul>
             ) : (
               <p className="mt-4 t-meta text-muted-foreground">Aucun mouvement de caisse récent.</p>
+            )}
+          </Card>
+
+          <Card density="touch" className="p-4">
+            <h3 className="t-section">Arrêts traités</h3>
+            {completedStops.length ? (
+              <ul className="mt-3 space-y-2">
+                {completedStops.map((stop) => {
+                  const visual = getStopVisualStyle(stop.status);
+                  return (
+                    <li key={stop.deliveryNote} className="flex items-center gap-3 border-b border-hairline pb-2 last:border-0 last:pb-0">
+                      <span className={`grid size-8 shrink-0 place-items-center rounded-full text-xs font-semibold ${visual.badgeClass}`}>
+                        {visual.markerSymbol || "·"}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{stop.customerName}</span>
+                        <span className="t-meta text-muted-foreground">{stop.deliveryNote}</span>
+                      </span>
+                      <span className="t-meta font-semibold text-slate-600">{stop.status}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="mt-3 t-body text-muted-foreground">Aucun arrêt traité pour le moment.</p>
             )}
           </Card>
 

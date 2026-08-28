@@ -7,16 +7,19 @@ from log.api.distribution_rules import (
 	capacity_warning,
 	change_reason_required,
 	classify_order_change,
+	complete_stop_gate_error,
 	completion_errors,
 	driver_owns_route,
 	has_assignment_conflict,
 	has_any_role,
 	is_repeated_request,
 	intervals_overlap,
+	load_verification_error,
 	planning_status_for_route,
 	parse_gps_value,
 	public_tracking_payload,
 	revision_matches,
+	start_without_load_error,
 	stop_status,
 )
 
@@ -199,6 +202,21 @@ class TestDistributionRules(unittest.TestCase):
 			"payment": {"method": "cash", "amount": 1001},
 		}
 		self.assertFalse(any("solde" in error for error in completion_errors(data, balance=1000, failure_reasons=FAILURES)))
+
+	def test_load_requires_every_delivery_note_verified(self):
+		self.assertIsNone(load_verification_error({"DN-1", "DN-2"}, {"DN-2", "DN-1"}))
+		self.assertIn("Vérifiez", load_verification_error({"DN-1", "DN-2"}, {"DN-1"}))
+		self.assertIn("aucun bon", load_verification_error(set(), set()))
+
+	def test_start_requires_loaded_stock(self):
+		self.assertIsNone(start_without_load_error(loaded=True))
+		self.assertIn("Chargez", start_without_load_error(loaded=False))
+
+	def test_complete_stop_requires_started_loaded_and_enleve(self):
+		self.assertIn("démarrée", complete_stop_gate_error(route_state="Publiée", loaded=True, stop_status="Enlevé"))
+		self.assertIn("Chargez", complete_stop_gate_error(route_state="En cours", loaded=False, stop_status="Enlevé"))
+		self.assertIn("chargé", complete_stop_gate_error(route_state="En cours", loaded=True, stop_status="Préparé"))
+		self.assertIsNone(complete_stop_gate_error(route_state="En cours", loaded=True, stop_status="Enlevé"))
 
 
 if __name__ == "__main__":

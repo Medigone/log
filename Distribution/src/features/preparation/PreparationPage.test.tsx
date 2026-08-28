@@ -19,6 +19,13 @@ const mocks = vi.hoisted(() => {
     picked_qty: 0,
     sales_order: "SO-1",
   };
+  const draftSession = {
+    name: "SESSION-PL-1",
+    sales_orders: ["SO-1"],
+    pick_lists: [{ name: "PL-1", docstatus: 0, sales_orders: ["SO-1"], locations: [location], grouped: [] }],
+    grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, locations: [location] }],
+    delivery_notes: [] as Array<{ name: string; customer_name: string }>,
+  };
   return {
     createPickList: vi.fn().mockResolvedValue({ name: "SESSION-PL-1", pick_lists: [{ name: "PL-1" }] }),
     submitPickList: vi.fn().mockResolvedValue({ delivery_notes: [{ name: "DN-1", customer_name: "Client Test 1" }] }),
@@ -33,7 +40,9 @@ const mocks = vi.hoisted(() => {
       { name: "SO-2", customer_name: "Client Test 2", delivery_date: tomorrowIso, total_qty: 3, custom_wilaya: "Alger", custom_commune: "COM-0002", custom_commune_nom: "Bab Ezzouar" },
       { name: "SO-3", customer_name: "Client Test 3", delivery_date: "2099-01-01", total_qty: 1, custom_wilaya: "Oran", custom_commune: "COM-0003", custom_commune_nom: "Oran" },
     ] },
-    pickListData: { message: { name: "SESSION-PL-1", sales_orders: ["SO-1"], pick_lists: [{ name: "PL-1", docstatus: 0, sales_orders: ["SO-1"], locations: [location], grouped: [] }], grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, locations: [location] }] } },
+    location,
+    draftSession,
+    pickListData: { message: structuredClone(draftSession) },
   };
 });
 
@@ -80,6 +89,7 @@ describe("PreparationPage", () => {
       increment: 1,
       barcode: "123456",
     });
+    mocks.pickListData.message = structuredClone(mocks.draftSession);
     mocks.queueData.message.forEach((order) => {
       delete order.stock_shortages;
     });
@@ -95,7 +105,7 @@ describe("PreparationPage", () => {
     expect(screen.getByText(/une par commande sélectionnée/i)).toBeInTheDocument();
     expect(mocks.createPickList).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: /confirmer la création/i }));
-    await waitFor(() => expect(screen.getByRole("heading", { name: /session de préparation/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "PL-1" })).toBeInTheDocument());
     expect(screen.getByText(/liste de prélèvement créée avec succès/i)).toBeInTheDocument();
     const quantity = screen.getByRole("spinbutton");
     await user.clear(quantity);
@@ -182,8 +192,10 @@ describe("PreparationPage", () => {
 
   it("initialise les quantités prélevées à 0", async () => {
     renderWorkspace();
-    expect(await screen.findByRole("heading", { name: /session de préparation/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
     expect(screen.getByRole("spinbutton")).toHaveValue(0);
+    expect(screen.getByRole("button", { name: /demandé/i })).toBeInTheDocument();
+    expect(screen.getAllByText("Restant").length).toBeGreaterThan(0);
   });
 
   it("incrémente la quantité au scan d’un code-barres de la session", async () => {
@@ -222,5 +234,35 @@ describe("PreparationPage", () => {
     await user.type(scan, "999{Enter}");
     expect(await screen.findByText(/n'est pas dans la session de préparation/i)).toBeInTheDocument();
     expect(screen.getByRole("spinbutton")).toHaveValue(0);
+  });
+
+  it("filtre les lignes restantes via le KPI", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "État" }), "Complet");
+    expect(screen.getByText(/aucun article ne correspond à la recherche/i)).toBeInTheDocument();
+    expect(screen.queryByText(/article test/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /encore à scanner/i }));
+    expect(screen.getByText(/article test/i)).toBeInTheDocument();
+  });
+
+  it("affiche le recap BL d'une liste déjà soumise sans saisie", async () => {
+    const location = { ...mocks.location, picked_qty: 2 };
+    mocks.pickListData.message = {
+      name: "SESSION-PL-1",
+      sales_orders: ["SO-1"],
+      pick_lists: [{ name: "PL-1", docstatus: 1, sales_orders: ["SO-1"], locations: [location], grouped: [], delivery_notes: [{ name: "DN-1", customer_name: "Client Test 1" }] }],
+      grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, picked_qty: 2, locations: [location] }],
+      delivery_notes: [{ name: "DN-1", customer_name: "Client Test 1" }],
+    };
+    renderWorkspace();
+    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
+    expect(screen.getByText(/liste soumise/i)).toBeInTheDocument();
+    expect(screen.getAllByText("Complet").length).toBeGreaterThan(0);
+    expect(screen.getByText("DN-1")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/code-barres article/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /contrôle final/i })).not.toBeInTheDocument();
   });
 });

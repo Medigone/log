@@ -11,6 +11,7 @@ const manager = { name: "manager@test", email: "manager@test", fullName: "Respon
 describe("DesktopShell", () => {
   it("n'affiche au préparateur que son espace autorisé", () => {
     render(<MemoryRouter><DesktopShell user={{ name: "prep@test", email: "prep@test", fullName: "Préparateur Test", role: "preparateur" }}><p>Accueil préparation</p></DesktopShell></MemoryRouter>);
+    expect(screen.getByRole("link", { name: /tableau de bord/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /préparation/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /stock véhicules/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /planification/i })).not.toBeInTheDocument();
@@ -18,6 +19,7 @@ describe("DesktopShell", () => {
   });
   it("donne au responsable les parcours opérationnels", () => {
     render(<MemoryRouter><DesktopShell user={manager}><p>Accueil responsable</p></DesktopShell></MemoryRouter>);
+    expect(screen.getByRole("link", { name: /tableau de bord/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /préparation/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /planification/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /livraisons/i })).toBeInTheDocument();

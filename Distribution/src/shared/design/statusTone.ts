@@ -85,6 +85,7 @@ export function toneStyle(tone: StatusTone): ToneStyle {
 
 /** Statut d'un BL sur l'écran de planification. */
 export function planningStatusTone(status: string): StatusTone {
+  if (status === "En retard") return "danger";
   if (["À revalider", "À repréparer", "Exception"].includes(status)) return "warning";
   if (["Publié", "En cours"].includes(status)) return "info";
   if (status === "Terminé") return "success";
@@ -145,4 +146,11 @@ export function vehicleStatusTone(status?: string): StatusTone {
   if (status === "En maintenance") return "warning";
   if (status === "Hors service") return "danger";
   return "neutral";
+}
+
+/** Progression d'une ligne de prélèvement. */
+export function pickLineTone(picked: number, requested: number): StatusTone {
+  if (picked === requested) return "success";
+  if (picked > requested) return "danger";
+  return "warning";
 }

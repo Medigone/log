@@ -20,6 +20,7 @@ import type {
   StopCompletionPayload,
   StopCompletionResult,
   VehicleStock,
+  ActivityDashboardData,
 } from "@/shared/types/distribution";
 
 interface FrappeMessage<T> {
@@ -67,6 +68,20 @@ export function useDriverDashboard(date: string) {
     "log.api.distribution.get_driver_dashboard",
     { date },
     `distribution-driver-dashboard-${date}`,
+  );
+}
+
+export function useActivityDashboard(date: string) {
+  return useFrappeGetCall<FrappeMessage<ActivityDashboardData>>(
+    "log.api.distribution.get_activity_dashboard",
+    { date },
+    `distribution-activity-dashboard-${date}`,
+    {
+      refreshInterval: 10_000,
+      refreshWhenHidden: false,
+      refreshWhenOffline: false,
+      revalidateOnFocus: true,
+    },
   );
 }
 
@@ -164,6 +179,7 @@ export function useDistributionMutations() {
   const save = useFrappePostCall<FrappeMessage<SaveRouteResult>>("log.api.distribution.save_route");
   const publish = useFrappePostCall<FrappeMessage<SaveRouteResult>>("log.api.distribution.publish_route");
   const start = useFrappePostCall<FrappeMessage<DistributionRoute>>("log.api.distribution.start_route");
+  const load = useFrappePostCall<FrappeMessage<DistributionRoute>>("log.api.distribution.load_route");
   const finish = useFrappePostCall<FrappeMessage<DistributionRoute>>("log.api.distribution.finish_route");
   const complete = useFrappePostCall<FrappeMessage<StopCompletionResult>>(
     "log.api.distribution.complete_delivery_stop",
@@ -243,6 +259,13 @@ export function useDistributionMutations() {
         expected_revision: expectedRevision,
       })).message,
     startRoute: async (routeId: string, expectedRevision?: number) => (await start.call({ route_id: routeId, expected_revision: expectedRevision, request_id: crypto.randomUUID() })).message,
+    loadRoute: async (routeId: string, expectedRevision: number, verifiedDeliveryNotes: string[]) =>
+      (await load.call({
+        route_id: routeId,
+        expected_revision: expectedRevision,
+        verified_delivery_notes: verifiedDeliveryNotes,
+        request_id: crypto.randomUUID(),
+      })).message,
     finishRoute: async (routeId: string) => (await finish.call({ route_id: routeId })).message,
     completeStop: async (payload: StopCompletionPayload) => (await complete.call({ payload })).message,
     declareRouteReturn: async (routeId: string, expectedRevision: number) => (await declareReturn.call({ route_id: routeId, expected_revision: expectedRevision, request_id: crypto.randomUUID() })).message,
@@ -251,7 +274,7 @@ export function useDistributionMutations() {
     resolveCashDiscrepancy: async (payload: CashReconciliationInput) => (await resolveCash.call({ payload })).message,
     retryDeliveryInvoice: async (deliveryNote: string) => (await retryInvoice.call({ delivery_note: deliveryNote })).message,
     postDriverCashAdjustment: async (payload: DriverCashAdjustmentInput) => (await adjustCash.call({ payload })).message,
-    saving: save.loading || publish.loading || start.loading || finish.loading || complete.loading
+    saving: save.loading || publish.loading || start.loading || load.loading || finish.loading || complete.loading
       || schedule.loading || reassign.loading || acknowledge.loading || impact.loading || reprepare.loading || resolveException.loading
       || generateQr.loading,
     fulfillment: declareReturn.loading || confirmReturn.loading,
