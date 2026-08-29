@@ -27,7 +27,7 @@ export function PageHeader({ eyebrow, title, meta, description, actions, breadcr
           <h1 className="t-display text-foreground">{title}</h1>
           {meta}
         </div>
-        {description && <p className="mt-1 t-body max-w-2xl text-muted-foreground">{description}</p>}
+        {description && <div className="mt-1 t-body max-w-2xl text-muted-foreground">{description}</div>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
     </header>

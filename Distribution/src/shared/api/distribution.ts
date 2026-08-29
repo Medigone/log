@@ -1,4 +1,5 @@
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
+import { useSWRConfig } from "swr";
 import type {
   AssignmentChange,
   CashReconciliation,
@@ -10,6 +11,15 @@ import type {
   DriverCashBox,
   DriverDashboardData,
   DriverRouteBoard,
+  FleetDocumentUpload,
+  FleetDriver,
+  FleetDriverBoard,
+  FleetDriverInput,
+  FleetEntretienInput,
+  FleetOptions,
+  FleetVehicle,
+  FleetVehicleBoard,
+  FleetVehicleInput,
   OrderChangeImpact,
   PlanningFilters,
   PlanningBoard,
@@ -291,6 +301,124 @@ export function useDistributionMutations() {
     driverCash: adjustCash.loading,
     accounting: retryInvoice.loading,
     routing: calculateItinerary.loading || proposeOptimization.loading || applyOptimization.loading,
+  };
+}
+
+export function useFleetDrivers() {
+  return useFrappeGetCall<FrappeMessage<FleetDriverBoard>>(
+    "log.api.distribution.get_fleet_drivers",
+    {},
+    "distribution-fleet-drivers",
+    { revalidateOnFocus: true },
+  );
+}
+
+export function useFleetDriver(name?: string) {
+  return useFrappeGetCall<FrappeMessage<FleetDriver>>(
+    "log.api.distribution.get_fleet_driver",
+    name ? { name } : undefined,
+    name ? `distribution-fleet-driver-${name}` : null,
+    name ? { revalidateOnFocus: true } : undefined,
+  );
+}
+
+export function useFleetVehicles() {
+  return useFrappeGetCall<FrappeMessage<FleetVehicleBoard>>(
+    "log.api.distribution.get_fleet_vehicles",
+    {},
+    "distribution-fleet-vehicles",
+    { revalidateOnFocus: true },
+  );
+}
+
+export function useFleetVehicle(name?: string) {
+  return useFrappeGetCall<FrappeMessage<FleetVehicle>>(
+    "log.api.distribution.get_fleet_vehicle",
+    name ? { name } : undefined,
+    name ? `distribution-fleet-vehicle-${name}` : null,
+    name ? { revalidateOnFocus: true } : undefined,
+  );
+}
+
+export function useFleetOptions() {
+  return useFrappeGetCall<FrappeMessage<FleetOptions>>(
+    "log.api.distribution.get_fleet_options",
+    {},
+    "distribution-fleet-options",
+    { revalidateOnFocus: true },
+  );
+}
+
+function isFleetCacheKey(key: unknown) {
+  return (
+    typeof key === "string" &&
+    (key.startsWith("distribution-fleet-") || key === "distribution-vehicle-stocks")
+  );
+}
+
+export function useFleetMutations() {
+  const { mutate } = useSWRConfig();
+  const revalidateFleet = () => mutate(isFleetCacheKey);
+
+  const createDriver = useFrappePostCall<FrappeMessage<FleetDriver>>("log.api.distribution.create_fleet_driver");
+  const updateDriver = useFrappePostCall<FrappeMessage<FleetDriver>>("log.api.distribution.update_fleet_driver");
+  const assignDriver = useFrappePostCall<FrappeMessage<FleetDriver>>("log.api.distribution.assign_fleet_driver_vehicle");
+  const createVehicle = useFrappePostCall<FrappeMessage<FleetVehicle>>("log.api.distribution.create_fleet_vehicle");
+  const updateVehicle = useFrappePostCall<FrappeMessage<FleetVehicle>>("log.api.distribution.update_fleet_vehicle");
+  const assignVehicle = useFrappePostCall<FrappeMessage<FleetVehicle>>("log.api.distribution.assign_fleet_vehicle_driver");
+  const createEntretien = useFrappePostCall<FrappeMessage<FleetVehicle>>("log.api.distribution.create_fleet_entretien");
+  const uploadDocument = useFrappePostCall<FrappeMessage<FleetDriver | FleetVehicle>>("log.api.distribution.upload_fleet_document");
+
+  return {
+    createDriver: async (payload: FleetDriverInput) => {
+      const result = (await createDriver.call({ payload })).message;
+      await revalidateFleet();
+      return result;
+    },
+    updateDriver: async (payload: FleetDriverInput) => {
+      const result = (await updateDriver.call({ payload })).message;
+      await revalidateFleet();
+      return result;
+    },
+    assignDriverVehicle: async (driver: string, vehicle: string | null, reason?: string | null) => {
+      const result = (await assignDriver.call({ payload: { driver, vehicle, reason: reason || null } })).message;
+      await revalidateFleet();
+      return result;
+    },
+    createVehicle: async (payload: FleetVehicleInput) => {
+      const result = (await createVehicle.call({ payload })).message;
+      await revalidateFleet();
+      return result;
+    },
+    updateVehicle: async (payload: FleetVehicleInput) => {
+      const result = (await updateVehicle.call({ payload })).message;
+      await revalidateFleet();
+      return result;
+    },
+    assignVehicleDriver: async (vehicle: string, driver: string | null, reason?: string | null) => {
+      const result = (await assignVehicle.call({ payload: { vehicle, driver, reason: reason || null } })).message;
+      await revalidateFleet();
+      return result;
+    },
+    createEntretien: async (payload: FleetEntretienInput) => {
+      const result = (await createEntretien.call({ payload })).message;
+      await revalidateFleet();
+      return result;
+    },
+    uploadDocument: async (payload: FleetDocumentUpload) => {
+      const result = (await uploadDocument.call({ payload })).message;
+      await revalidateFleet();
+      return result;
+    },
+    saving:
+      createDriver.loading ||
+      updateDriver.loading ||
+      assignDriver.loading ||
+      createVehicle.loading ||
+      updateVehicle.loading ||
+      assignVehicle.loading ||
+      createEntretien.loading ||
+      uploadDocument.loading,
   };
 }
 

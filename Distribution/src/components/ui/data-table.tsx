@@ -3,19 +3,16 @@ import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TONES, type StatusTone } from "@/shared/design/statusTone"
 import { SkeletonRows } from "@/components/ui/skeleton"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export interface DataTableColumn<T> {
   id: string
   header: ReactNode
   cell: (row: T) => ReactNode
-  /** Largeur de colonne (`140px`, `minmax(0,1fr)`, `20%`…). */
   width?: string
   align?: "left" | "right" | "center"
-  /** Rend la colonne triable en fournissant la valeur de comparaison. */
   sortValue?: (row: T) => string | number
-  /** Masque la colonne sous ce point de rupture. */
   hideBelow?: "sm" | "md" | "lg" | "xl"
-  /** Applique l'alignement des chiffres tabulaires. */
   numeric?: boolean
   className?: string
 }
@@ -24,16 +21,13 @@ interface DataTableProps<T> {
   columns: Array<DataTableColumn<T>>
   rows: T[]
   rowKey: (row: T) => string
-  /** Colore le rail de statut à gauche de la ligne — le statut se lit avant l'identité. */
   rowTone?: (row: T) => StatusTone | undefined
   onRowClick?: (row: T) => void
   isRowActive?: (row: T) => boolean
   isLoading?: boolean
   empty?: ReactNode
-  /** Libellé accessible du tableau. */
   label: string
   defaultSort?: { id: string; direction: "asc" | "desc" }
-  /** Active l'en-tête collant en bornant la hauteur (`max-h-[60vh]`…). */
   maxHeight?: string
   className?: string
 }
@@ -51,10 +45,6 @@ const ALIGN_CLASS = {
   center: "text-center",
 } as const
 
-/**
- * Tableau dense de la console : ligne de 40px, en-tête collant, tri,
- * rail de statut coloré, états de chargement et vide intégrés.
- */
 export function DataTable<T>({
   columns,
   rows,
@@ -94,35 +84,32 @@ export function DataTable<T>({
 
   if (isLoading) {
     return (
-      <div className={cn("rounded-lg border border-hairline bg-card p-3 shadow-card", className)}>
+      <div className={cn("rounded-xl border bg-card p-3", className)}>
         <SkeletonRows rows={6} />
       </div>
     )
   }
 
   return (
-    <div
-      className={cn("overflow-hidden rounded-lg border border-hairline bg-card shadow-card", className)}
-    >
-      <div className={cn("overflow-auto", maxHeight)}>
-        <table className="w-full border-separate border-spacing-0" aria-label={label}>
+    <div className={cn("overflow-hidden rounded-xl border bg-card", className)}>
+      <div className={cn(maxHeight, "overflow-auto")}>
+        <Table aria-label={label}>
           <colgroup>
             {columns.map((column) => (
               <col key={column.id} style={column.width ? { width: column.width } : undefined} />
             ))}
           </colgroup>
-          <thead className="sticky top-0 z-10">
-            <tr>
+          <TableHeader className="sticky top-0 z-10 bg-muted">
+            <TableRow className="hover:bg-transparent">
               {columns.map((column) => {
                 const sortable = Boolean(column.sortValue)
                 const active = sort?.id === column.id
                 return (
-                  <th
+                  <TableHead
                     key={column.id}
-                    scope="col"
                     aria-sort={active ? (sort!.direction === "asc" ? "ascending" : "descending") : undefined}
                     className={cn(
-                      "t-micro whitespace-nowrap border-b border-hairline bg-surface-subtle px-3 py-2 text-muted-foreground",
+                      "h-9 whitespace-nowrap bg-muted text-xs font-medium text-muted-foreground",
                       ALIGN_CLASS[column.align ?? "left"],
                       column.hideBelow && HIDE_CLASS[column.hideBelow],
                       column.className,
@@ -133,8 +120,8 @@ export function DataTable<T>({
                         type="button"
                         onClick={() => toggleSort(column.id)}
                         className={cn(
-                          "inline-flex items-center gap-1 rounded transition-colors hover:text-foreground",
-                          active && "text-brand-700",
+                          "inline-flex items-center gap-1 rounded-md transition-colors hover:text-foreground",
+                          active && "text-foreground",
                           column.align === "right" && "flex-row-reverse",
                         )}
                       >
@@ -152,37 +139,34 @@ export function DataTable<T>({
                     ) : (
                       column.header
                     )}
-                  </th>
+                  </TableHead>
                 )
               })}
-            </tr>
-          </thead>
-          <tbody>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {sortedRows.length === 0 && (
-              <tr>
-                <td colSpan={columns.length} className="px-3">
-                  {empty ?? <p className="py-10 text-center t-body text-muted-foreground">Aucun résultat.</p>}
-                </td>
-              </tr>
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={columns.length} className="whitespace-normal">
+                  {empty ?? <p className="py-10 text-center text-sm text-muted-foreground">Aucun résultat.</p>}
+                </TableCell>
+              </TableRow>
             )}
             {sortedRows.map((row) => {
               const tone = rowTone?.(row)
               const active = isRowActive?.(row)
               return (
-                <tr
+                <TableRow
                   key={rowKey(row)}
+                  data-state={active ? "selected" : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={cn(
-                    "transition-colors",
-                    onRowClick && "cursor-pointer",
-                    active ? "bg-brand-50" : "hover:bg-surface-subtle",
-                  )}
+                  className={cn(onRowClick && "cursor-pointer", active && "bg-muted")}
                 >
                   {columns.map((column, index) => (
-                    <td
+                    <TableCell
                       key={column.id}
                       className={cn(
-                        "h-10 border-b border-hairline px-3 text-sm text-foreground",
+                        "h-10",
                         ALIGN_CLASS[column.align ?? "left"],
                         column.numeric && "num tabular-nums",
                         column.hideBelow && HIDE_CLASS[column.hideBelow],
@@ -191,13 +175,13 @@ export function DataTable<T>({
                       )}
                     >
                       {column.cell(row)}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               )
             })}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
     </div>
   )

@@ -24,3 +24,4 @@ log.patches.v1_0.initialize_customer_portal_access
 log.patches.v1_0.initialize_item_store_visibility
 log.patches.v1_0.initialize_portal_merchandising
 log.patches.v1_0.add_portal_merchandising_indexes
+log.patches.v1_0.seed_fleet_assignment_history

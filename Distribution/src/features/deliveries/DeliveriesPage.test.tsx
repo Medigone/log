@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage";
+import { chooseOption } from "@/test/chooseOption";
 
 const sampleRoutes = [
   {
@@ -91,7 +92,7 @@ describe("DeliveriesPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.selectOptions(screen.getByLabelText("Cycle de vie"), "Terminée");
+    await chooseOption(user, screen.getByLabelText("Cycle de vie"), "Terminée");
     expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
     expect(screen.queryAllByText(/camion a/i)).toHaveLength(0);
     expect(screen.getAllByText(/camion b/i).length).toBeGreaterThan(0);
@@ -145,14 +146,14 @@ describe("DeliveriesPage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.selectOptions(screen.getByLabelText("Cycle de vie"), "Terminée");
+    await chooseOption(user, screen.getByLabelText("Cycle de vie"), "Terminée");
     expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /réinitialiser/i }));
     expect(screen.getByText("Avancement de toutes les tournées.")).toBeInTheDocument();
     expect(mocks.filters).toEqual({ allDates: true });
     expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cycle de vie")).toHaveValue("");
+    expect(screen.getByLabelText("Cycle de vie")).not.toHaveTextContent("Terminée");
     expect(screen.queryByRole("button", { name: /réinitialiser/i })).not.toBeInTheDocument();
   });
 });

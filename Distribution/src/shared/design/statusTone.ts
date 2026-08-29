@@ -141,10 +141,44 @@ export function vehicleStockTone(vehicle: VehicleStockToneInput): StatusTone {
 }
 
 /** Statut parc du véhicule. */
-export function vehicleStatusTone(status?: string): StatusTone {
+export function vehicleStatusTone(status?: string, active = true): StatusTone {
+  if (!active) return "danger";
   if (status === "Disponible") return "success";
   if (status === "En maintenance") return "warning";
   if (status === "Hors service") return "danger";
+  return "neutral";
+}
+
+/** Statut RH du livreur. */
+export function driverStatusTone(status?: string, active = true): StatusTone {
+  if (!active) return "danger";
+  if (status === "Actif") return "success";
+  if (status === "En congé") return "warning";
+  if (status === "Indisponible") return "danger";
+  return "neutral";
+}
+
+/** Alerte de document (permis, assurance, CT). */
+export function documentAlertTone(alert?: string | null): StatusTone {
+  if (alert === "expired" || alert === "missing") return "danger";
+  if (alert === "expiring" || alert === "due" || alert === "upcoming") return "warning";
+  if (alert === "valid") return "success";
+  return "neutral";
+}
+
+/** Statut d'une fiche d'entretien véhicule. */
+export function entretienStatusTone(status?: string): StatusTone {
+  if (status === "Terminé") return "success";
+  if (status === "En Cours") return "warning";
+  if (status === "Programmé") return "info";
+  return "neutral";
+}
+
+/** Action d'historique d'affectation flotte. */
+export function assignmentActionTone(action?: string): StatusTone {
+  if (action === "Affectation") return "success";
+  if (action === "Réaffectation") return "info";
+  if (action === "Désaffectation") return "warning";
   return "neutral";
 }
 

@@ -6,8 +6,8 @@ import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { formatMoney } from "@/shared/format";
 import type { RouteDepot, RouteItinerary, RouteStop } from "@/shared/types/distribution";
 
-/** Couleur de marque du tracé — miroir de `--color-brand-600` (Leaflet ne lit pas les variables CSS). */
-const BRAND = "#457b9d";
+/** Couleur du tracé — miroir de `--primary` clair (Leaflet ne lit pas les variables CSS). */
+const BRAND = "#18181b";
 
 type MapPoint = [number, number];
 

@@ -15,6 +15,29 @@ class Vehicule(Document):
 	def after_insert(self):
 		"""Créer automatiquement un entrepôt pour ce véhicule après création"""
 		self.create_vehicle_warehouse()
+		self._sync_fleet_assignment(is_insert=True)
+
+	def on_update(self):
+		if getattr(self.flags, "fleet_assignment_sync", False):
+			return
+		if not self.has_value_changed("chauffeur"):
+			return
+		self._sync_fleet_assignment()
+
+	def _sync_fleet_assignment(self, *, is_insert: bool = False):
+		if getattr(self.flags, "fleet_assignment_sync", False):
+			return
+		if is_insert and not self.chauffeur:
+			return
+		from log.services.distribution_fleet import _driver_for_user, assign_vehicle_driver
+
+		if self.chauffeur:
+			driver = _driver_for_user(self.chauffeur)
+			if not driver:
+				frappe.throw(_("Aucun livreur n'est lié à ce compte."))
+			assign_vehicle_driver(self.name, driver, source="Desk")
+		else:
+			assign_vehicle_driver(self.name, None, source="Desk")
 
 	def create_vehicle_warehouse(self):
 		"""Créer un entrepôt dédié pour ce véhicule"""

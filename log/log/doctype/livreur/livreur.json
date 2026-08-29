@@ -30,7 +30,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "ID Utilisateur",
-   "link_filters": "[[\"User\",\"role\",\"=\",\"Delivery User\"]]",
+   "link_filters": "[[\"User\",\"role\",\"=\",\"Livreur\"]]",
    "options": "User"
   },
   {
@@ -90,7 +90,13 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Historique",
+   "link_doctype": "Historique Affectation Flotte",
+   "link_fieldname": "livreur"
+  }
+ ],
  "modified": "2025-12-08 11:17:25.814712",
  "modified_by": "Administrator",
  "module": "Log",

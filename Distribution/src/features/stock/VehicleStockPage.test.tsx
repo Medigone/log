@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { VehicleStockPage } from "@/features/stock/VehicleStockPage";
+import { chooseOption } from "@/test/chooseOption";
 
 const mutate = vi.fn().mockResolvedValue(undefined);
 
@@ -86,11 +87,11 @@ describe("VehicleStockPage", () => {
     expect(screen.getByRole("heading", { name: /camion a/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /camion b/i })).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "État" }), "Entrepôt manquant");
+    await chooseOption(user, screen.getByRole("combobox", { name: "État" }), "Entrepôt manquant");
     expect(screen.getByRole("heading", { name: /camion b/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /camion a/i })).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "État" }), "Tous (actifs)");
+    await chooseOption(user, screen.getByRole("combobox", { name: "État" }), "Tous (actifs)");
     await user.type(screen.getByRole("textbox", { name: /rechercher un véhicule/i }), "Karim");
     expect(screen.getByRole("heading", { name: /camion a/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /camion b/i })).not.toBeInTheDocument();

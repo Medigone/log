@@ -46,6 +46,8 @@ PREPARATION_ROLES = {"Préparateur", "Responsable", "System Manager"}
 CASHIER_ROLES = {"Caissier", "Responsable", "System Manager"}
 STOCK_ROLES = PLANNING_ROLES | PREPARATION_ROLES
 ACTIVITY_ROLES = PLANNING_ROLES | PREPARATION_ROLES
+FLEET_ROLES = PLANNING_ROLES
+FLEET_WRITE_ROLES = {"Responsable", "System Manager"}
 ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours", "Retour dépôt", "Contrôle caisse")
 TERMINAL_STOP_STATES = {"Livré", "Partiellement Livré", "Non Livré", "Annulé"}
 OPEN_PLANNING_FOR_OVERDUE = {"Non planifié", "Planifié", "Publié"}
@@ -2228,3 +2230,134 @@ def regularize_legacy_route(route_id, confirmed=0):
 		finalize_delivery_document(route, dn, "delivered" if status == "Livré" else "partial")
 	_refresh_route_lifecycle(route)
 	return _serialize_route(frappe.get_doc("Livraison", route_id))
+
+
+@frappe.whitelist()
+def get_fleet_drivers():
+	_require(FLEET_ROLES)
+	from log.services.distribution_fleet import list_drivers
+
+	return list_drivers()
+
+
+@frappe.whitelist()
+def get_fleet_driver(name=None, date=None):
+	_require(FLEET_ROLES)
+	from log.services.distribution_fleet import get_driver
+
+	return get_driver(name, date=date)
+
+
+@frappe.whitelist()
+def get_fleet_vehicles():
+	_require(FLEET_ROLES)
+	from log.services.distribution_fleet import list_vehicles
+
+	return list_vehicles()
+
+
+@frappe.whitelist()
+def get_fleet_vehicle(name=None):
+	_require(FLEET_ROLES)
+	from log.services.distribution_fleet import get_vehicle
+
+	return get_vehicle(name)
+
+
+@frappe.whitelist()
+def get_fleet_options():
+	_require(FLEET_ROLES)
+	from log.services.distribution_fleet import list_options
+
+	return list_options()
+
+
+@frappe.whitelist()
+def create_fleet_driver(payload):
+	_require(FLEET_WRITE_ROLES)
+	from log.services.distribution_fleet import create_driver
+
+	return create_driver(_payload(payload))
+
+
+@frappe.whitelist()
+def update_fleet_driver(payload):
+	_require(FLEET_WRITE_ROLES)
+	from log.services.distribution_fleet import update_driver
+
+	return update_driver(_payload(payload))
+
+
+@frappe.whitelist()
+def assign_fleet_driver_vehicle(payload):
+	_require(FLEET_WRITE_ROLES)
+	data = _payload(payload)
+	from log.services.distribution_fleet import assign_driver_vehicle
+
+	return assign_driver_vehicle(
+		str(data.get("driver") or "").strip(),
+		str(data.get("vehicle") or "").strip() or None,
+		motif=str(data.get("reason") or data.get("motif") or "").strip() or None,
+		source="Distribution",
+	)
+
+
+@frappe.whitelist()
+def create_fleet_vehicle(payload):
+	_require(FLEET_WRITE_ROLES)
+	from log.services.distribution_fleet import create_vehicle
+
+	return create_vehicle(_payload(payload))
+
+
+@frappe.whitelist()
+def update_fleet_vehicle(payload):
+	_require(FLEET_WRITE_ROLES)
+	from log.services.distribution_fleet import update_vehicle
+
+	return update_vehicle(_payload(payload))
+
+
+@frappe.whitelist()
+def assign_fleet_vehicle_driver(payload):
+	_require(FLEET_WRITE_ROLES)
+	data = _payload(payload)
+	from log.services.distribution_fleet import assign_vehicle_driver
+
+	return assign_vehicle_driver(
+		str(data.get("vehicle") or "").strip(),
+		str(data.get("driver") or "").strip() or None,
+		motif=str(data.get("reason") or data.get("motif") or "").strip() or None,
+		source="Distribution",
+	)
+
+
+@frappe.whitelist()
+def create_fleet_entretien(payload):
+	_require(FLEET_WRITE_ROLES)
+	from log.services.distribution_fleet import create_entretien
+
+	return create_entretien(_payload(payload))
+
+
+@frappe.whitelist()
+def upload_fleet_document(payload):
+	_require(FLEET_WRITE_ROLES)
+	data = _payload(payload)
+	doctype = str(data.get("doctype") or "").strip()
+	name = str(data.get("name") or "").strip()
+	field = str(data.get("field") or "").strip()
+	filename = str(data.get("filename") or "document").strip() or "document"
+	if doctype not in {"Livreur", "Vehicule"}:
+		frappe.throw(_("Type de document non pris en charge."))
+	content = _decode_evidence(str(data.get("content") or ""), _("Fichier"))
+	from log.services.distribution_fleet import attach_document
+
+	return attach_document(
+		doctype=doctype,
+		name=name,
+		field=field,
+		filename=filename,
+		content=content,
+		expiry=data.get("expiry") or None,
+	)

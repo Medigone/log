@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, LoaderCircle, Package, RefreshCw, Search, Truck, Warehouse } from "lucide-react";
+import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
-import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
+import { Toolbar } from "@/components/ui/toolbar";
 import { apiErrorMessage, useVehicleStocks } from "@/shared/api/distribution";
 import { routeLifecycleTone, vehicleStatusTone, vehicleStockTone } from "@/shared/design/statusTone";
 import { formatQuantity } from "@/shared/format";
@@ -224,28 +225,30 @@ export function VehicleStockPage({ canLinkRoutes = false }: { canLinkRoutes?: bo
       </section>
 
       <Toolbar>
-        <ToolbarField label="Rechercher" className="min-w-56 flex-1">
-          <span className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Véhicule, plaque, livreur ou tournée…"
-              className="pl-9"
-              aria-label="Rechercher un véhicule"
-            />
-          </span>
-        </ToolbarField>
-        <ToolbarField label="État" className="w-52">
-          <NativeSelect aria-label="État" value={focus} onChange={(event) => setFocus(event.target.value as StockFocus)}>
-            <option value="all">Tous (actifs)</option>
-            <option value="route">En tournée</option>
-            <option value="loaded">Chargé</option>
-            <option value="empty">Vide</option>
-            <option value="missing">Entrepôt manquant</option>
-            <option value="inactive">Inactifs</option>
-          </NativeSelect>
-        </ToolbarField>
+        <InputGroup className="min-w-48 flex-1 bg-background">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Véhicule, plaque, livreur ou tournée…"
+            aria-label="Rechercher un véhicule"
+          />
+        </InputGroup>
+        <FilterSelect
+          label="État"
+          value={focus}
+          onChange={(value) => setFocus(value as StockFocus)}
+          options={[
+            { value: "all", label: "Tous (actifs)" },
+            { value: "route", label: "En tournée" },
+            { value: "loaded", label: "Chargé" },
+            { value: "empty", label: "Vide" },
+            { value: "missing", label: "Entrepôt manquant" },
+            { value: "inactive", label: "Inactifs" },
+          ]}
+        />
       </Toolbar>
 
       {error && (

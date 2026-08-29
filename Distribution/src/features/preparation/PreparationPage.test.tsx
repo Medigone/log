@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { PreparationPage } from "@/features/preparation/PreparationPage";
+import { chooseOption } from "@/test/chooseOption";
 
 const mocks = vi.hoisted(() => {
   const tomorrow = new Date();
@@ -22,8 +23,8 @@ const mocks = vi.hoisted(() => {
   const draftSession = {
     name: "SESSION-PL-1",
     sales_orders: ["SO-1"],
-    pick_lists: [{ name: "PL-1", docstatus: 0, sales_orders: ["SO-1"], locations: [location], grouped: [] }],
-    grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, locations: [location] }],
+    pick_lists: [{ name: "PL-1", docstatus: 0, sales_orders: ["SO-1"], locations: [location], grouped: [] as never[], delivery_notes: [] as Array<{ name: string; customer_name: string }> }],
+    grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, picked_qty: 0, locations: [location] }],
     delivery_notes: [] as Array<{ name: string; customer_name: string }>,
   };
   return {
@@ -39,7 +40,16 @@ const mocks = vi.hoisted(() => {
       { name: "SO-1", customer_name: "Client Test 1", delivery_date: tomorrowIso, total_qty: 2, custom_wilaya: "Alger", custom_commune: "COM-0001", custom_commune_nom: "Alger Centre" },
       { name: "SO-2", customer_name: "Client Test 2", delivery_date: tomorrowIso, total_qty: 3, custom_wilaya: "Alger", custom_commune: "COM-0002", custom_commune_nom: "Bab Ezzouar" },
       { name: "SO-3", customer_name: "Client Test 3", delivery_date: "2099-01-01", total_qty: 1, custom_wilaya: "Oran", custom_commune: "COM-0003", custom_commune_nom: "Oran" },
-    ] },
+    ] as Array<{
+      name: string
+      customer_name: string
+      delivery_date: string
+      total_qty: number
+      custom_wilaya: string
+      custom_commune: string
+      custom_commune_nom: string
+      stock_shortages?: Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number }>
+    }> },
     location,
     draftSession,
     pickListData: { message: structuredClone(draftSession) },
@@ -260,7 +270,7 @@ describe("PreparationPage", () => {
     const user = userEvent.setup();
     renderWorkspace();
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
-    await user.selectOptions(screen.getByRole("combobox", { name: "État" }), "Complet");
+    await chooseOption(user, screen.getByRole("combobox", { name: "État" }), "Complet");
     expect(screen.getByText(/aucun article ne correspond à la recherche/i)).toBeInTheDocument();
     expect(screen.queryByText(/article test/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /encore à scanner/i }));

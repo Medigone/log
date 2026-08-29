@@ -764,3 +764,210 @@ export interface ActivityDashboardData {
   alerts?: ActivityAlert[];
   now?: ActivityNowItem[];
 }
+
+export type DocumentAlert = "expired" | "expiring" | "valid" | "missing" | null;
+
+export interface FleetDocument {
+  key: string;
+  label: string;
+  url?: string | null;
+  expiresOn?: string | null;
+  alert?: DocumentAlert;
+}
+
+export interface FleetRouteSummary {
+  name: string;
+  date?: string | null;
+  lifecycle?: string;
+  driver?: string | null;
+  driverName?: string | null;
+  vehicle?: string | null;
+  vehicleLabel?: string | null;
+  cashStatus?: string;
+}
+
+export interface FleetAssignmentHistory {
+  name: string;
+  action: "Affectation" | "Réaffectation" | "Désaffectation" | string;
+  at?: string | null;
+  user?: string | null;
+  userLabel?: string | null;
+  source?: string | null;
+  reason?: string | null;
+  driver?: string | null;
+  driverLabel?: string | null;
+  vehicle?: string | null;
+  vehicleLabel?: string | null;
+  driverBefore?: string | null;
+  driverBeforeLabel?: string | null;
+  vehicleBefore?: string | null;
+  vehicleBeforeLabel?: string | null;
+  driverAfter?: string | null;
+  driverAfterLabel?: string | null;
+  vehicleAfter?: string | null;
+  vehicleAfterLabel?: string | null;
+}
+
+export interface FleetDriver {
+  name: string;
+  label: string;
+  user?: string | null;
+  userEmail?: string | null;
+  status: "Actif" | "En congé" | "Indisponible" | string;
+  active: boolean;
+  vehicle?: string | null;
+  vehicleLabel?: string | null;
+  vehicleStatus?: string | null;
+  vehicleActive?: boolean | null;
+  license: FleetDocument;
+  cashBalance: number;
+  cashUpdatedAt?: string | null;
+  cash?: DriverCashBox | null;
+  dashboard?: DriverDashboardData;
+  recentRoutes?: FleetRouteSummary[];
+  assignmentHistory?: FleetAssignmentHistory[];
+}
+
+export interface FleetDriverKpis {
+  total: number;
+  active: number;
+  onLeave: number;
+  unavailable: number;
+  withoutVehicle: number;
+  licenseAlerts: number;
+  cashToHandover: number;
+}
+
+export interface FleetDriverBoard {
+  kpis: FleetDriverKpis;
+  drivers: FleetDriver[];
+}
+
+export type MaintenanceAlert = "due" | "upcoming" | null;
+
+export interface FleetEntretien {
+  name: string;
+  status?: string | null;
+  date?: string | null;
+  type?: string | null;
+  km?: number;
+  repairs?: string | null;
+  nextMaintenance?: string | null;
+  documentUrl?: string | null;
+}
+
+export interface FleetVehicle {
+  name: string;
+  nom?: string | null;
+  label: string;
+  registration?: string | null;
+  status: "Disponible" | "En maintenance" | "Hors service" | string;
+  active: boolean;
+  driver?: string | null;
+  driverName?: string | null;
+  driverUser?: string | null;
+  company?: string | null;
+  warehouse?: string | null;
+  fuelType?: string | null;
+  km?: number;
+  capacity?: number | null;
+  costPerKm?: number;
+  lastMaintenance?: string | null;
+  nextMaintenance?: string | null;
+  maintenanceAlert?: MaintenanceAlert;
+  imageUrl?: string | null;
+  documents: FleetDocument[];
+  recentRoutes?: FleetRouteSummary[];
+  activeRoutes?: FleetRouteSummary[];
+  entretiens?: FleetEntretien[];
+  assignmentHistory?: FleetAssignmentHistory[];
+}
+
+export interface FleetVehicleKpis {
+  total: number;
+  available: number;
+  maintenance: number;
+  outOfService: number;
+  withoutDriver: number;
+  documentAlerts: number;
+  maintenanceDue: number;
+}
+
+export interface FleetVehicleBoard {
+  kpis: FleetVehicleKpis;
+  vehicles: FleetVehicle[];
+}
+
+export interface FleetOption {
+  name: string;
+  label: string;
+  email?: string;
+  user?: string;
+  status?: string | null;
+  vehicle?: string | null;
+  vehicleLabel?: string | null;
+  vehicleStatus?: string | null;
+  driver?: string | null;
+  driverName?: string | null;
+  driverUser?: string | null;
+}
+
+export interface FleetOptions {
+  users: FleetOption[];
+  vehicles: FleetOption[];
+  drivers: FleetOption[];
+  companies: FleetOption[];
+}
+
+export interface FleetDriverInput {
+  name?: string;
+  user?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  password?: string;
+  status?: string;
+  active?: boolean | number;
+  vehicle?: string | null;
+  licenseExpiry?: string | null;
+}
+
+export interface FleetVehicleInput {
+  name?: string;
+  label?: string;
+  nom?: string;
+  registration?: string;
+  immatriculation?: string;
+  company?: string;
+  status?: string;
+  active?: boolean | number;
+  fuelType?: string;
+  capacity?: number | null;
+  km?: number;
+  costPerKm?: number;
+  driver?: string | null;
+  nextMaintenance?: string | null;
+  lastMaintenance?: string | null;
+  insuranceExpiry?: string | null;
+  inspectionExpiry?: string | null;
+}
+
+export interface FleetDocumentUpload {
+  doctype: "Livreur" | "Vehicule";
+  name: string;
+  field: string;
+  filename: string;
+  content: string;
+  expiry?: string | null;
+}
+
+export interface FleetEntretienInput {
+  vehicle: string;
+  status?: string;
+  type?: string;
+  date?: string;
+  dateEntretien?: string | null;
+  km?: number | null;
+  repairs?: string | null;
+  nextMaintenance?: string | null;
+}

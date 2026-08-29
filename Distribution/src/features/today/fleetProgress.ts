@@ -3,7 +3,7 @@ import type { ActivityLiveRoute, ActivityLiveStop, DistributionException, RouteL
 
 export const LIVE_ROUTE_STATES: RouteLifecycle[] = ["Publiée", "En cours", "Retour dépôt"];
 
-export const FLEET_COLORS = ["#457b9d", "#0f766e", "#7c3aed", "#c2410c", "#0369a1", "#15803d"];
+export const FLEET_COLORS = ["#18181b", "#0f766e", "#7c3aed", "#c2410c", "#52525b", "#15803d"];
 
 export type MapPoint = [number, number];
 

@@ -14,7 +14,12 @@ import { DriverApp } from "@/features/driver/DriverApp";
 import { CashierPage } from "@/features/cashier/CashierPage";
 import { DriverCashPage } from "@/features/cashier/DriverCashPage";
 import { VehicleStockPage } from "@/features/stock/VehicleStockPage";
+import { DriversPage } from "@/features/fleet/DriversPage";
+import { DriverDetailsPage } from "@/features/fleet/DriverDetailsPage";
+import { VehiclesPage } from "@/features/fleet/VehiclesPage";
+import { VehicleDetailsPage } from "@/features/fleet/VehicleDetailsPage";
 import { PublicTrackingPage } from "@/features/tracking/PublicTrackingPage";
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { DesktopShell } from "@/layouts/DesktopShell";
 import type { DistributionRole } from "@/shared/types/distribution";
 
@@ -83,6 +88,10 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
         <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="size-7 animate-spin text-brand-600" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
         <Route path="/deliveries" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DeliveriesPage /></RoleGuard>} />
+        <Route path="/livreurs" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DriversPage canWrite={user.role === "responsable"} /></RoleGuard>} />
+        <Route path="/livreurs/:driverId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DriverDetailsPage canWrite={user.role === "responsable"} /></RoleGuard>} />
+        <Route path="/vehicules" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><VehiclesPage canWrite={user.role === "responsable"} /></RoleGuard>} />
+        <Route path="/vehicules/:vehicleId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><VehicleDetailsPage canWrite={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage canLinkRoutes={user.role !== "preparateur"} /></RoleGuard>} />
         <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><DriverCashPage canAdjust={user.role === "responsable"} /></RoleGuard>} />
@@ -105,10 +114,12 @@ function DistributionContent() {
 export default function App() {
   return (
     <FrappeProvider socketPort={import.meta.env.VITE_SOCKET_PORT} siteName={getSiteName()}>
-      <HashRouter>
-        <DistributionContent />
-        <Toaster />
-      </HashRouter>
+      <TooltipProvider>
+        <HashRouter>
+          <DistributionContent />
+          <Toaster />
+        </HashRouter>
+      </TooltipProvider>
     </FrappeProvider>
   );
 }

@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Banknote, Check, CircleDollarSign, LoaderCircle, ReceiptText, RefreshCw } from "lucide-react";
+import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
 import { Money } from "@/components/ui/money";
-import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { Textarea } from "@/components/ui/textarea";
-import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
+import { Toolbar } from "@/components/ui/toolbar";
 import { apiErrorMessage, useCashierReconciliation, useCashierRoutes, useDistributionMutations } from "@/shared/api/distribution";
 import { formatMoney } from "@/shared/format";
 import type { CashCollection, CashReconciliationInput, InvoiceAllocation } from "@/shared/types/distribution";
@@ -135,35 +136,42 @@ export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscr
       />
 
       <Toolbar>
-        <ToolbarField label="Du" className="w-36">
-          <Input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </ToolbarField>
-        <ToolbarField label="Au" className="w-36">
-          <Input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        </ToolbarField>
-        <ToolbarField label="État" className="w-44">
-          <NativeSelect aria-label="État" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">Tous</option>
-            <option>À contrôler</option>
-            <option>Écart</option>
-            <option>Validée</option>
-            <option>Sans encaissement</option>
-          </NativeSelect>
-        </ToolbarField>
-        <ToolbarField label="Tournée" className="min-w-56 flex-1">
-          <NativeSelect
-            aria-label="Tournée"
-            value={selectedRoute}
-            onChange={(event) => setSelectedRoute(event.target.value)}
-          >
-            <option value="">Sélectionner</option>
-            {routes.map((route) => (
-              <option key={route.name} value={route.name}>
-                {route.name} · {route.driverName || route.driver}
-              </option>
-            ))}
-          </NativeSelect>
-        </ToolbarField>
+        <InputGroup className="w-36 bg-background">
+          <InputGroupAddon>
+            <span className="text-muted-foreground">Du</span>
+          </InputGroupAddon>
+          <InputGroupInput type="date" aria-label="Du" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </InputGroup>
+        <InputGroup className="w-36 bg-background">
+          <InputGroupAddon>
+            <span className="text-muted-foreground">Au</span>
+          </InputGroupAddon>
+          <InputGroupInput type="date" aria-label="Au" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </InputGroup>
+        <FilterSelect
+          label="État"
+          value={status || "all"}
+          onChange={(value) => setStatus(value === "all" ? "" : value)}
+          options={[
+            { value: "all", label: "Tous" },
+            { value: "À contrôler", label: "À contrôler" },
+            { value: "Écart", label: "Écart" },
+            { value: "Validée", label: "Validée" },
+            { value: "Sans encaissement", label: "Sans encaissement" },
+          ]}
+        />
+        <FilterSelect
+          label="Tournée"
+          value={selectedRoute || "all"}
+          onChange={(value) => setSelectedRoute(value === "all" ? "" : value)}
+          options={[
+            { value: "all", label: "Sélectionner" },
+            ...routes.map((route) => ({
+              value: route.name,
+              label: `${route.name} · ${route.driverName || route.driver}`,
+            })),
+          ]}
+        />
       </Toolbar>
 
       {(routesError || detailError) && (

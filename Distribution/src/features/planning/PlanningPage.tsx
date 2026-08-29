@@ -10,10 +10,12 @@ import {
   LocateFixed,
   Pencil,
   RefreshCw,
+  Search,
 } from "lucide-react";
+import { FilterSelect, FormSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
@@ -29,7 +31,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
+import { Toolbar } from "@/components/ui/toolbar";
 import { apiErrorMessage, useDistributionMutations, usePlanningBoard } from "@/shared/api/distribution";
 import { planningStatusTone, routeLifecycleTone } from "@/shared/design/statusTone";
 import type {
@@ -225,11 +227,10 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
 
           <label className="flex flex-col gap-1.5">
             <span className="t-micro text-muted-foreground">Livreur</span>
-            <NativeSelect
+            <FormSelect
               aria-label="Livreur"
               value={driver}
-              onChange={(event) => {
-                const nextDriver = event.target.value;
+              onChange={(nextDriver) => {
                 setDriver(nextDriver);
                 const defaultVehicle = drivers.find((item) => item.name === nextDriver)?.vehicle;
                 if (defaultVehicle && vehicles.some((item) => item.name === defaultVehicle && item.active)) {
@@ -237,37 +238,31 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
                 }
                 resetTarget();
               }}
-            >
-              <option value="">Sélectionner</option>
-              {drivers
-                .filter((item) => item.active || item.name === driver)
-                .map((item) => (
-                  <option key={item.name} value={item.name}>
-                    {item.label}
-                  </option>
-                ))}
-            </NativeSelect>
+              options={[
+                { value: "", label: "Sélectionner" },
+                ...drivers
+                  .filter((item) => item.active || item.name === driver)
+                  .map((item) => ({ value: item.name, label: item.label })),
+              ]}
+            />
           </label>
 
           <label className="flex flex-col gap-1.5">
             <span className="t-micro text-muted-foreground">Véhicule</span>
-            <NativeSelect
+            <FormSelect
               aria-label="Véhicule"
               value={vehicle}
-              onChange={(event) => {
-                setVehicle(event.target.value);
+              onChange={(nextVehicle) => {
+                setVehicle(nextVehicle);
                 resetTarget();
               }}
-            >
-              <option value="">Sélectionner</option>
-              {vehicles
-                .filter((item) => item.active || item.name === vehicle)
-                .map((item) => (
-                  <option key={item.name} value={item.name}>
-                    {item.label}
-                  </option>
-                ))}
-            </NativeSelect>
+              options={[
+                { value: "", label: "Sélectionner" },
+                ...vehicles
+                  .filter((item) => item.active || item.name === vehicle)
+                  .map((item) => ({ value: item.name, label: item.label })),
+              ]}
+            />
           </label>
 
           {isNewAssignment ? (
@@ -275,19 +270,19 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
               {compatible.length > 1 && (
                 <label className="flex flex-col gap-1.5 sm:col-span-2">
                   <span className="t-micro text-amber-700">Tournée</span>
-                  <NativeSelect
+                  <FormSelect
                     aria-label="Tournée"
                     value={targetRouteId}
-                    onChange={(event) => setTargetRouteId(event.target.value)}
+                    onChange={setTargetRouteId}
                     className="border-amber-300"
-                  >
-                    <option value="">Choisir la tournée</option>
-                    {compatible.map((route) => (
-                      <option key={route.name} value={route.name}>
-                        {route.name} · {route.stops.length} arrêt(s)
-                      </option>
-                    ))}
-                  </NativeSelect>
+                    options={[
+                      { value: "", label: "Choisir la tournée" },
+                      ...compatible.map((route) => ({
+                        value: route.name,
+                        label: `${route.name} · ${route.stops.length} arrêt(s)`,
+                      })),
+                    ]}
+                  />
                   <span className="t-meta text-amber-800">
                     Plusieurs tournées ont exactement le même créneau et les mêmes ressources.
                   </span>
@@ -306,18 +301,18 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
               {compatible.length > 0 && (
                 <label className="flex flex-col gap-1.5 sm:col-span-2">
                   <span className="t-micro text-muted-foreground">Tournée existante</span>
-                  <NativeSelect
+                  <FormSelect
                     aria-label="Tournée existante"
                     value={targetRouteId}
-                    onChange={(event) => setTargetRouteId(event.target.value)}
-                  >
-                    <option value="">Mettre à jour ou créer automatiquement</option>
-                    {compatible.map((route) => (
-                      <option key={route.name} value={route.name}>
-                        {route.name} · {route.stops.length} arrêt(s) · rév. {route.revision}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                    onChange={setTargetRouteId}
+                    options={[
+                      { value: "", label: "Mettre à jour ou créer automatiquement" },
+                      ...compatible.map((route) => ({
+                        value: route.name,
+                        label: `${route.name} · ${route.stops.length} arrêt(s) · rév. ${route.revision}`,
+                      })),
+                    ]}
+                  />
                 </label>
               )}
               <div className="rounded-md border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900 sm:col-span-2">
@@ -548,66 +543,53 @@ export function PlanningPage() {
       )}
 
       <Toolbar>
-        <ToolbarField label="Du" className="w-36">
-          <Input type="date" aria-label="Du" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </ToolbarField>
-        <ToolbarField label="Au" className="w-36">
-          <Input type="date" aria-label="Au" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        </ToolbarField>
-        <ToolbarField label="Recherche" className="min-w-56 flex-1">
-          <Input
+        <InputGroup className="w-36 bg-background">
+          <InputGroupAddon>
+            <span className="text-muted-foreground">Du</span>
+          </InputGroupAddon>
+          <InputGroupInput type="date" aria-label="Du" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+        </InputGroup>
+        <InputGroup className="w-36 bg-background">
+          <InputGroupAddon>
+            <span className="text-muted-foreground">Au</span>
+          </InputGroupAddon>
+          <InputGroupInput type="date" aria-label="Au" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+        </InputGroup>
+        <InputGroup className="min-w-48 flex-1 bg-background">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
             aria-label="Recherche"
             value={filters.search || ""}
             onChange={(event) => setFilters((value) => ({ ...value, search: event.target.value }))}
             placeholder="BL, client, commune…"
           />
-        </ToolbarField>
-        <ToolbarField label="Statut" className="w-44">
-          <NativeSelect
-            aria-label="Statut"
-            value={filters.status || ""}
-            onChange={(event) => setFilters((value) => ({ ...value, status: event.target.value as PlanningStatus | "" }))}
-          >
-            <option value="">Tous</option>
-            {PLANNING_STATUSES.map((status) => (
-              <option key={status}>{status}</option>
-            ))}
-          </NativeSelect>
-        </ToolbarField>
-        <ToolbarField label="Livreur" className="w-44">
-          <NativeSelect
-            aria-label="Livreur"
-            value={filters.driver || ""}
-            onChange={(event) => setFilters((value) => ({ ...value, driver: event.target.value }))}
-          >
-            <option value="">Tous</option>
-            {board?.drivers.map((item) => (
-              <option key={item.name} value={item.name}>
-                {item.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </ToolbarField>
-        <ToolbarField label="Véhicule" className="w-44">
-          <NativeSelect
-            aria-label="Véhicule"
-            value={filters.vehicle || ""}
-            onChange={(event) => setFilters((value) => ({ ...value, vehicle: event.target.value }))}
-          >
-            <option value="">Tous</option>
-            {board?.vehicles.map((item) => (
-              <option key={item.name} value={item.name}>
-                {item.label}
-              </option>
-            ))}
-          </NativeSelect>
-        </ToolbarField>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input bg-white px-3 text-sm font-medium">
+        </InputGroup>
+        <FilterSelect
+          label="Statut"
+          value={filters.status || "all"}
+          onChange={(status) => setFilters((value) => ({ ...value, status: status === "all" ? "" : (status as PlanningStatus) }))}
+          options={[{ value: "all", label: "Tous" }, ...PLANNING_STATUSES.map((status) => ({ value: status, label: status }))]}
+        />
+        <FilterSelect
+          label="Livreur"
+          value={filters.driver || "all"}
+          onChange={(driver) => setFilters((value) => ({ ...value, driver: driver === "all" ? "" : driver }))}
+          options={[{ value: "all", label: "Tous" }, ...(board?.drivers.map((item) => ({ value: item.name, label: item.label })) || [])]}
+        />
+        <FilterSelect
+          label="Véhicule"
+          value={filters.vehicle || "all"}
+          onChange={(vehicle) => setFilters((value) => ({ ...value, vehicle: vehicle === "all" ? "" : vehicle }))}
+          options={[{ value: "all", label: "Tous" }, ...(board?.vehicles.map((item) => ({ value: item.name, label: item.label })) || [])]}
+        />
+        <label className="flex h-8 cursor-pointer items-center gap-2 rounded-lg border bg-background px-2.5 text-sm font-medium">
           <input
             type="checkbox"
             checked={Boolean(filters.alertsOnly)}
             onChange={(event) => setFilters((value) => ({ ...value, alertsOnly: event.target.checked }))}
-            className="size-4 accent-brand-600"
+            className="size-4 accent-primary"
           />
           Alertes seules
         </label>

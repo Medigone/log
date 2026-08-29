@@ -27,6 +27,34 @@ export function formatShortDate(value?: string) {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+/** Date ISO locale → `31 août 2026`. */
+export function formatLongDate(value?: string) {
+  const parts = parseIsoDate(value);
+  if (!parts) return value ? value : "—";
+  return new Date(parts.year, parts.month - 1, parts.day).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export function parseIsoDate(value?: string) {
+  if (!value) return null;
+  const [year, month, day] = value.slice(0, 10).split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return { year, month, day };
+}
+
+/** Nombre de jours calendaires entre aujourd’hui et une date ISO (négatif si passé). */
+export function calendarDaysUntil(value: string, todayValue?: string) {
+  const target = parseIsoDate(value);
+  const today = parseIsoDate(todayValue) ?? parseIsoDate(new Date().toLocaleDateString("en-CA"));
+  if (!target || !today) return null;
+  const start = Date.UTC(today.year, today.month - 1, today.day);
+  const end = Date.UTC(target.year, target.month - 1, target.day);
+  return Math.round((end - start) / 86_400_000);
+}
+
 /** Horodatage complet, locale fr-DZ. */
 export function formatDateTime(value?: string) {
   if (!value) return "—";

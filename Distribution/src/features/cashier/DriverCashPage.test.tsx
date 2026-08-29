@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { DriverCashPage } from "@/features/cashier/DriverCashPage";
+import { chooseOption } from "@/test/chooseOption";
 
 const mocks = vi.hoisted(() => ({
   adjust: vi.fn().mockResolvedValue({ balance: -200 }),
@@ -69,7 +70,7 @@ describe("DriverCashPage", () => {
 
     await user.click(screen.getByRole("button", { name: /nouveau mouvement/i }));
     const dialog = await screen.findByRole("dialog");
-    await user.selectOptions(within(dialog).getByRole("combobox"), "Remise");
+    await chooseOption(user, within(dialog).getByRole("combobox"), "Remise");
     await user.type(within(dialog).getByRole("spinbutton"), "200");
     await user.type(within(dialog).getByPlaceholderText(/expliquez le mouvement/i), "Remise du soir");
     await user.click(within(dialog).getByRole("button", { name: /enregistrer/i }));
@@ -103,11 +104,11 @@ describe("DriverCashPage", () => {
     expect(screen.getByRole("heading", { name: "Nadir" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Karim" })).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "État" }), "Inactifs");
+    await chooseOption(user, screen.getByRole("combobox", { name: "État" }), "Inactifs");
     expect(screen.getByRole("heading", { name: "Samir" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Nadir" })).not.toBeInTheDocument();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "État" }), "Tous (actifs)");
+    await chooseOption(user, screen.getByRole("combobox", { name: "État" }), "Tous (actifs)");
     await user.type(screen.getByRole("textbox", { name: /rechercher un livreur/i }), "Karim");
     expect(screen.getByRole("heading", { name: "Karim" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /nadir/i })).not.toBeInTheDocument();

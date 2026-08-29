@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AlertCircle, ArrowRight, CheckCircle2, MapPin, RotateCcw, Route, Truck } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, MapPin, RotateCcw, Route, Search, Truck } from "lucide-react";
+import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
-import { NativeSelect } from "@/components/ui/native-select";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Toolbar, ToolbarField, ToolbarSpacer } from "@/components/ui/toolbar";
+import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { FleetMap } from "@/features/today/FleetMap";
 import { fleetColor, isLiveRoute, stopProgress } from "@/features/today/fleetProgress";
@@ -267,45 +267,46 @@ export function DeliveriesPage() {
       />
 
       <Toolbar>
-        <ToolbarField label="Date" className="w-40">
-          <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-        </ToolbarField>
-        <ToolbarField label="Cycle de vie" className="w-44">
-          <NativeSelect
-            aria-label="Cycle de vie"
-            value={lifecycle}
-            onChange={(event) => {
-              setLifecycle(event.target.value as RouteLifecycle | "");
-              setKpi("all");
-            }}
-          >
-            <option value="">Tous</option>
-            {LIFECYCLES.map((status) => (
-              <option key={status}>{status}</option>
-            ))}
-          </NativeSelect>
-        </ToolbarField>
-        <ToolbarField label="Livreur" className="w-44">
-          <NativeSelect aria-label="Livreur" value={driver} onChange={(event) => setDriver(event.target.value)}>
-            <option value="">Tous</option>
-            {(data?.message.drivers || []).map((item) => (
-              <option key={item.name} value={item.name}>{item.label}</option>
-            ))}
-          </NativeSelect>
-        </ToolbarField>
-        <ToolbarField label="Recherche" className="min-w-56 flex-1">
-          <Input
+        <InputGroup className="w-40 bg-background">
+          <InputGroupAddon>
+            <span className="text-muted-foreground">Date</span>
+          </InputGroupAddon>
+          <InputGroupInput type="date" aria-label="Date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </InputGroup>
+        <FilterSelect
+          label="Cycle de vie"
+          value={lifecycle || "all"}
+          onChange={(value) => {
+            setLifecycle(value === "all" ? "" : (value as RouteLifecycle));
+            setKpi("all");
+          }}
+          options={[{ value: "all", label: "Tous" }, ...LIFECYCLES.map((status) => ({ value: status, label: status }))]}
+        />
+        <FilterSelect
+          label="Livreur"
+          value={driver || "all"}
+          onChange={(value) => setDriver(value === "all" ? "" : value)}
+          options={[
+            { value: "all", label: "Tous" },
+            ...(data?.message.drivers || []).map((item) => ({ value: item.name, label: item.label })),
+          ]}
+        />
+        <InputGroup className="min-w-48 flex-1 bg-background">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
             aria-label="Recherche"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Tournée, client, BL…"
           />
-        </ToolbarField>
+        </InputGroup>
         {filtersActive && (
           <>
             <ToolbarSpacer />
-            <Button type="button" variant="ghost" onClick={clearFilters}>
-              <RotateCcw />
+            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+              <RotateCcw data-icon="inline-start" />
               Réinitialiser
             </Button>
           </>

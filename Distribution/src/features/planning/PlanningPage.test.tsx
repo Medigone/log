@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { PlanningPage } from "@/features/planning/PlanningPage";
 import { reorderStops } from "@/features/planning/routeOrder";
+import { chooseOption } from "@/test/chooseOption";
 import type { DistributionRoute, PlanningBoard, RouteStop } from "@/shared/types/distribution";
 
 const mocks = vi.hoisted(() => ({
@@ -91,7 +92,8 @@ vi.mock("@/shared/api/distribution", () => ({
 vi.mock("@/features/planning/RouteMap", () => ({ RouteMap: () => <div>Carte OSM</div> }));
 
 describe("PlanningPage", () => {
-  it("ouvre la page sans date ni autre filtre", () => {
+  it("ouvre la page sans date ni autre filtre", async () => {
+    const user = userEvent.setup();
     render(
       <MemoryRouter>
         <PlanningPage />
@@ -100,10 +102,11 @@ describe("PlanningPage", () => {
     expect(screen.getByLabelText(/^du$/i)).toHaveValue("");
     expect(screen.getByLabelText(/^au$/i)).toHaveValue("");
     expect(screen.getByLabelText("Recherche")).toHaveValue("");
-    expect(screen.getByLabelText("Statut")).toHaveValue("");
+    expect(screen.getByLabelText("Statut")).toBeInTheDocument();
+    expect(screen.getByLabelText("Livreur")).toBeInTheDocument();
+    expect(screen.getByLabelText("Véhicule")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("Statut"));
     expect(screen.getByRole("option", { name: "En retard" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Livreur")).toHaveValue("");
-    expect(screen.getByLabelText("Véhicule")).toHaveValue("");
     expect(screen.getByRole("checkbox", { name: /alertes seules/i })).not.toBeChecked();
     expect(mocks.boardArgs).toEqual({ dateFrom: "", dateTo: "", filters: { allDates: true } });
   });
@@ -125,8 +128,8 @@ describe("PlanningPage", () => {
     expect(within(dialog).queryByLabelText("Position")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Tournée compatible")).not.toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Motif")).not.toBeInTheDocument();
-    await user.selectOptions(within(dialog).getByLabelText("Livreur"), "DRV-1");
-    await user.selectOptions(within(dialog).getByLabelText("Véhicule"), "VEH-1");
+    await chooseOption(user, within(dialog).getByLabelText("Livreur"), "Livreur Test");
+    await chooseOption(user, within(dialog).getByLabelText("Véhicule"), "Camion Test");
     await user.click(screen.getByRole("button", { name: /enregistrer la planification/i }));
     expect(mocks.scheduleDeliveryNote).toHaveBeenCalledWith(expect.objectContaining({ deliveryNote: "DN-1", driver: "DRV-1", vehicle: "VEH-1", position: 1 }));
     expect(mocks.reassignDeliveryNote).not.toHaveBeenCalled();
@@ -146,7 +149,7 @@ describe("PlanningPage", () => {
     const today = new Date();
     const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     expect(within(dialog).getByLabelText("Date planifiée")).toHaveValue(iso);
-    await user.selectOptions(within(dialog).getByLabelText("Livreur"), "DRV-2");
+    await chooseOption(user, within(dialog).getByLabelText("Livreur"), "Livreur 2");
     await user.type(within(dialog).getByLabelText("Motif"), "Client reporté");
     await user.click(screen.getByRole("button", { name: /enregistrer la reprogrammation/i }));
     expect(mocks.reassignDeliveryNote).toHaveBeenCalledWith(

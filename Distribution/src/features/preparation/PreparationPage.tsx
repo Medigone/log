@@ -1,15 +1,16 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
-import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toolbar, ToolbarField } from "@/components/ui/toolbar";
+import { Toolbar } from "@/components/ui/toolbar";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -779,26 +780,28 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
           </section>
 
           <Toolbar>
-            <ToolbarField label="Rechercher" className="min-w-56 flex-1">
-              <span className="relative block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Article, entrepôt ou commande…"
-                  className="pl-9"
-                  aria-label="Rechercher un article"
-                />
-              </span>
-            </ToolbarField>
-            <ToolbarField label="État" className="w-44">
-              <NativeSelect aria-label="État" value={focus} onChange={(event) => setFocus(event.target.value as LineFocus)}>
-                <option value="all">Tous</option>
-                <option value="remaining">Restant</option>
-                <option value="complete">Complet</option>
-                <option value="variance">Écart</option>
-              </NativeSelect>
-            </ToolbarField>
+            <InputGroup className="min-w-48 flex-1 bg-background">
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Article, entrepôt ou commande…"
+                aria-label="Rechercher un article"
+              />
+            </InputGroup>
+            <FilterSelect
+              label="État"
+              value={focus}
+              onChange={(value) => setFocus(value as LineFocus)}
+              options={[
+                { value: "all", label: "Tous" },
+                { value: "remaining", label: "Restant" },
+                { value: "complete", label: "Complet" },
+                { value: "variance", label: "Écart" },
+              ]}
+            />
           </Toolbar>
 
           <Card>

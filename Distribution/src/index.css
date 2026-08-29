@@ -1,35 +1,28 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 /* ==========================================================================
-   IntraPro Distribution — socle de design
-   Marque : #457B9D (= brand-600). Fond blanc, bordures fines, deux densités :
-   « console » au bureau, « touch » sur l'app livreur.
+   IntraPro Distribution — socle shadcn base-nova (primary noir / neutral)
+   Conservé : rampe brand (zinc), densité touch, typo .t-*, marqueurs Leaflet.
    ========================================================================== */
 
+@custom-variant dark (&:is(.dark *));
+
 @theme {
-  /* --- Rampe de marque (teinte constante 203°, celle de #457B9D) --- */
-  --color-brand-50: #f2f7fa;
-  --color-brand-100: #e3edf3;
-  --color-brand-200: #c7dbe7;
-  --color-brand-300: #a0c3d7;
-  --color-brand-400: #6ba3c4;
-  --color-brand-500: #4b87ab;
-  --color-brand-600: #457b9d; /* ← la marque */
-  --color-brand-700: #3a6884; /* texte de marque sur blanc (6.0:1) + hover */
-  --color-brand-800: #2e546c;
-  --color-brand-900: #264659;
-  --color-brand-950: #172d3a;
+  --color-brand-50: oklch(0.97 0 0);
+  --color-brand-100: oklch(0.95 0 0);
+  --color-brand-200: oklch(0.922 0 0);
+  --color-brand-300: oklch(0.87 0 0);
+  --color-brand-400: oklch(0.708 0 0);
+  --color-brand-500: oklch(0.556 0 0);
+  --color-brand-600: oklch(0.205 0 0);
+  --color-brand-700: oklch(0.145 0 0);
+  --color-brand-800: oklch(0.145 0 0);
+  --color-brand-900: oklch(0.145 0 0);
+  --color-brand-950: oklch(0.145 0 0);
 
-  /* --- Rayons : 8px en console, 16px au doigt --- */
-  --radius: 0.5rem;
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
   --radius-touch: 1rem;
-
-  /* --- Ombres : la console s'appuie sur les bordures, pas sur les ombres --- */
   --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04);
   --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
   --shadow-overlay: 0 16px 48px -12px rgb(15 23 42 / 0.24);
@@ -51,12 +44,35 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --font-heading: var(--font-sans);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
 
-  /* Tokens applicatifs */
   --color-surface: var(--surface);
   --color-surface-subtle: var(--surface-subtle);
   --color-hairline: var(--border);
@@ -65,95 +81,112 @@
 }
 
 :root {
-  font-family: system-ui, -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.45 0.13 155);
+  --warning: #f4a261;
+  --info: oklch(0.48 0.1 230);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 
-  /* Surfaces — fond blanc, séparation par bordures fines */
-  --background: #ffffff;
-  --surface: #ffffff;
-  --surface-subtle: #f7f9fb;
-  --card: #ffffff;
-  --popover: #ffffff;
-
-  /* Texte */
-  --foreground: #0f172a;
-  --card-foreground: #0f172a;
-  --popover-foreground: #0f172a;
-  --text-subtle: #94a3b8;
-
-  /* Bordures */
-  --border: #e5e9ef;
-  --border-strong: #cfd6e0;
-  --input: #dfe5ec;
-
-  /* Rôles sémantiques */
-  --primary: var(--color-brand-600);
-  --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172a;
-  --muted: #f7f9fb;
-  --muted-foreground: #64748b;
-  --accent: #f7f9fb;
-  --accent-foreground: #0f172a;
-  --destructive: #dc2626;
-  --destructive-foreground: #ffffff;
-  --ring: var(--color-brand-600);
+  --surface: oklch(1 0 0);
+  --surface-subtle: oklch(0.97 0 0);
+  --border-strong: oklch(0.87 0 0);
+  --text-subtle: oklch(0.65 0 0);
 }
 
-/* ==========================================================================
-   Base
-   ========================================================================== */
-
-html,
-body,
-#root {
-  height: 100%;
-}
-
-body {
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button {
-  font-family: inherit;
-}
-
-a:focus-visible,
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-[role="button"]:focus-visible {
-  outline: 2px solid var(--color-brand-600);
-  outline-offset: 2px;
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.78 0.13 155);
+  --warning: #f4a261;
+  --info: oklch(0.75 0.1 230);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+  --surface: oklch(0.205 0 0);
+  --surface-subtle: oklch(0.269 0 0);
+  --border-strong: oklch(1 0 0 / 18%);
+  --text-subtle: oklch(0.708 0 0);
 }
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #root {
+    min-height: 100%;
+    height: 100%;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply m-0 antialiased bg-background text-foreground;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  html {
+    @apply font-sans;
   }
 }
 
-/* ==========================================================================
-   Échelle typographique — une seule, appliquée partout
-   ========================================================================== */
-
 @layer components {
-  /* 24 / 600 — titre de page */
   .t-display {
     font-size: 1.5rem;
     line-height: 2rem;
@@ -161,7 +194,6 @@ textarea:focus-visible,
     letter-spacing: -0.02em;
   }
 
-  /* 16 / 600 — titre de section ou de carte */
   .t-section {
     font-size: 1rem;
     line-height: 1.5rem;
@@ -169,20 +201,17 @@ textarea:focus-visible,
     letter-spacing: -0.01em;
   }
 
-  /* 14 / 400 — corps */
   .t-body {
     font-size: 0.875rem;
     line-height: 1.25rem;
   }
 
-  /* 12 / 500 — métadonnée, libellé secondaire */
   .t-meta {
     font-size: 0.75rem;
     line-height: 1rem;
     font-weight: 500;
   }
 
-  /* 11 / 600 uppercase — surtitre, en-tête de tableau */
   .t-micro {
     font-size: 0.6875rem;
     line-height: 1rem;
@@ -191,16 +220,11 @@ textarea:focus-visible,
     letter-spacing: 0.06em;
   }
 
-  /* Chiffres alignés : montants, quantités, compteurs */
   .num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
   }
 }
-
-/* ==========================================================================
-   Marqueurs Leaflet — alignés sur les tokens de statut
-   ========================================================================== */
 
 .distribution-map-marker,
 .distribution-map-depot {
