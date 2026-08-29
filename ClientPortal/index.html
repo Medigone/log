@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Portail client IntraPro" />
+    <title>IntraPro — Portail client</title>
+    <link rel="icon" type="image/png" href="/assets/log/images/intrapro-mark.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>window.csrf_token = '{{ frappe.session.csrf_token }}';
+      if (!window.frappe) window.frappe = {};
+      frappe.boot = JSON.parse({{ boot }});
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

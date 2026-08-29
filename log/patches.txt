@@ -19,3 +19,8 @@ log.patches.v1_0.initialize_distribution_fulfillment
 log.patches.v1_0.initialize_driver_cash_boxes
 log.patches.v1_0.sync_driver_cash_from_declared_payments
 log.patches.v1_0.sync_driver_cash_from_declared_payments_retry
+log.patches.v1_0.initialize_client_portal
+log.patches.v1_0.initialize_customer_portal_access
+log.patches.v1_0.initialize_item_store_visibility
+log.patches.v1_0.initialize_portal_merchandising
+log.patches.v1_0.add_portal_merchandising_indexes

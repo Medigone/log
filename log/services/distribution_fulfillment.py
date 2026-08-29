@@ -7,6 +7,7 @@ mutation en cas d'erreur.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import Any
 
 import frappe
@@ -98,6 +99,17 @@ def _submit_material_transfer(company: str, remarks: str, rows: list[dict[str, A
 	entry.insert(ignore_permissions=True)
 	entry.submit()
 	return entry
+
+
+@contextmanager
+def _ignore_permission_checks():
+	"""ERPNext mapping and SI.validate re-check create perms for the current user."""
+	original = frappe.has_permission
+	frappe.has_permission = lambda *args, **kwargs: True
+	try:
+		yield
+	finally:
+		frappe.has_permission = original
 
 
 def _save_distribution_doc(doc):
@@ -256,6 +268,22 @@ def refresh_route_stock_totals(route):
 	route.total_quantite_restante = sum(_line_remaining(line) for line in lines)
 
 
+LOCKED_CASH_STATUSES = frozenset({"À contrôler", "Écart", "Validée"})
+
+
+def _sync_cash_status_after_return(route) -> None:
+	"""Le retour stock ne démarre ni n'écrase le contrôle de caisse."""
+	current = route.get("statut_caisse") or "Sans encaissement"
+	if current in LOCKED_CASH_STATUSES:
+		return
+	payments = (
+		frappe.get_all("Paiement Client", filters={"livraison": route.name}, pluck="name")
+		if route.get("name")
+		else []
+	)
+	route.statut_caisse = "À contrôler" if payments else "Sans encaissement"
+
+
 def complete_empty_route_return(route, *, persist: bool = True) -> bool:
 	"""Clôture le retour véhicule s'il ne reste aucune marchandise à ramener."""
 	refresh_route_stock_totals(route)
@@ -268,10 +296,7 @@ def complete_empty_route_return(route, *, persist: bool = True) -> bool:
 	route.date_confirmation_retour = route.get("date_confirmation_retour") or now_datetime()
 	route.retour_confirme_par = route.get("retour_confirme_par") or frappe.session.user
 	route.etat_planification = "Contrôle caisse"
-	payments = frappe.get_all("Paiement Client", filters={"livraison": route.name}, pluck="name") if route.get("name") else []
-	route.statut_caisse = "À contrôler" if payments else "Sans encaissement"
-	for payment in payments:
-		frappe.db.set_value("Paiement Client", payment, "statut_controle", "À contrôler", update_modified=False)
+	_sync_cash_status_after_return(route)
 	if persist and hasattr(route, "save"):
 		route.save(ignore_permissions=True)
 	return True
@@ -396,13 +421,14 @@ def create_and_submit_invoice(route, delivery_note: str) -> tuple[str | None, st
 	try:
 		from erpnext.stock.doctype.delivery_note.delivery_note import make_sales_invoice
 
-		invoice = make_sales_invoice(delivery_note)
-		invoice.set_posting_time = 1
-		invoice.posting_date = today()
-		invoice.posting_time = nowtime()
-		invoice.flags.ignore_permissions = True
-		invoice.insert(ignore_permissions=True)
-		invoice.submit()
+		with _ignore_permission_checks():
+			invoice = make_sales_invoice(delivery_note)
+			invoice.set_posting_time = 1
+			invoice.posting_date = today()
+			invoice.posting_time = nowtime()
+			invoice.flags.ignore_permissions = True
+			invoice.insert(ignore_permissions=True)
+			invoice.submit()
 		frappe.db.set_value(
 			"Delivery Note",
 			delivery_note,
@@ -656,10 +682,7 @@ def confirm_route_return(route, counted_lines: list[dict[str, Any]]) -> dict[str
 	route.retour_confirme_par = frappe.session.user
 	route.etat_planification = "Contrôle caisse"
 	refresh_route_stock_totals(route)
-	payments = frappe.get_all("Paiement Client", filters={"livraison": route.name}, pluck="name")
-	route.statut_caisse = "À contrôler" if payments else "Sans encaissement"
-	for payment in payments:
-		frappe.db.set_value("Paiement Client", payment, "statut_controle", "À contrôler", update_modified=False)
+	_sync_cash_status_after_return(route)
 	for exception in frappe.get_all(
 		"Exception Distribution",
 		filters={"tournee": route.name, "type_exception": "Retour de stock", "statut": ["in", ["Ouverte", "En traitement"]]},

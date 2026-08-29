@@ -9,6 +9,7 @@ import type {
   DriverCashAdjustmentInput,
   DriverCashBox,
   DriverDashboardData,
+  DriverRouteBoard,
   OrderChangeImpact,
   PlanningFilters,
   PlanningBoard,
@@ -60,6 +61,14 @@ export function useDriverRoutes(date: string) {
     "log.api.distribution.get_driver_routes",
     { date },
     `distribution-driver-routes-${date}`,
+  );
+}
+
+export function useDriverRouteBoard(date: string) {
+  return useFrappeGetCall<FrappeMessage<DriverRouteBoard>>(
+    "log.api.distribution.get_driver_route_board",
+    { date },
+    `distribution-driver-route-board-${date}`,
   );
 }
 
@@ -163,7 +172,7 @@ export function useDriverRoute(routeId?: string) {
   return useFrappeGetCall<FrappeMessage<DistributionRoute | null>>(
     "log.api.distribution.get_driver_route",
     routeId ? { route_id: routeId } : undefined,
-    routeId ? `distribution-driver-${routeId}` : "distribution-driver-current",
+    routeId ? `distribution-driver-${routeId}` : null,
   );
 }
 

@@ -72,18 +72,24 @@ def vehicle_stock_snapshot() -> list[dict[str, Any]]:
 	)
 	warehouses = [row.warehouse for row in vehicles if row.warehouse]
 	bins = []
-	if warehouses and frappe.db.table_exists("tabBin"):
+	if warehouses and frappe.db.table_exists("Bin"):
 		bins = frappe.get_all(
 			"Bin",
 			filters={"warehouse": ["in", warehouses], "actual_qty": ["!=", 0]},
 			fields=["item_code", "warehouse", "actual_qty", "stock_uom"],
+			ignore_permissions=True,
 		)
 	item_codes = list({row.item_code for row in bins if row.item_code})
 	item_names = {}
 	if item_codes:
 		item_names = {
 			row.name: row.item_name or row.name
-			for row in frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=["name", "item_name"])
+			for row in frappe.get_all(
+				"Item",
+				filters={"name": ["in", item_codes]},
+				fields=["name", "item_name"],
+				ignore_permissions=True,
+			)
 		}
 	vehicle_names = [row.name for row in vehicles]
 	routes = []

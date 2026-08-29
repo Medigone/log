@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrappeAuth } from "frappe-react-sdk";
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   LocateFixed,
   LogOut,
@@ -24,9 +25,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { apiErrorMessage, useDistributionMutations, useDriverDashboard, useDriverRoutes } from "@/shared/api/distribution";
+import {
+  apiErrorMessage,
+  useDistributionMutations,
+  useDriverDashboard,
+  useDriverRoute,
+  useDriverRouteBoard,
+} from "@/shared/api/distribution";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { formatMoney } from "@/shared/format";
 import { BrandLogo } from "@/shared/ui/BrandLogo";
@@ -44,10 +50,12 @@ import {
   writeVerifiedNotes,
 } from "@/features/driver/departureWorkflow";
 import { DriverDashboard } from "@/features/driver/DriverDashboard";
+import { DriverRouteList } from "@/features/driver/DriverRouteList";
 import { StopCompletionWizard } from "@/features/driver/StopCompletionWizard";
 import { directionUrl, isStopCompleted, stopAddress, stopFormKey } from "@/features/driver/stopHelpers";
 
 type DriverTab = "route" | "scanner" | "bilan";
+type RouteListTab = "programmed" | "history";
 
 const DRIVER_TABS = [
   { value: "route", label: "Tournée", icon: MapPin },
@@ -274,25 +282,40 @@ function RouteNowView({
 
 export function DriverApp() {
   const [tab, setTab] = useState<DriverTab>("route");
+  const [listTab, setListTab] = useState<RouteListTab>("programmed");
   const [selectedStop, setSelectedStop] = useState<RouteStop>();
   const [scanValue, setScanValue] = useState("");
   const [message, setMessage] = useState("");
   const [selectedRouteId, setSelectedRouteId] = useState("");
+  const [openRouteId, setOpenRouteId] = useState("");
   const [verified, setVerified] = useState<string[]>([]);
   const [highlightedNote, setHighlightedNote] = useState<string>();
   const [confirmKind, setConfirmKind] = useState<"load" | "start" | null>(null);
   const [pendingCount, setPendingCount] = useState(() => readPendingOperations().length);
   const { logout } = useFrappeAuth();
   const today = localDate();
-  const { data, error, isLoading, mutate } = useDriverRoutes(today);
+  const { data, error, isLoading, mutate } = useDriverRouteBoard(today);
   const { data: dashboardData, error: dashboardError, isLoading: dashboardLoading, mutate: mutateDashboard } =
     useDriverDashboard(today);
   const actions = useDistributionMutations();
-  const routes = useMemo(() => data?.message || [], [data?.message]);
-  const routeData = routes.find((route) => route.name === selectedRouteId) || routes[0];
+  const programmed = useMemo(() => data?.message?.programmed || [], [data?.message]);
+  const history = useMemo(() => data?.message?.history || [], [data?.message]);
+  const needsHistoryFetch = Boolean(openRouteId && !programmed.some((route) => route.name === openRouteId));
+  const { data: fetchedRouteData, isLoading: historyRouteLoading, mutate: mutateOpenRoute } = useDriverRoute(
+    needsHistoryFetch ? openRouteId : undefined,
+  );
+  const fetchedRoute = fetchedRouteData?.message?.name === openRouteId ? fetchedRouteData.message : undefined;
+  const detailRoute = programmed.find((route) => route.name === openRouteId) || fetchedRoute;
+  const showingList = tab === "route" && !openRouteId;
+  const showDetail = tab === "route" && Boolean(openRouteId);
+  const routeData =
+    (openRouteId ? detailRoute : undefined)
+    || programmed.find((route) => route.name === selectedRouteId)
+    || programmed[0];
   const completeStopRef = useRef(actions.completeStop);
   const mutateRef = useRef(mutate);
   const mutateDashboardRef = useRef(mutateDashboard);
+  const mutateOpenRouteRef = useRef(mutateOpenRoute);
 
   useEffect(() => {
     completeStopRef.current = actions.completeStop;
@@ -303,16 +326,30 @@ export function DriverApp() {
   useEffect(() => {
     mutateDashboardRef.current = mutateDashboard;
   }, [mutateDashboard]);
+  useEffect(() => {
+    mutateOpenRouteRef.current = mutateOpenRoute;
+  }, [mutateOpenRoute]);
 
   const refresh = useCallback(async () => {
-    await Promise.all([mutate(), mutateDashboard()]);
+    await Promise.all([mutate(), mutateDashboard(), mutateOpenRouteRef.current?.()]);
   }, [mutate, mutateDashboard]);
 
   useEffect(() => {
-    if (routes.length && !routes.some((route) => route.name === selectedRouteId)) {
-      setSelectedRouteId(routes[0].name);
+    if (programmed.length && !programmed.some((route) => route.name === selectedRouteId) && !openRouteId) {
+      setSelectedRouteId(programmed[0].name);
     }
-  }, [routes, selectedRouteId]);
+  }, [programmed, selectedRouteId, openRouteId]);
+
+  const openRoute = useCallback((routeId: string) => {
+    setSelectedRouteId(routeId);
+    setOpenRouteId(routeId);
+  }, []);
+
+  const closeRoute = useCallback(() => {
+    setOpenRouteId("");
+    setSelectedStop(undefined);
+    setConfirmKind(null);
+  }, []);
 
   const retryPending = useCallback(async () => {
     const pending = readPendingOperations();
@@ -425,6 +462,8 @@ export function DriverApp() {
     if (!routeData) return;
     const proposal = proposeScanAction(routeData, scanValue, verified);
     setScanValue("");
+    setSelectedRouteId(routeData.name);
+    setOpenRouteId(routeData.name);
     setTab("route");
     setMessage(proposal.message);
     setHighlightedNote(proposal.stop?.deliveryNote);
@@ -457,11 +496,31 @@ export function DriverApp() {
     <div className="mx-auto min-h-screen max-w-xl bg-surface-subtle pb-24 text-foreground">
       <header className="sticky top-0 z-30 bg-brand-600 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white">
         <div className="flex items-center gap-3">
-          <div className="rounded-lg bg-white p-1.5">
-            <BrandLogo compact className="h-7 w-7" alt="IntraPro Distribution" />
-          </div>
+          {showDetail ? (
+            <button
+              type="button"
+              onClick={closeRoute}
+              aria-label="Retour aux tournées"
+              className="grid size-11 place-items-center rounded-xl bg-white/10 transition-colors hover:bg-white/20"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+          ) : (
+            <div className="rounded-lg bg-white p-1.5">
+              <BrandLogo compact className="h-7 w-7" alt="IntraPro Distribution" />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
-            {routeData ? (
+            {showingList ? (
+              <>
+                <p className="text-sm font-semibold tracking-tight">Tournées</p>
+                <p className="t-meta text-brand-100">
+                  {programmed.length
+                    ? `${programmed.length} programmée${programmed.length > 1 ? "s" : ""}`
+                    : "Aucune tournée programmée"}
+                </p>
+              </>
+            ) : routeData ? (
               <>
                 <p className="num truncate text-sm font-semibold tracking-tight">
                   {doneCount}/{totalStops}
@@ -532,46 +591,40 @@ export function DriverApp() {
           />
         )}
 
-        {tab !== "bilan" && isLoading && (
+        {showingList && (
+          <DriverRouteList
+            programmed={programmed}
+            history={history}
+            loading={isLoading}
+            tab={listTab}
+            onTabChange={setListTab}
+            onSelect={openRoute}
+          />
+        )}
+
+        {showDetail && historyRouteLoading && !detailRoute && (
           <div className="space-y-3" aria-busy="true" aria-label="Chargement de la tournée">
             <Skeleton className="h-48 rounded-touch" />
             <Skeleton className="h-32 rounded-touch" />
           </div>
         )}
 
-        {tab !== "bilan" && !isLoading && !routeData && (
+        {tab === "scanner" && isLoading && !routeData && (
+          <div className="space-y-3" aria-busy="true" aria-label="Chargement de la tournée">
+            <Skeleton className="h-48 rounded-touch" />
+            <Skeleton className="h-32 rounded-touch" />
+          </div>
+        )}
+
+        {tab === "scanner" && !isLoading && !routeData && (
           <Card density="touch" className="p-8 text-center">
             <Truck className="mx-auto size-9 text-subtle" />
-            <h2 className="mt-3 t-section">Aucune tournée publiée</h2>
-            <p className="mt-2 t-body text-muted-foreground">Actualisez lorsque le planning est prêt.</p>
-            <Button variant="outline" size="touch" onClick={() => mutate()} className="mt-5">
-              <RefreshCw />
-              Actualiser
-            </Button>
+            <h2 className="mt-3 t-section">Aucune tournée programmée</h2>
+            <p className="mt-2 t-body text-muted-foreground">Ouvrez une tournée pour scanner un bon de livraison.</p>
           </Card>
         )}
 
-        {tab !== "bilan" && routes.length > 1 && (
-          <Card density="touch" className="block p-4">
-            <label className="block">
-              <span className="t-section">Tournée du jour</span>
-              <NativeSelect
-                size="touch"
-                className="mt-2"
-                value={routeData?.name || ""}
-                onChange={(event) => setSelectedRouteId(event.target.value)}
-              >
-                {routes.map((route) => (
-                  <option key={route.name} value={route.name}>
-                    {route.plannedStart?.slice(11, 16) || "--:--"} · {route.name} · {route.lifecycle}
-                  </option>
-                ))}
-              </NativeSelect>
-            </label>
-          </Card>
-        )}
-
-        {routeData && tab === "route" && routeData.lifecycle === "Publiée" && (
+        {showDetail && routeData && routeData.lifecycle === "Publiée" && (
           <DepartureBoard
             route={routeData}
             verified={verified}
@@ -590,7 +643,7 @@ export function DriverApp() {
           />
         )}
 
-        {routeData && tab === "route" && routeData.lifecycle !== "Publiée" && (
+        {showDetail && routeData && routeData.lifecycle !== "Publiée" && (
           <RouteNowView
             routeData={routeData}
             nextStop={nextStop}
@@ -636,7 +689,13 @@ export function DriverApp() {
             <button
               key={item.value}
               type="button"
-              onClick={() => setTab(item.value)}
+              onClick={() => {
+                if (item.value === "route" && tab === "route" && openRouteId) {
+                  closeRoute();
+                  return;
+                }
+                setTab(item.value);
+              }}
               aria-current={active ? "page" : undefined}
               className={`flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-colors ${
                 active ? "text-brand-700" : "text-subtle"

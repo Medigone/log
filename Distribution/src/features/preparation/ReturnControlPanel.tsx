@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, ClipboardCheck, LoaderCircle, RotateCcw, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { apiErrorMessage, useDistributionMutations, useReturnRoutes } from "@/shared/api/distribution";
 import type { DistributionRoute } from "@/shared/types/distribution";
@@ -13,6 +14,15 @@ function isoDate(offsetDays = 0) {
 
 export function hasGoodsToReturn(route: Pick<DistributionRoute, "stock">) {
   return (route.stock?.remainingQuantity || 0) > 0;
+}
+
+export function usePendingReturnRoutes() {
+  const { data, error, isLoading, mutate } = useReturnRoutes(isoDate(-30), isoDate(7));
+  const routes = useMemo(
+    () => (data?.message || []).filter(hasGoodsToReturn),
+    [data?.message],
+  );
+  return { routes, error, isLoading, mutate };
 }
 
 function ReturnRouteCard({ route, onUpdated }: { route: DistributionRoute; onUpdated: () => Promise<unknown> }) {
@@ -102,22 +112,33 @@ function ReturnRouteCard({ route, onUpdated }: { route: DistributionRoute; onUpd
 }
 
 export function ReturnControlPanel() {
-  const { data, error, isLoading, mutate } = useReturnRoutes(isoDate(-30), isoDate(7));
-  const routes = useMemo(
-    () => (data?.message || []).filter(hasGoodsToReturn),
-    [data?.message],
-  );
-  if (!isLoading && !error && routes.length === 0) return null;
+  const { routes, error, isLoading, mutate } = usePendingReturnRoutes();
 
   return (
-    <section className="rounded-lg border border-amber-200 bg-amber-50/40 p-4 sm:p-5" aria-labelledby="return-control-title">
-      <div className="mb-4 flex items-start gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-md bg-amber-100 text-amber-800"><RotateCcw className="h-5 w-5" /></span>
-        <div><h2 id="return-control-title" className="font-semibold text-foreground">Retours à contrôler</h2><p className="text-sm text-slate-600">Recomptage et retour obligatoire du véhicule vers l’entrepôt configuré.</p></div>
+    <section className="flex flex-col gap-4" aria-labelledby="return-control-title">
+      <div>
+        <h2 id="return-control-title" className="font-semibold text-foreground">Retours à contrôler</h2>
+        <p className="text-sm text-muted-foreground">Recomptage et retour du véhicule vers l’entrepôt. Indépendant du contrôle de caisse.</p>
       </div>
-      {isLoading && <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" />Chargement des retours…</p>}
-      {error && <p role="alert" className="text-sm text-red-700">{apiErrorMessage(error)}</p>}
-      <div className="space-y-3">{routes.map((route) => <ReturnRouteCard key={route.name} route={route} onUpdated={mutate} />)}</div>
+      {isLoading && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LoaderCircle className="size-4 animate-spin" />
+          Chargement des retours…
+        </p>
+      )}
+      {error ? <p role="alert" className="text-sm text-red-700">{apiErrorMessage(error)}</p> : null}
+      {!isLoading && !error && routes.length === 0 && (
+        <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
+          <EmptyState
+            icon={RotateCcw}
+            title="Aucun retour à traiter"
+            description="Les tournées avec un reliquat à ramener apparaîtront ici après la déclaration du livreur."
+          />
+        </div>
+      )}
+      <div className="flex flex-col gap-3">
+        {routes.map((route) => <ReturnRouteCard key={route.name} route={route} onUpdated={mutate} />)}
+      </div>
     </section>
   );
 }

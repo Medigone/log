@@ -39,16 +39,18 @@ class TestDistributionRules(unittest.TestCase):
 		self.assertTrue(can_transition_route("Brouillon", "Publiée"))
 		self.assertTrue(can_transition_route("Publiée", "En cours"))
 		self.assertTrue(can_transition_route("En cours", "Retour dépôt"))
+		self.assertTrue(can_transition_route("En cours", "Contrôle caisse"))
 		self.assertTrue(can_transition_route("Retour dépôt", "Contrôle caisse"))
 		self.assertTrue(can_transition_route("Contrôle caisse", "Terminée"))
 		self.assertFalse(can_transition_route("En cours", "Terminée"))
 		self.assertFalse(can_transition_route("Terminée", "En cours"))
 
 	def test_vehicle_capacity(self):
+		# Contrôle de charge désactivé : ni erreur ni avertissement.
 		self.assertIsNone(capacity_error(None, 200))
 		self.assertIsNone(capacity_error(20, 20))
-		self.assertIn("dépassée", capacity_error(20, 21))
-		self.assertIn("pas configurée", capacity_warning(None))
+		self.assertIsNone(capacity_error(20, 21))
+		self.assertIsNone(capacity_warning(None))
 
 	def test_delivery_note_cannot_have_two_active_routes(self):
 		self.assertTrue(has_assignment_conflict("LIV-0002"))

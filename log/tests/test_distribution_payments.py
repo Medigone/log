@@ -54,6 +54,64 @@ class TestDistributionPaymentSummary(unittest.TestCase):
 		refresh.assert_called_once_with(route)
 		route.save.assert_called_once_with(ignore_permissions=True)
 
+	def test_refresh_route_lifecycle_closes_empty_return_from_in_progress(self):
+		route = SimpleNamespace(
+			name="LIV-1",
+			bons_de_livraison=[SimpleNamespace(bon_de_livraison="DN-1")],
+			etat_planification="En cours",
+			statut_chargement="Chargé",
+			save=Mock(),
+		)
+		dn = SimpleNamespace(name="DN-1", docstatus=1)
+		reloaded = SimpleNamespace(name="LIV-1")
+		db = Mock()
+		db.get_value.return_value = "Livré"
+
+		def fake_get_doc(doctype, name):
+			if doctype == "Delivery Note":
+				return dn
+			return reloaded
+
+		with (
+			patch.object(distribution, "frappe", SimpleNamespace(db=db, get_doc=fake_get_doc)),
+			patch.object(distribution, "_refresh_document_timestamp"),
+			patch.object(distribution, "_set_delivery_note_assignment"),
+			patch(
+				"log.services.distribution_fulfillment.complete_empty_route_return",
+				return_value=True,
+			) as complete,
+			patch.object(distribution, "_try_complete_route") as try_complete,
+		):
+			distribution._refresh_route_lifecycle(route)
+		complete.assert_called_once_with(route, persist=False)
+		route.save.assert_called_once_with(ignore_permissions=True)
+		try_complete.assert_called_once_with(reloaded)
+
+	def test_try_complete_route_finishes_without_payments(self):
+		route = SimpleNamespace(
+			name="LIV-1",
+			statut_chargement="Retourné",
+			statut_caisse="Sans encaissement",
+			etat_planification="Contrôle caisse",
+			bons_de_livraison=[],
+			date_fin=None,
+			save=Mock(),
+		)
+		route.get = lambda key, default=None: getattr(route, key, default)
+		db = Mock()
+		db.count.return_value = 0
+		with (
+			patch.object(distribution, "frappe", SimpleNamespace(db=db)),
+			patch.object(distribution, "_refresh_document_timestamp") as refresh,
+			patch.object(distribution, "now_datetime", return_value="2026-08-28 23:58:00"),
+		):
+			distribution._try_complete_route(route)
+		self.assertEqual(route.etat_planification, "Terminée")
+		self.assertEqual(route.statut_caisse, "Sans encaissement")
+		self.assertEqual(route.date_fin, "2026-08-28 23:58:00")
+		refresh.assert_called_once_with(route)
+		route.save.assert_called_once_with(ignore_permissions=True)
+
 	def test_paiement_hook_updates_totals_without_saving_route(self):
 		livraison = SimpleNamespace(
 			nombre_bons_de_livraison=1,

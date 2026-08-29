@@ -239,7 +239,7 @@ export function DriverCashPage({ canAdjust = false }: { canAdjust?: boolean }) {
       <PageHeader
         eyebrow="Fonds livreurs"
         title="Caisses des livreurs"
-        description="Solde permanent par livreur. Les encaissements s’y ajoutent en tournée ; la validation du retour vide la caisse. Un responsable peut ajouter ou retirer des fonds avec un motif."
+        description="Solde permanent par livreur. Les encaissements s’y ajoutent en tournée ; la validation de caisse vide la caisse. Un responsable peut ajouter ou retirer des fonds avec un motif."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
             <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />

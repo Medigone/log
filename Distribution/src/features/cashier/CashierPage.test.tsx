@@ -54,6 +54,8 @@ describe("CashierPage", () => {
     render(<CashierPage />);
 
     expect(await screen.findByRole("heading", { name: /caisse des tournées/i })).toBeInTheDocument();
+    expect(screen.getByText(/indépendant du retour stock/i)).toBeInTheDocument();
+
     expect(screen.getByText("SINV-1")).toBeInTheDocument();
     expect(screen.getByText(/avance client : 500 DZD/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /valider le contrôle de caisse/i }));

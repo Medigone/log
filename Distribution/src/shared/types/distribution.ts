@@ -158,6 +158,7 @@ export interface DistributionRoute {
   vehicleLabel?: string;
   vehicleCapacity?: number;
   totalQuantity: number;
+  totalArticles?: number;
   totalCollected: number;
   totalAmount: number;
   stops: RouteStop[];
@@ -166,6 +167,23 @@ export interface DistributionRoute {
   stock: RouteStockSummary;
   cash: CashReconciliation;
   alerts: string[];
+}
+
+export interface DriverRouteCard {
+  name: string;
+  date: string;
+  lifecycle: RouteLifecycle | string;
+  plannedStart?: string | null;
+  customerLabel: string;
+  stopCount: number;
+  totalArticles: number;
+  locationLabel: string;
+}
+
+export interface DriverRouteBoard {
+  programmed: DistributionRoute[];
+  history: DriverRouteCard[];
+  programmedCount: number;
 }
 
 export interface PlanningResource {

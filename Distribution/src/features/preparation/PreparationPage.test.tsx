@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => {
     location,
     draftSession,
     pickListData: { message: structuredClone(draftSession) },
+    returnRoutes: [] as Array<{ name: string; stock: { remainingQuantity: number; status: string; lines: unknown[] } }>,
   };
 });
 
@@ -67,7 +68,7 @@ vi.mock("@/shared/api/preparation", async (importOriginal) => {
 });
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
-  useReturnRoutes: () => ({ data: { message: [] }, error: undefined, isLoading: false, mutate: vi.fn() }),
+  useReturnRoutes: () => ({ data: { message: mocks.returnRoutes }, error: undefined, isLoading: false, mutate: vi.fn() }),
   useDistributionMutations: () => ({ confirmRouteReturn: vi.fn(), fulfillment: false }),
 }));
 
@@ -93,7 +94,26 @@ describe("PreparationPage", () => {
     mocks.queueData.message.forEach((order) => {
       delete order.stock_shortages;
     });
+    mocks.returnRoutes = [];
     Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  it("place les retours dans un onglet dédié avec le nombre à traiter", async () => {
+    mocks.returnRoutes = [{
+      name: "LIV-RET-1",
+      stock: { remainingQuantity: 5, status: "Retour déclaré", lines: [] },
+    }];
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
+
+    expect(screen.getByRole("tab", { name: /commandes/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /retours/i })).toHaveTextContent("1");
+    expect(screen.queryByText("LIV-RET-1")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /retours/i }));
+    expect(screen.getByText("LIV-RET-1")).toBeInTheDocument();
+    expect(screen.getByText("5 à retourner")).toBeInTheDocument();
+    expect(screen.queryByText("Commandes à prélever (3)")).not.toBeInTheDocument();
   });
 
   it("passe de la file de commandes au contrôle des écarts", async () => {

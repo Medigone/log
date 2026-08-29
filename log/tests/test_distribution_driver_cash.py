@@ -263,6 +263,45 @@ class TestVehicleStock(unittest.TestCase):
 		self.assertTrue(payload[1]["missingWarehouse"])
 		self.assertEqual(payload[1]["lines"], [])
 
+	def test_snapshot_reads_bin_doctype_table(self):
+		from log.services import distribution_vehicle_stock as stock
+
+		vehicles = [
+			frappe._dict(
+				name="VEH-1",
+				nom="Camion A",
+				immatriculation="12345",
+				status="Disponible",
+				active=1,
+				warehouse="12345 - VEH",
+			)
+		]
+		bins = [frappe._dict(item_code="ART-1", warehouse="12345 - VEH", actual_qty=6, stock_uom="Nos")]
+		items = [frappe._dict(name="ART-1", item_name="Huile")]
+
+		calls = {}
+
+		def get_all(doctype, **kwargs):
+			calls[doctype] = kwargs
+			return {
+				"Vehicule": vehicles,
+				"Bin": bins,
+				"Item": items,
+				"Livraison": [],
+			}[doctype]
+
+		with (
+			patch.object(stock.frappe, "get_all", side_effect=get_all),
+			patch.object(stock.frappe.db, "table_exists", return_value=True) as table_exists,
+		):
+			payload = stock.vehicle_stock_snapshot()
+
+		table_exists.assert_called_with("Bin")
+		self.assertTrue(calls["Bin"]["ignore_permissions"])
+		self.assertEqual(payload[0]["totalQuantity"], 6)
+		self.assertEqual(payload[0]["itemCount"], 1)
+		self.assertEqual(payload[0]["lines"][0]["itemName"], "Huile")
+
 
 if __name__ == "__main__":
 	unittest.main()

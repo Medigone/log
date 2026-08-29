@@ -395,10 +395,8 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
     }
   };
 
-  const overCapacity = route.vehicleCapacity != null && route.totalQuantity > route.vehicleCapacity;
   const operationalAlerts = [
     ...route.alerts,
-    ...(route.vehicle && route.vehicleCapacity == null ? ["La capacité maximale du véhicule n’est pas définie."] : []),
     ...(!route.depot ? ["Aucun dépôt principal exploitable n’est configuré."] : []),
     ...(missingGps.length ? [`${missingGps.length} client(s) sans GPS : position à collecter par le livreur.`] : []),
     ...(missingQr.length ? [`${missingQr.length} bon(s) sans QR imprimable.`] : []),
@@ -527,12 +525,7 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
           icon={Truck}
           label="Véhicule"
           value={route.vehicleLabel || route.vehicle || "Non affecté"}
-          tone={overCapacity ? "danger" : "neutral"}
-          hint={
-            route.vehicleCapacity == null
-              ? `${route.totalQuantity} articles · capacité non définie`
-              : `${route.totalQuantity} / ${route.vehicleCapacity} articles`
-          }
+          hint={`${route.totalQuantity} articles`}
         />
         <KpiTile
           icon={Banknote}

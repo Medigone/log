@@ -45,6 +45,7 @@ add_to_apps_screen = [
 
 # include js in doctype views
 doctype_js = {
+	"Customer": "public/js/customer_portal_access.js",
     "Delivery Note": "public/js/delivery_note.js",
     "Sales Order": "public/js/sales_order.js",
 }
@@ -192,9 +193,11 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"daily": []
-# }
+scheduler_events = {
+	"daily": [
+		"log.services.portal_promotion_events.purge_old_events",
+	],
+}
 
 # Testing
 # -------
@@ -278,6 +281,7 @@ website_redirects = [
 
 website_route_rules = [
     {"from_route": "/distribution/<path:app_path>", "to_route": "distribution"},
+    {"from_route": "/client/<path:app_path>", "to_route": "client"},
 ]
 
 fixtures = [

@@ -190,6 +190,53 @@ def _validate_allocations(payment, requested: list[dict[str, Any]]) -> list[dict
 	return validated
 
 
+def _submitted_invoice(name: str | None) -> str | None:
+	invoice = str(name or "").strip()
+	if not invoice:
+		return None
+	if frappe.db.get_value("Sales Invoice", invoice, "docstatus") != 1:
+		return None
+	return invoice
+
+
+def _ensure_source_invoice(payment, route) -> str:
+	existing = _submitted_invoice(payment.get("facture_source"))
+	if existing:
+		payment.facture_source = existing
+		return existing
+	linked = _submitted_invoice(
+		frappe.db.get_value("Delivery Note", payment.bon_livraison, "custom_sales_invoice")
+	)
+	if linked:
+		payment.facture_source = linked
+		return linked
+	from log.services.distribution_fulfillment import create_and_submit_invoice
+
+	invoice, _status = create_and_submit_invoice(route, payment.bon_livraison)
+	existing = _submitted_invoice(invoice)
+	if not existing:
+		frappe.throw(
+			_("La facture du bon {0} doit être créée avant le contrôle de caisse.").format(payment.bon_livraison)
+		)
+	payment.facture_source = existing
+	return existing
+
+
+def _requested_allocations(payment, requested: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	source = payment.get("facture_source")
+	if source and not any(str(row.get("salesInvoice") or "") == source for row in requested or []):
+		return [
+			{
+				"salesInvoice": row["name"],
+				"dueDate": row["dueDate"],
+				"outstandingBefore": row["outstandingAmount"],
+				"allocatedAmount": row["allocatedAmount"],
+			}
+			for row in _suggested_allocations(payment)
+		]
+	return requested or []
+
+
 def _create_payment_entry(payment, allocations: list[dict[str, Any]]) -> str:
 	if payment.get("payment_entry"):
 		return payment.payment_entry
@@ -259,11 +306,6 @@ def _create_cash_exception(route, reason: str):
 
 
 def validate_reconciliation(route, payload: dict[str, Any], *, approved_by_responsible: bool = False) -> dict[str, Any]:
-	from log.services.distribution_fulfillment import complete_empty_route_return
-
-	complete_empty_route_return(route)
-	if route.get("statut_chargement") != "Retourné":
-		frappe.throw(_("Le retour de stock doit être confirmé avant le contrôle de caisse."))
 	current = reconciliation(route)
 	if current["status"] == "Validée":
 		return current
@@ -308,7 +350,8 @@ def validate_reconciliation(route, payload: dict[str, Any], *, approved_by_respo
 			frappe.throw(_("Un écart de caisse doit être approuvé par un Responsable."))
 		if payment.moyen_paiement == "Chèque":
 			payment.numero_cheque = str(row.get("chequeNumber") or payment.numero_cheque or "").strip()
-		allocations = _validate_allocations(payment, row.get("allocations") or [])
+		_ensure_source_invoice(payment, route)
+		allocations = _validate_allocations(payment, _requested_allocations(payment, row.get("allocations") or []))
 		entry_name = _create_payment_entry(payment, allocations)
 		payment.set("affectations", [])
 		for allocation in allocations:

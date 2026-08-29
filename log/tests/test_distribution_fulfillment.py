@@ -276,6 +276,26 @@ class TestDistributionFulfillment(unittest.TestCase):
 		self.assertEqual(route.statut_chargement, "Retour requis")
 		self.assertEqual(route.total_quantite_restante, 2)
 
+	def test_complete_empty_route_return_from_in_progress(self):
+		route = frappe._dict(
+			name="LIV-EN-COURS",
+			statut_chargement="Chargé",
+			etat_planification="En cours",
+			lignes_chargement=[frappe._dict(loaded_qty=2, delivered_qty=2, returned_qty=0)],
+			save=Mock(),
+		)
+		with (
+			patch.object(fulfillment, "_settle_delivery_notes_after_return"),
+			patch.object(fulfillment, "now_datetime", return_value="2026-08-28 23:58:00"),
+			patch.object(fulfillment.frappe, "get_all", return_value=[]),
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="driver@example.com")),
+		):
+			self.assertTrue(fulfillment.complete_empty_route_return(route, persist=False))
+		self.assertEqual(route.statut_chargement, "Retourné")
+		self.assertEqual(route.etat_planification, "Contrôle caisse")
+		self.assertEqual(route.statut_caisse, "Sans encaissement")
+		route.save.assert_not_called()
+
 	def test_complete_empty_route_return_closes_when_nothing_left(self):
 		route = frappe._dict(
 			name="LIV-1",
@@ -297,6 +317,56 @@ class TestDistributionFulfillment(unittest.TestCase):
 		self.assertEqual(route.statut_caisse, "Sans encaissement")
 		route.save.assert_called_once_with(ignore_permissions=True)
 
+	def test_complete_empty_route_return_keeps_validated_cash(self):
+		route = frappe._dict(
+			name="LIV-CASH",
+			statut_chargement="Retour requis",
+			etat_planification="Retour dépôt",
+			statut_caisse="Validée",
+			lignes_chargement=[frappe._dict(loaded_qty=1, delivered_qty=1, returned_qty=0)],
+			save=Mock(),
+		)
+		with (
+			patch.object(fulfillment, "_settle_delivery_notes_after_return"),
+			patch.object(fulfillment, "now_datetime", return_value="2026-08-26 12:00:00"),
+			patch.object(fulfillment.frappe, "get_all") as get_all,
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="prep@example.com")),
+		):
+			self.assertTrue(fulfillment.complete_empty_route_return(route))
+		get_all.assert_not_called()
+		self.assertEqual(route.statut_caisse, "Validée")
+
+	def test_create_and_submit_invoice_bypasses_sales_invoice_create_permission(self):
+		seen = {}
+		invoice = Mock()
+		invoice.name = "SINV-NEW"
+		invoice.flags = frappe._dict()
+
+		def fake_make(delivery_note):
+			seen["allowed"] = frappe.has_permission("Sales Invoice", "create")
+			return invoice
+
+		with (
+			patch.object(fulfillment.frappe.db, "get_value", return_value=None),
+			patch.object(fulfillment.frappe.db, "set_value"),
+			patch.object(fulfillment.frappe.db, "savepoint"),
+			patch.object(fulfillment, "today", return_value="2026-08-28"),
+			patch.object(fulfillment, "nowtime", return_value="12:00:00"),
+			patch(
+				"erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice",
+				fake_make,
+			),
+			patch.object(fulfillment.frappe, "has_permission", return_value=False),
+		):
+			name, status = fulfillment.create_and_submit_invoice(frappe._dict(name="LIV-1"), "DN-1")
+
+		self.assertTrue(seen["allowed"])
+		self.assertEqual(name, "SINV-NEW")
+		self.assertEqual(status, "created")
+		invoice.insert.assert_called_once_with(ignore_permissions=True)
+		invoice.submit.assert_called_once()
+
 
 if __name__ == "__main__":
 	unittest.main()
+

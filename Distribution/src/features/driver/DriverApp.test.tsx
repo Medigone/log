@@ -12,6 +12,8 @@ function stop(overrides: Partial<RouteStop> & Pick<RouteStop, "deliveryNote" | "
     address: "1 rue A",
     phone: "0550000000",
     totalQuantity: 2,
+    commune: "Hydra",
+    wilaya: "Alger",
     amountCollected: 0,
     amountToCollect: 12000,
     payments: [],
@@ -39,6 +41,7 @@ function makeRoute(overrides: Partial<DistributionRoute>): DistributionRoute {
     vehicleLabel: "Renault · 16-123-16",
     vehicleCapacity: 20,
     totalQuantity: 4,
+    totalArticles: 4,
     totalCollected: 0,
     totalAmount: 18000,
     alerts: [],
@@ -89,12 +92,22 @@ const mocks = vi.hoisted(() => ({
   logout: vi.fn().mockResolvedValue(undefined),
   mutate: vi.fn().mockResolvedValue(undefined),
   mutateDashboard: vi.fn().mockResolvedValue(undefined),
+  mutateOpenRoute: vi.fn().mockResolvedValue(undefined),
   completeStop: vi.fn(),
   startRoute: vi.fn(),
   loadRoute: vi.fn(),
   acknowledgeRoute: vi.fn(),
   declareRouteReturn: vi.fn(),
   current: null as unknown as DistributionRoute,
+  history: [] as Array<{
+    name: string;
+    date: string;
+    lifecycle: string;
+    customerLabel: string;
+    stopCount: number;
+    totalArticles: number;
+    locationLabel: string;
+  }>,
 }));
 
 const inProgressRoute = makeRoute({});
@@ -170,7 +183,24 @@ vi.mock("frappe-react-sdk", () => ({
 
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
-  useDriverRoutes: () => ({ data: { message: [mocks.current] }, error: undefined, isLoading: false, mutate: mocks.mutate }),
+  useDriverRouteBoard: () => ({
+    data: {
+      message: {
+        programmed: [mocks.current],
+        history: mocks.history,
+        programmedCount: 1,
+      },
+    },
+    error: undefined,
+    isLoading: false,
+    mutate: mocks.mutate,
+  }),
+  useDriverRoute: () => ({
+    data: { message: null },
+    error: undefined,
+    isLoading: false,
+    mutate: mocks.mutateOpenRoute,
+  }),
   useDriverDashboard: () => ({ data: { message: dashboard }, error: undefined, isLoading: false, mutate: mocks.mutateDashboard }),
   useDistributionMutations: () => ({
     completeStop: mocks.completeStop,
@@ -190,10 +220,25 @@ async function scanDeliveryNote(user: ReturnType<typeof userEvent.setup>, delive
   await user.click(screen.getByRole("button", { name: /vérifier le bon/i }));
 }
 
+async function openListedRoute(user: ReturnType<typeof userEvent.setup>, name = "LIV-1") {
+  await user.click(screen.getByRole("button", { name: new RegExp(`tournée ${name}`, "i") }));
+}
+
 describe("DriverApp", () => {
   beforeEach(() => {
     localStorage.clear();
     mocks.current = structuredClone(inProgressRoute);
+    mocks.history = [
+      {
+        name: "LIV-OLD",
+        date: "2026-08-20",
+        lifecycle: "Terminée",
+        customerLabel: "Client Hier",
+        stopCount: 3,
+        totalArticles: 18,
+        locationLabel: "Oran · Oran",
+      },
+    ];
     mocks.loadRoute.mockReset();
     mocks.startRoute.mockReset();
     Object.defineProperty(navigator, "geolocation", {
@@ -202,13 +247,24 @@ describe("DriverApp", () => {
     });
   });
 
-  it("ouvre la tournée sur le prochain arrêt, sans onglet accueil", () => {
+  it("affiche d’abord la liste Programmées avec le compteur, sans le select", () => {
     render(<DriverApp />);
 
     expect(screen.getByRole("navigation", { name: /navigation livreur/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^tournée$/i })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("button", { name: /^accueil$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^activité$/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/tournée du jour/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /programmées/i })).toHaveTextContent("1");
+    expect(screen.getByRole("tab", { name: /^historique$/i })).not.toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: /tournée liv-1/i })).toBeInTheDocument();
+    expect(screen.queryByText(/prochain arrêt/i)).not.toBeInTheDocument();
+  });
+
+  it("ouvre la tournée sur le prochain arrêt au tap d’une carte", async () => {
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await openListedRoute(user);
+
     expect(screen.getByText(/prochain arrêt/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /épicerie nord/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /traiter cet arrêt/i })).toBeEnabled();
@@ -216,9 +272,26 @@ describe("DriverApp", () => {
     expect(screen.getAllByRole("link", { name: /appeler épicerie nord/i }).length).toBeGreaterThan(0);
   });
 
+  it("revient à la liste via le bouton retour ou un second tap sur Tournée", async () => {
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await openListedRoute(user);
+    expect(screen.getByText(/prochain arrêt/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /retour aux tournées/i }));
+    expect(screen.queryByText(/prochain arrêt/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /programmées/i })).toBeInTheDocument();
+
+    await openListedRoute(user);
+    await user.click(screen.getByRole("button", { name: /^tournée$/i }));
+    expect(screen.queryByText(/prochain arrêt/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /programmées/i })).toBeInTheDocument();
+  });
+
   it("ouvre l’assistant au tap sur Traiter", async () => {
     const user = userEvent.setup();
     render(<DriverApp />);
+    await openListedRoute(user);
     await user.click(screen.getByRole("button", { name: /traiter cet arrêt/i }));
     expect(screen.getByText(/résultat de l’arrêt/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /continuer/i })).toBeInTheDocument();
@@ -233,9 +306,11 @@ describe("DriverApp", () => {
     expect(screen.getByText("Client A")).toBeInTheDocument();
   });
 
-  it("n’affiche pas Traiter tant que la tournée est publiée", () => {
+  it("n’affiche pas Traiter tant que la tournée est publiée", async () => {
     mocks.current = structuredClone(publishedRoute);
+    const user = userEvent.setup();
     render(<DriverApp />);
+    await openListedRoute(user);
     expect(screen.queryByRole("button", { name: /traiter cet arrêt/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /vérifier, charger et démarrer/i })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /vérifier les bons/i })).toBeInTheDocument();
@@ -295,6 +370,7 @@ describe("DriverApp", () => {
     mocks.loadRoute.mockResolvedValue({});
     const user = userEvent.setup();
     render(<DriverApp />);
+    await openListedRoute(user);
     await user.click(screen.getByRole("button", { name: /client a/i }));
     await user.click(screen.getByRole("button", { name: /client b/i }));
     await user.click(screen.getByRole("button", { name: /charger le véhicule/i }));

@@ -20,16 +20,16 @@ describe("hasGoodsToReturn", () => {
 });
 
 describe("ReturnControlPanel", () => {
-  it("n’affiche pas le panneau s’il n’y a rien à ramener", () => {
+  it("affiche un état vide s’il n’y a rien à ramener", () => {
     mocks.routes = [{
       name: "LIV-EMPTY",
       driverName: "Karim",
       vehicleLabel: "Camion A",
       stock: { remainingQuantity: 0, status: "Retour requis", lines: [] },
     }];
-    const { container } = render(<ReturnControlPanel />);
-    expect(container).toBeEmptyDOMElement();
-    expect(screen.queryByText("Retours à contrôler")).not.toBeInTheDocument();
+    render(<ReturnControlPanel />);
+    expect(screen.getByText("Aucun retour à traiter")).toBeInTheDocument();
+    expect(screen.queryByText("LIV-EMPTY")).not.toBeInTheDocument();
   });
 
   it("affiche les tournées qui ont un reliquat", () => {
@@ -41,6 +41,7 @@ describe("ReturnControlPanel", () => {
     }];
     render(<ReturnControlPanel />);
     expect(screen.getByText("Retours à contrôler")).toBeInTheDocument();
+    expect(screen.getByText(/indépendant du contrôle de caisse/i)).toBeInTheDocument();
     expect(screen.getByText("LIV-GOODS")).toBeInTheDocument();
     expect(screen.getByText("4 à retourner")).toBeInTheDocument();
   });

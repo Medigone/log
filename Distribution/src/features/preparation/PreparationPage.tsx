@@ -35,7 +35,7 @@ import {
   type PickGroup,
   type SalesOrderRow,
 } from "@/shared/api/preparation";
-import { ReturnControlPanel } from "@/features/preparation/ReturnControlPanel";
+import { ReturnControlPanel, usePendingReturnRoutes } from "@/features/preparation/ReturnControlPanel";
 import {
   Dialog,
   DialogBody,
@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pickLineTone, type StatusTone } from "@/shared/design/statusTone";
 import { cn } from "@/lib/utils";
 import { formatQuantity } from "@/shared/format";
@@ -272,13 +272,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
   };
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        eyebrow="Entrepôt"
-        title="Préparation"
-        description="Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever."
-      />
-
+    <div className="flex flex-col gap-5">
       {(error || errorMessage) && (
         <Alert>
           <AlertDescription>
@@ -1042,6 +1036,9 @@ export function PreparationPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const pickListNames = (searchParams.get("pick_lists") || searchParams.get("pick_list") || "").split(",").filter(Boolean);
+  const tab = searchParams.get("tab") === "retours" ? "retours" : "commandes";
+  const { routes: pendingReturns } = usePendingReturnRoutes();
+  const returnCount = pendingReturns.length;
 
   if (pickListNames.length) {
     return (
@@ -1057,13 +1054,43 @@ export function PreparationPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <ReturnControlPanel />
-      <SalesOrderPicker
-        onOpenPickLists={(names, created = false) => {
-          setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
-        }}
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Entrepôt"
+        title="Préparation"
+        description={
+          tab === "retours"
+            ? "Recomptage et retour du véhicule vers l’entrepôt, indépendant du contrôle de caisse."
+            : "Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever."
+        }
       />
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          setSearchParams(value === "retours" ? { tab: "retours" } : {});
+        }}
+        aria-label="Sections préparation"
+      >
+        <TabsList variant="line">
+          <TabsTrigger value="commandes">Commandes</TabsTrigger>
+          <TabsTrigger value="retours">
+            Retours
+            <Badge variant={returnCount > 0 ? "default" : "secondary"} aria-label={`${returnCount} à traiter`}>
+              {returnCount}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="commandes" className="pt-5">
+          <SalesOrderPicker
+            onOpenPickLists={(names, created = false) => {
+              setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
+            }}
+          />
+        </TabsContent>
+        <TabsContent value="retours" className="pt-5">
+          <ReturnControlPanel />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

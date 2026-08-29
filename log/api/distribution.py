@@ -537,6 +537,7 @@ def _serialize_route(doc) -> dict[str, Any]:
 		"vehicleLabel": vehicle_label,
 		"vehicleCapacity": cint(capacity) if capacity not in (None, "", 0) else None,
 		"totalQuantity": sum(stop["totalQuantity"] for stop in stops),
+		"totalArticles": cint(doc.get("total_articles")),
 		"totalCollected": sum(stop["amountCollected"] for stop in stops),
 		"totalAmount": sum(stop["amountToCollect"] for stop in stops),
 		"stops": stops,
@@ -1376,6 +1377,18 @@ def get_driver_routes(date=None):
 
 
 @frappe.whitelist()
+def get_driver_route_board(date=None):
+	_require(DRIVER_ROLES)
+	_require_schema()
+	from log.services.distribution_driver_routes import build_driver_route_board, empty_board
+
+	driver = _driver_record()
+	if not driver and not (_roles() & {"Responsable", "System Manager"}):
+		return empty_board()
+	return build_driver_route_board(driver=driver, date=date, serialize_route=_serialize_route)
+
+
+@frappe.whitelist()
 def get_driver_dashboard(date=None):
 	_require(DRIVER_ROLES)
 	_require_schema()
@@ -1768,6 +1781,7 @@ def _refresh_route_lifecycle(route):
 		frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut")
 		for row in route.bons_de_livraison
 	]
+	empty_return_closed = False
 	if statuses and all(status in TERMINAL_STOP_STATES for status in statuses):
 		for row in route.bons_de_livraison:
 			dn = frappe.get_doc("Delivery Note", row.bon_de_livraison)
@@ -1775,12 +1789,16 @@ def _refresh_route_lifecycle(route):
 			_set_delivery_note_assignment(dn, route, planning_status)
 		from log.services.distribution_fulfillment import complete_empty_route_return
 
-		if not complete_empty_route_return(route, persist=False):
+		if complete_empty_route_return(route, persist=False):
+			empty_return_closed = True
+		else:
 			route.etat_planification = "Retour dépôt"
 			route.statut_chargement = "Retour requis"
 	# Nested DN/payment writes can bump Livraison.modified in the same request.
 	_refresh_document_timestamp(route)
 	route.save(ignore_permissions=True)
+	if empty_return_closed:
+		_try_complete_route(frappe.get_doc("Livraison", route.name))
 
 
 @frappe.whitelist()
@@ -1903,6 +1921,7 @@ def declare_route_return(route_id, expected_revision=None, request_id=None):
 	from log.services.distribution_fulfillment import complete_empty_route_return, declare_route_return as declare_return
 
 	if complete_empty_route_return(route):
+		_try_complete_route(frappe.get_doc("Livraison", route.name))
 		return _serialize_route(frappe.get_doc("Livraison", route.name))
 	declare_return(route)
 	if route.meta.has_field("last_return_request_id"):
@@ -1979,13 +1998,21 @@ def get_cashier_routes(date_from=None, date_to=None, status=None):
 	end = getdate(date_to or add_days(start, 7))
 	filters: dict[str, Any] = {
 		"date_liv": ["between", [start, end]],
-		"etat_planification": ["in", ["Retour dépôt", "Contrôle caisse", "Terminée"]],
 	}
 	if status:
 		filters["statut_caisse"] = status
 	return [
 		_serialize_route(frappe.get_doc("Livraison", row.name))
-		for row in frappe.get_all("Livraison", filters=filters, fields=["name"], order_by="date_liv desc, modified desc")
+		for row in frappe.get_all(
+			"Livraison",
+			filters=filters,
+			or_filters=[
+				["etat_planification", "in", ["Retour dépôt", "Contrôle caisse", "Terminée"]],
+				["statut_caisse", "in", ["À contrôler", "Écart", "Validée"]],
+			],
+			fields=["name"],
+			order_by="date_liv desc, modified desc",
+		)
 	]
 
 

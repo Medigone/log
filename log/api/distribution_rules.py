@@ -9,7 +9,8 @@ from typing import Any, Iterable
 ROUTE_TRANSITIONS = {
 	"Brouillon": {"Publiée", "Annulée"},
 	"Publiée": {"Brouillon", "En cours", "Annulée"},
-	"En cours": {"Retour dépôt"},
+	# Rien à ramener : le dernier arrêt peut sauter le passage dépôt.
+	"En cours": {"Retour dépôt", "Contrôle caisse"},
 	"Retour dépôt": {"Contrôle caisse"},
 	"Contrôle caisse": {"Terminée"},
 	"Terminée": set(),
@@ -86,13 +87,21 @@ def public_tracking_payload(name: str, status: str, steps: list[dict[str, Any]],
 	return {"name": name, "status": status, "steps": steps, "articles": articles}
 
 
+# Contrôle de charge véhicule désactivé pour le moment.
+ENFORCE_VEHICLE_CAPACITY = False
+
+
 def capacity_error(capacity: int | None, quantity: float) -> str | None:
+	if not ENFORCE_VEHICLE_CAPACITY:
+		return None
 	if capacity is not None and quantity > capacity:
 		return f"La capacité du véhicule est dépassée : {quantity:g} articles prévus pour une capacité de {capacity}."
 	return None
 
 
 def capacity_warning(capacity: int | None) -> str | None:
+	if not ENFORCE_VEHICLE_CAPACITY:
+		return None
 	return "La capacité de ce véhicule n'est pas configurée." if capacity is None else None
 
 

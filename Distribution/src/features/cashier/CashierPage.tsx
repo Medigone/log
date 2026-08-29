@@ -121,7 +121,7 @@ export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscr
       <PageHeader
         eyebrow="Contrôle financier"
         title="Caisse des tournées"
-        description="Comptez les espèces, vérifiez chaque chèque et contrôlez la ventilation avant de créer les règlements ERPNext."
+        description="Contrôle financier indépendant du retour stock. Comptez les espèces, vérifiez chaque chèque et la ventilation avant de créer les règlements ERPNext."
         actions={
           <Button
             variant="outline"
@@ -195,7 +195,7 @@ export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscr
           <EmptyState
             icon={Banknote}
             title="Aucune tournée à contrôler"
-            description="Élargissez la période ou attendez la confirmation du retour stock."
+            description="Élargissez la période. Les encaissements sont contrôlables dès qu’ils sont déclarés, sans attendre le retour stock."
           />
         </div>
       )}
@@ -332,7 +332,7 @@ export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscr
 
             {!reconciliation.payments.length && (
               <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-                Aucun encaissement déclaré. La tournée pourra être clôturée après le retour stock et la facturation.
+                Aucun encaissement déclaré. Le contrôle de caisse n’est pas requis. Le préparateur confirme le retour stock séparément.
               </div>
             )}
           </section>

@@ -1,0 +1,100 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-08-28 18:10:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "event_type",
+  "campaign",
+  "placement",
+  "item_code",
+  "column_break_meta",
+  "customer",
+  "impression_key"
+ ],
+ "fields": [
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Événement",
+   "options": "view_promotion\nselect_promotion\nadd_to_cart",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Campagne",
+   "options": "Campagne Portail",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "placement",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Emplacement"
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Article",
+   "options": "Item"
+  },
+  {
+   "fieldname": "column_break_meta",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Client",
+   "options": "Customer",
+   "search_index": 1
+  },
+  {
+   "fieldname": "impression_key",
+   "fieldtype": "Data",
+   "label": "Clé d'impression",
+   "read_only": 1,
+   "unique": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-28 18:10:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Evenement Promotion Portail",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "event_type",
+ "track_changes": 0
+}

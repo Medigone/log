@@ -6,5 +6,8 @@ tags
 node_modules
 __pycache__
 log/public/distribution
+log/public/client
 log/public/node_modules
 log/www/distribution.html
+log/www/client.html
+log/setup/parapharmacie_images/

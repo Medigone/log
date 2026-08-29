@@ -1,0 +1,136 @@
+{
+ "actions": [],
+ "creation": "2026-08-28 18:10:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_fallback",
+  "fallback_headline",
+  "fallback_cta_label",
+  "fallback_body",
+  "column_break_fallback",
+  "fallback_image",
+  "section_layout",
+  "show_categories",
+  "show_promotions",
+  "show_featured",
+  "column_break_layout",
+  "rail_limit",
+  "section_groups",
+  "featured_groups"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_fallback",
+   "fieldtype": "Section Break",
+   "label": "Hero par défaut"
+  },
+  {
+   "default": "Commandez vos produits",
+   "fieldname": "fallback_headline",
+   "fieldtype": "Data",
+   "label": "Titre"
+  },
+  {
+   "default": "Parcourir le catalogue",
+   "fieldname": "fallback_cta_label",
+   "fieldtype": "Data",
+   "label": "Libellé du bouton"
+  },
+  {
+   "fieldname": "fallback_body",
+   "fieldtype": "Small Text",
+   "label": "Texte"
+  },
+  {
+   "fieldname": "column_break_fallback",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fallback_image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
+  },
+  {
+   "fieldname": "section_layout",
+   "fieldtype": "Section Break",
+   "label": "Sections permanentes"
+  },
+  {
+   "default": "1",
+   "fieldname": "show_categories",
+   "fieldtype": "Check",
+   "label": "Afficher les catégories"
+  },
+  {
+   "default": "1",
+   "fieldname": "show_promotions",
+   "fieldtype": "Check",
+   "label": "Afficher les offres du moment"
+  },
+  {
+   "default": "1",
+   "fieldname": "show_featured",
+   "fieldtype": "Check",
+   "label": "Afficher les produits mis en avant"
+  },
+  {
+   "fieldname": "column_break_layout",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "8",
+   "description": "Nombre maximum d'articles par rayon.",
+   "fieldname": "rail_limit",
+   "fieldtype": "Int",
+   "label": "Articles par rayon",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "description": "Groupes affichés en rayons permanents, dans cet ordre.",
+   "fieldname": "section_groups",
+   "fieldtype": "Section Break",
+   "label": "Groupes mis en avant"
+  },
+  {
+   "fieldname": "featured_groups",
+   "fieldtype": "Table",
+   "label": "Groupes",
+   "options": "Parametres Boutique Groupe"
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-08-28 18:10:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Parametres Boutique Portail",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
