@@ -24,6 +24,7 @@ interface DataTableProps<T> {
   rowTone?: (row: T) => StatusTone | undefined
   onRowClick?: (row: T) => void
   isRowActive?: (row: T) => boolean
+  rowClassName?: (row: T) => string | undefined
   isLoading?: boolean
   empty?: ReactNode
   label: string
@@ -52,6 +53,7 @@ export function DataTable<T>({
   rowTone,
   onRowClick,
   isRowActive,
+  rowClassName,
   isLoading,
   empty,
   label,
@@ -160,7 +162,7 @@ export function DataTable<T>({
                   key={rowKey(row)}
                   data-state={active ? "selected" : undefined}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={cn(onRowClick && "cursor-pointer", active && "bg-muted")}
+                  className={cn(onRowClick && "cursor-pointer", active && "bg-muted", rowClassName?.(row))}
                 >
                   {columns.map((column, index) => (
                     <TableCell

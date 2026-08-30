@@ -23,6 +23,8 @@ export interface SalesOrderRow {
   custom_commune_nom?: string;
   custom_wilaya?: string;
   draft_pick_list?: string;
+  existing_pick_list?: string;
+  can_create_pick_list?: boolean;
   stock_shortages?: StockShortage[];
 }
 

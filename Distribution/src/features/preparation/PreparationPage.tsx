@@ -1,22 +1,28 @@
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { FilterSelect } from "@/components/FilterSelect";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toolbar } from "@/components/ui/toolbar";
+import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar";
 import {
   AlertTriangle,
   ArrowLeft,
+  Camera,
   CheckCircle,
   ClipboardList,
-  Filter,
   Package,
   Printer,
   QrCode,
@@ -29,14 +35,16 @@ import {
   usePickSession,
   usePreparationMutations,
   usePreparationQueue,
-  useRecentPickLists,
   applyBarcodeScan,
   getPickGroupLocations,
   type DeliveryNoteResult,
   type PickGroup,
+  type PickLocation,
   type SalesOrderRow,
 } from "@/shared/api/preparation";
 import { ReturnControlPanel, usePendingReturnRoutes } from "@/features/preparation/ReturnControlPanel";
+import { PickFloorView, type ScanSnapshot } from "@/features/preparation/PickFloorView";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Dialog,
   DialogBody,
@@ -51,7 +59,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { pickLineTone, type StatusTone } from "@/shared/design/statusTone";
 import { cn } from "@/lib/utils";
-import { formatQuantity } from "@/shared/format";
+import { formatQuantity, formatShortDate } from "@/shared/format";
 
 function priority(date?: string): { label: string; tone: StatusTone } {
   if (!date) return { label: "Date à confirmer", tone: "neutral" };
@@ -128,6 +136,14 @@ function stockShortages(order: SalesOrderRow) {
   return order.stock_shortages || [];
 }
 
+function orderCanCreate(order: SalesOrderRow) {
+  return order.can_create_pick_list !== false;
+}
+
+function orderExistingPickList(order: SalesOrderRow) {
+  return order.existing_pick_list || order.draft_pick_list;
+}
+
 function isoDateWithOffset(days: number) {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -160,13 +176,11 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   const { data, mutate, error, isLoading } = usePreparationQueue();
-  const { data: recentData, isLoading: recentLoading } = useRecentPickLists();
   const { createPickList, creating } = usePreparationMutations();
 
   const orders = useMemo(() => data?.message || [], [data?.message]);
-  const recentPickLists = recentData?.message || [];
   const selectedOrders = useMemo(
-    () => orders.filter((order) => selected.has(order.name)),
+    () => orders.filter((order) => selected.has(order.name) && orderCanCreate(order)),
     [orders, selected],
   );
   const wilayas = useMemo(
@@ -207,8 +221,10 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
     });
   }, [commune, dateFrom, dateScope, dateTo, orders, search, wilaya]);
 
-  const allSelected = filtered.length > 0 && filtered.every((row) => selected.has(row.name));
-  const activeFilterCount = [dateScope !== "all", dateFrom, dateTo, wilaya, commune].filter(Boolean).length;
+  const creatableFiltered = filtered.filter(orderCanCreate);
+  const allSelected = creatableFiltered.length > 0 && creatableFiltered.every((row) => selected.has(row.name));
+  const someSelected = !allSelected && creatableFiltered.some((row) => selected.has(row.name));
+  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune);
   const insufficientOrders = selectedOrders.filter((order) => stockShortages(order).length > 0);
 
   // Le Dialog gère Échap et le piège de focus ; on force seulement le focus initial
@@ -217,30 +233,39 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
     if (confirming) confirmButtonRef.current?.focus();
   }, [confirming]);
 
-  const toggle = (name: string) => {
+  const toggle = (order: SalesOrderRow) => {
+    if (!orderCanCreate(order)) return;
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(order.name)) next.delete(order.name);
+      else next.add(order.name);
       return next;
     });
   };
 
   const toggleAllFiltered = () => {
+    handleSelectAll(!allSelected);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev);
-      filtered.forEach((order) => {
-        if (allSelected) next.delete(order.name);
-        else next.add(order.name);
+      creatableFiltered.forEach((order) => {
+        if (checked) next.add(order.name);
+        else next.delete(order.name);
       });
       return next;
     });
   };
 
-  const setQuickDate = (scope: DateScope) => {
-    setDateScope(scope);
-    setDateFrom("");
-    setDateTo("");
+  const handleSelectRow = (order: SalesOrderRow, checked: boolean) => {
+    if (!orderCanCreate(order)) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(order.name);
+      else next.delete(order.name);
+      return next;
+    });
   };
 
   const resetFilters = () => {
@@ -272,6 +297,28 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
     }
   };
 
+  const openExisting = (order: SalesOrderRow) => {
+    const name = orderExistingPickList(order);
+    if (name) onOpenPickLists([name]);
+  };
+
+  const emptyOrders = (
+    <Empty className="border border-dashed">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <Package />
+        </EmptyMedia>
+        <EmptyTitle>Aucune commande ne correspond</EmptyTitle>
+        <EmptyDescription>Modifiez ou réinitialisez les filtres.</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button variant="outline" size="sm" onClick={resetFilters}>
+          Réinitialiser
+        </Button>
+      </EmptyContent>
+    </Empty>
+  );
+
   return (
     <div className="flex flex-col gap-5">
       {(error || errorMessage) && (
@@ -282,164 +329,230 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
         </Alert>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between space-y-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-base">Commandes à prélever ({filtered.length})</CardTitle>
-            {selectedOrders.length > 0 && (
-              <Badge aria-live="polite" className="bg-brand-100 text-brand-800 hover:bg-brand-100">
-                {selectedOrders.length} sélectionnée{selectedOrders.length > 1 ? "s" : ""}
-              </Badge>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="relative">
-              <Search className="w-4 h-4 absolute left-2.5 top-2.5 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Rechercher…"
-                className="pl-8 w-52"
-              />
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={toggleAllFiltered}
-              disabled={!filtered.length}
-            >
-              {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
-            </Button>
-            <Button size="sm" onClick={() => setConfirming(true)} disabled={!selectedOrders.length || creating}>
-              <ClipboardList className="w-4 h-4 mr-2" />
-              {creating ? "Création…" : "Créer la liste de prélèvement"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="rounded-xl border border-hairline bg-surface-subtle p-3">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-                <Filter className="h-4 w-4 text-brand-700" />
-                Filtres {activeFilterCount > 0 && <Badge variant="secondary">{activeFilterCount}</Badge>}
-              </div>
-              {(activeFilterCount > 0 || search) && (
-                <Button type="button" variant="ghost" size="sm" onClick={resetFilters}>
-                  <RotateCcw className="mr-1 h-4 w-4" />
-                  Réinitialiser
-                </Button>
-              )}
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <div className="md:col-span-2 xl:col-span-4">
-                <span className="mb-1.5 block text-xs font-medium text-slate-600">Échéance</span>
-                <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer par échéance">
-                  {([
-                    ["all", "Toutes"],
-                    ["today", "Aujourd’hui"],
-                    ["tomorrow", "Demain"],
-                    ["overdue", "En retard"],
-                  ] as Array<[DateScope, string]>).map(([scope, label]) => (
-                    <Button
-                      key={scope}
-                      type="button"
-                      size="sm"
-                      variant={dateScope === scope ? "default" : "outline"}
-                      onClick={() => setQuickDate(scope)}
-                      aria-pressed={dateScope === scope}
-                    >
-                      {label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <label className="space-y-1.5 text-xs font-medium text-slate-600">
-                Date de début
-                <Input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setDateScope("all"); }} />
-              </label>
-              <label className="space-y-1.5 text-xs font-medium text-slate-600">
-                Date de fin
-                <Input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => { setDateTo(event.target.value); setDateScope("all"); }} />
-              </label>
-              <label className="space-y-1.5 text-xs font-medium text-slate-600">
-                Wilaya
-                <select
-                  value={wilaya}
-                  onChange={(event) => { setWilaya(event.target.value); setCommune(""); }}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm text-foreground shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                >
-                  <option value="">Toutes les wilayas</option>
-                  {wilayas.map((value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </label>
-              <label className="space-y-1.5 text-xs font-medium text-slate-600">
-                Commune
-                <select
-                  value={commune}
-                  onChange={(event) => setCommune(event.target.value)}
-                  className="flex h-9 w-full rounded-md border border-input bg-white px-3 py-1 text-sm text-foreground shadow-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                >
-                  <option value="">Toutes les communes</option>
-                  {communes.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </label>
-            </div>
-          </div>
-
-          {isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-          {!isLoading && filtered.length === 0 && (
-            <div className="rounded-xl border border-dashed border-hairline-strong p-6 text-center">
-              <p className="text-sm font-medium text-slate-700">Aucune commande ne correspond aux filtres.</p>
-              <Button type="button" variant="link" size="sm" onClick={resetFilters}>Réinitialiser les filtres</Button>
-            </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold">Commandes à prélever ({filtered.length})</h2>
+          {selectedOrders.length > 0 && (
+            <Badge aria-live="polite" className="bg-brand-100 text-brand-800 hover:bg-brand-100">
+              {selectedOrders.length} sélectionnée{selectedOrders.length > 1 ? "s" : ""}
+            </Badge>
           )}
-          {filtered.map((row) => (
-            <label
-              key={row.name}
-              className="flex items-center justify-between gap-3 rounded-lg border p-3 cursor-pointer"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <input type="checkbox" checked={selected.has(row.name)} onChange={() => toggle(row.name)} />
-                <Package className="w-4 h-4 shrink-0" />
-                <div className="min-w-0">
-                  <div className="font-medium text-sm">{row.name}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {row.customer_name || row.customer} · {row.custom_commune_nom || row.custom_commune || "—"} ·{" "}
-                    {row.delivery_date || row.transaction_date || "—"} · {row.total_qty || 0} art.
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={toggleAllFiltered} disabled={!creatableFiltered.length}>
+            {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
+          </Button>
+          <Button size="sm" onClick={() => setConfirming(true)} disabled={!selectedOrders.length || creating}>
+            <ClipboardList data-icon="inline-start" />
+            {creating ? "Création…" : "Créer la liste de prélèvement"}
+          </Button>
+        </div>
+      </div>
+
+      <Toolbar>
+        <InputGroup className="min-w-48 flex-1 bg-background">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Rechercher une commande…"
+            aria-label="Rechercher une commande"
+          />
+        </InputGroup>
+        <FilterSelect
+          label="Échéance"
+          value={dateScope}
+          onChange={(value) => {
+            setDateScope(value as DateScope);
+            setDateFrom("");
+            setDateTo("");
+          }}
+          options={[
+            { value: "all", label: "Toutes" },
+            { value: "today", label: "Aujourd’hui" },
+            { value: "tomorrow", label: "Demain" },
+            { value: "overdue", label: "En retard" },
+          ]}
+        />
+        <FilterSelect
+          label="Wilaya"
+          value={wilaya || "all"}
+          onChange={(value) => {
+            setWilaya(value === "all" ? "" : value);
+            setCommune("");
+          }}
+          options={[{ value: "all", label: "Toutes" }, ...wilayas.map((value) => ({ value, label: value }))]}
+        />
+        <FilterSelect
+          label="Commune"
+          value={commune || "all"}
+          onChange={(value) => setCommune(value === "all" ? "" : value)}
+          options={[{ value: "all", label: "Toutes" }, ...communes.map((option) => ({ value: option.value, label: option.label }))]}
+        />
+        <DateRangeFilter
+          from={dateFrom}
+          to={dateTo}
+          onChange={(range) => {
+            setDateFrom(range.from);
+            setDateTo(range.to);
+            setDateScope("all");
+          }}
+        />
+        {filtersActive ? (
+          <>
+            <ToolbarSpacer />
+            <Button type="button" variant="ghost" size="sm" onClick={resetFilters}>
+              <RotateCcw data-icon="inline-start" />
+              Réinitialiser
+            </Button>
+          </>
+        ) : null}
+      </Toolbar>
+
+      {isLoading && !orders.length ? (
+        <Skeleton className="h-72 w-full rounded-lg" aria-hidden="true" />
+      ) : !filtered.length ? (
+        emptyOrders
+      ) : (
+        <>
+          <div className="hidden overflow-hidden rounded-xl border md:block">
+            <Table aria-label="Commandes à prélever">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-8">
+                    <Checkbox
+                      aria-label="Tout sélectionner"
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      disabled={!creatableFiltered.length}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>Commande</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Lieu</TableHead>
+                  <TableHead>Échéance</TableHead>
+                  <TableHead>Stock</TableHead>
+                  <TableHead className="text-right">Liste</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((row) => {
+                  const existing = orderExistingPickList(row);
+                  const creatable = orderCanCreate(row);
+                  const isSelected = selected.has(row.name);
+                  return (
+                    <TableRow
+                      key={row.name}
+                      data-state={isSelected ? "selected" : undefined}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        if (creatable) toggle(row);
+                        else openExisting(row);
+                      }}
+                    >
+                      <TableCell
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {creatable ? (
+                          <Checkbox
+                            aria-label={`Sélectionner ${row.name}`}
+                            checked={isSelected}
+                            onCheckedChange={(checked) => handleSelectRow(row, checked)}
+                          />
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <span className="font-medium">{row.name}</span>
+                          <span className="text-muted-foreground">{row.total_qty || 0} art.</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="truncate">{row.customer_name || row.customer || "—"}</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="truncate">
+                          {[row.custom_commune_nom || row.custom_commune, row.custom_wilaya].filter(Boolean).join(" · ") || "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-1">
+                          <StatusBadge tone={priority(row.delivery_date).tone} size="sm">
+                            {priority(row.delivery_date).label}
+                          </StatusBadge>
+                          <span className="text-muted-foreground">{formatShortDate(row.delivery_date || row.transaction_date)}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {stockShortages(row).length > 0 ? (
+                          <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
+                        ) : (
+                          <span className="text-muted-foreground">OK</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {existing && !creatable ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openExisting(row);
+                            }}
+                          >
+                            Ouvrir {existing}
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground">{Math.round(row.per_picked || 0)}% prélevé</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="flex flex-col gap-2 md:hidden">
+            {filtered.map((row) => {
+              const existing = orderExistingPickList(row);
+              const creatable = orderCanCreate(row);
+              return (
+                <div key={row.name} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {creatable ? (
+                      <Checkbox
+                        aria-label={`Sélectionner ${row.name}`}
+                        checked={selected.has(row.name)}
+                        onCheckedChange={(checked) => handleSelectRow(row, checked)}
+                      />
+                    ) : null}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{row.name}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {row.customer_name || row.customer} · {row.custom_commune_nom || row.custom_commune || "—"} ·{" "}
+                        {formatShortDate(row.delivery_date || row.transaction_date)} · {row.total_qty || 0} art.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {stockShortages(row).length > 0 && <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>}
+                    <StatusBadge tone={priority(row.delivery_date).tone} size="sm">{priority(row.delivery_date).label}</StatusBadge>
+                    {existing && !creatable ? (
+                      <Button type="button" size="sm" variant="outline" onClick={() => openExisting(row)}>
+                        Ouvrir {existing}
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {stockShortages(row).length > 0 && (
-                  <StatusBadge tone="danger" size="sm">
-                    Stock insuffisant
-                  </StatusBadge>
-                )}
-                <StatusBadge tone={priority(row.delivery_date).tone} size="sm">
-                  {priority(row.delivery_date).label}
-                </StatusBadge>
-                {row.draft_pick_list ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      onOpenPickLists([row.draft_pick_list as string]);
-                    }}
-                  >
-                    Ouvrir {row.draft_pick_list}
-                  </Button>
-                ) : (
-                  <Badge variant="secondary">{Math.round(row.per_picked || 0)}% prélevé</Badge>
-                )}
-              </div>
-            </label>
-          ))}
-        </CardContent>
-      </Card>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <Dialog open={confirming} onOpenChange={(open) => !open && !creating && setConfirming(false)}>
         <DialogContent>
@@ -505,15 +618,6 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Sessions récentes</CardTitle></CardHeader>
-        <CardContent className="space-y-2">
-          {recentLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
-          {recentPickLists.map((pickList) => <div key={pickList.name} className="flex flex-col gap-3 rounded-xl border border-hairline p-3 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><strong className="text-sm text-foreground">{pickList.name}</strong><Badge variant={pickList.docstatus === 1 ? "default" : "secondary"}>{pickList.docstatus === 1 ? "Soumise" : "Brouillon"}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{pickList.sales_order_count} commande(s) · {pickList.delivery_notes.length ? `BL produits : ${pickList.delivery_notes.join(", ")}` : "Aucun BL produit"}</p></div><Button type="button" size="sm" variant="outline" onClick={() => onOpenPickLists([pickList.name])}>Ouvrir</Button></div>)}
-          {!recentLoading && !recentPickLists.length && <p className="text-sm text-muted-foreground">Aucune session récente.</p>}
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -527,6 +631,8 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const [scanValue, setScanValue] = useState("");
   const [scanMessage, setScanMessage] = useState("");
   const [scanError, setScanError] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [lastScan, setLastScan] = useState<ScanSnapshot | null>(null);
   const [lastScannedKey, setLastScannedKey] = useState("");
   const [search, setSearch] = useState("");
   const [focus, setFocus] = useState<LineFocus>("all");
@@ -535,12 +641,18 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const groupRefs = useRef<Record<string, HTMLElement | null>>({});
   const pickedRef = useRef<Record<string, number>>({});
 
+  const isMobile = useIsMobile();
   const { data, mutate, error, isLoading } = usePickSession(pickListNames);
   const { updateQuantities, submitPickList, scanPickItem, saving, submitting, scanning } = usePreparationMutations();
 
   const session = data?.message;
   const pickLists = session?.pick_lists || [];
   const draftOpen = pickLists.some((item) => item.docstatus === 0);
+  const floorMode = isMobile && draftOpen && !reviewing;
+
+  useEffect(() => {
+    void import("html5-qrcode");
+  }, []);
 
   useEffect(() => {
     if (!session?.pick_lists) return;
@@ -629,20 +741,46 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     }
   };
 
-  const handleScan = async (event: FormEvent) => {
-    event.preventDefault();
-    const value = scanValue.trim();
+  const applyScan = async (raw: string, restoreFocus = true) => {
+    const value = raw.trim();
     if (!value || reviewing || scanning || !draftOpen) return;
     setScanMessage("");
     setScanError("");
+    const snapshotFor = (
+      itemCode: string,
+      itemName: string,
+      warehouse: string | undefined,
+      pickedState: Record<string, number>,
+      increment: number,
+    ): ScanSnapshot => {
+      const group =
+        grouped.find((item) => item.item_code === itemCode && (item.warehouse || "") === (warehouse || "")) ||
+        grouped.find((item) => item.item_code === itemCode);
+      const requested = group?.stock_qty ?? 0;
+      const pickedQty = group ? groupPickedQty(group, pickedState) : 0;
+      return {
+        itemCode,
+        itemName,
+        warehouse: group?.warehouse || warehouse,
+        picked: pickedQty,
+        requested,
+        remaining: Math.max(0, requested - pickedQty),
+        increment,
+      };
+    };
     try {
       const result = await scanPickItem(value, pickListNames);
       const locations = pickLists.flatMap((pickList) => pickList.locations || []);
-      const applied = applyBarcodeScan(locations, pickedRef.current, result.item_code, result.increment || 1);
+      const increment = result.increment || 1;
+      const applied = applyBarcodeScan(locations, pickedRef.current, result.item_code, increment);
+      const itemName = result.item_name || result.item_code;
       if (!applied.ok) {
+        if (applied.reason === "already_complete") {
+          setLastScan(snapshotFor(result.item_code, itemName, undefined, pickedRef.current, increment));
+        }
         setScanError(
           applied.reason === "already_complete"
-            ? `Quantité demandée déjà atteinte pour ${result.item_name || result.item_code}.`
+            ? `Quantité demandée déjà atteinte pour ${itemName}.`
             : "Cet article n'est pas dans la session de préparation.",
         );
         return;
@@ -652,18 +790,249 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       setPicked(next);
       const groupKey = `${applied.itemCode}-${applied.warehouse || ""}`;
       setLastScannedKey(groupKey);
-      setScanMessage(`${result.item_name || result.item_code} · +${result.increment || 1}`);
+      const snapshot = snapshotFor(applied.itemCode, itemName, applied.warehouse, next, increment);
+      setLastScan(snapshot);
+      setScanMessage(`${itemName} · +${increment}`);
       groupRefs.current[groupKey]?.scrollIntoView({ behavior: "smooth", block: "center" });
     } catch (scanException) {
       setScanError(apiErrorMessage(scanException));
     } finally {
       setScanValue("");
-      scanInputRef.current?.focus();
+      if (restoreFocus) scanInputRef.current?.focus();
     }
   };
 
+  const openCamera = () => {
+    setCameraOpen(true);
+  };
+
+  const handleScan = async (event: FormEvent) => {
+    event.preventDefault();
+    await applyScan(scanValue);
+  };
+
+  const pickLineRows = filteredGroups.flatMap((group) => {
+    const groupKey = `${group.item_code}-${group.warehouse || ""}`;
+    return getPickGroupLocations(group).map((location) => ({ groupKey, group, location }));
+  });
+
+  const setLocationQty = (name: string, value: number) => {
+    setPicked((prev) => {
+      const next = { ...prev, [name]: value };
+      pickedRef.current = next;
+      return next;
+    });
+  };
+
+  const renderPickedQtyControl = (loc: PickLocation) => {
+    const locationDraft = pickLists.find((item) => item.name === loc.pick_list)?.docstatus === 0;
+    const locationQty = picked[loc.name] ?? loc.picked_qty ?? 0;
+    return (
+      <div key={loc.name} className="flex items-center justify-between gap-3 text-sm">
+        <span className="truncate text-muted-foreground">{loc.sales_order}</span>
+        <div className="flex items-center gap-2">
+          <span className="num text-xs text-muted-foreground">
+            {formatQty(loc.stock_qty)} {loc.stock_uom || loc.uom}
+          </span>
+          {locationDraft ? (
+            <Input
+              type="number"
+              min={0}
+              max={loc.stock_qty}
+              step="any"
+              className="h-8 w-24"
+              aria-label={`Quantité prélevée ${loc.item_code}`}
+              value={locationQty}
+              onChange={(event) => setLocationQty(loc.name, Number(event.target.value))}
+            />
+          ) : (
+            <span className="num w-24 text-right font-semibold">{formatQty(locationQty)}</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const pickLineColumns: Array<DataTableColumn<(typeof pickLineRows)[number]>> = [
+    {
+      id: "item",
+      header: "Article",
+      sortValue: (row) => row.location.item_code,
+      cell: (row) => (
+        <span
+          ref={(node) => {
+            groupRefs.current[row.groupKey] = node;
+          }}
+          className="font-medium"
+        >
+          {row.location.item_code} · {row.location.item_name}
+        </span>
+      ),
+    },
+    {
+      id: "warehouse",
+      header: "Entrepôt",
+      hideBelow: "md",
+      sortValue: (row) => row.location.warehouse || "",
+      cell: (row) => row.location.warehouse || "—",
+    },
+    {
+      id: "order",
+      header: "Commande",
+      hideBelow: "md",
+      sortValue: (row) => row.location.sales_order || "",
+      cell: (row) => row.location.sales_order || "—",
+    },
+    {
+      id: "requested",
+      header: "Demandé",
+      numeric: true,
+      width: "100px",
+      sortValue: (row) => row.location.stock_qty,
+      cell: (row) => `${formatQty(row.location.stock_qty)} ${row.location.stock_uom || row.location.uom || ""}`,
+    },
+    {
+      id: "picked",
+      header: "Prélevé",
+      width: "120px",
+      cell: (row) => {
+        const locationDraft = pickLists.find((item) => item.name === row.location.pick_list)?.docstatus === 0;
+        const locationQty = picked[row.location.name] ?? row.location.picked_qty ?? 0;
+        if (!locationDraft) return <span className="num font-semibold">{formatQty(locationQty)}</span>;
+        return (
+          <Input
+            type="number"
+            min={0}
+            max={row.location.stock_qty}
+            step="any"
+            className="h-8 w-24"
+            aria-label={`Quantité prélevée ${row.location.item_code}`}
+            value={locationQty}
+            onChange={(event) => setLocationQty(row.location.name, Number(event.target.value))}
+            onClick={(event) => event.stopPropagation()}
+          />
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "État",
+      width: "110px",
+      cell: (row) => {
+        const locationQty = picked[row.location.name] ?? row.location.picked_qty ?? 0;
+        return (
+          <StatusBadge tone={pickLineTone(locationQty, row.location.stock_qty)} size="sm">
+            {pickLineLabel(locationQty, row.location.stock_qty)}
+          </StatusBadge>
+        );
+      },
+    },
+  ];
+
+  const reviewColumns: Array<DataTableColumn<PickGroup>> = [
+    {
+      id: "item",
+      header: "Article",
+      cell: (group) => (
+        <div>
+          <p className="font-medium">{group.item_code} · {group.item_name}</p>
+          <p className="t-meta text-muted-foreground">{group.warehouse || "Emplacement non défini"}</p>
+        </div>
+      ),
+    },
+    {
+      id: "requested",
+      header: "Demandé",
+      numeric: true,
+      width: "100px",
+      cell: (group) => formatQty(group.stock_qty),
+    },
+    {
+      id: "picked",
+      header: "Prélevé",
+      numeric: true,
+      width: "100px",
+      cell: (group) => formatQty(groupPickedQty(group, picked)),
+    },
+    {
+      id: "diff",
+      header: "Écart",
+      numeric: true,
+      width: "100px",
+      cell: (group) => {
+        const difference = groupPickedQty(group, picked) - group.stock_qty;
+        return (
+          <span className={difference === 0 ? "text-emerald-700" : "text-amber-700"}>
+            {difference > 0 ? "+" : ""}{formatQty(difference)}
+          </span>
+        );
+      },
+    },
+  ];
+
   const currentStep: (typeof PREPARATION_STEPS)[number] =
     pickLists.every((item) => item.docstatus === 1) || reviewing ? "Contrôle" : "Prélèvement";
+
+  const floorLines = grouped.map((group) => {
+    const pickedQty = groupPickedQty(group, picked);
+    return {
+      key: `${group.item_code}-${group.warehouse || ""}`,
+      itemCode: group.item_code,
+      itemName: group.item_name || group.item_code,
+      warehouse: group.warehouse,
+      picked: pickedQty,
+      requested: group.stock_qty,
+      remaining: Math.max(0, group.stock_qty - pickedQty),
+      complete: pickedQty >= group.stock_qty,
+    };
+  });
+  const remainingArticles = floorLines.filter((line) => !line.complete).length;
+
+  if (floorMode) {
+    return (
+      <div className="flex flex-col gap-4">
+        {creationConfirmed && (
+          <Alert role="status" className="border-emerald-200 bg-emerald-50 text-emerald-900">
+            <CheckCircle className="text-emerald-700" />
+            <AlertDescription className="text-emerald-800">
+              <strong>Liste de prélèvement créée avec succès.</strong>
+              <span>{pickListNames.join(", ")}</span>
+            </AlertDescription>
+          </Alert>
+        )}
+        {(error || errorMessage) && (
+          <Alert>
+            <AlertDescription>{errorMessage || "Impossible de charger la liste de prélèvement."}</AlertDescription>
+          </Alert>
+        )}
+        {isLoading && !grouped.length ? (
+          <PickSessionSkeleton />
+        ) : (
+          <PickFloorView
+            title={title}
+            remainingArticles={remainingArticles}
+            lines={floorLines}
+            lastScan={lastScan}
+            scanError={scanError}
+            scanMessage={scanMessage}
+            scanning={scanning}
+            scanValue={scanValue}
+            onScanValueChange={setScanValue}
+            onScanSubmit={handleScan}
+            onOpenCamera={openCamera}
+            cameraOpen={cameraOpen}
+            onCameraOpenChange={setCameraOpen}
+            onApplyScan={(text) => void applyScan(text, false)}
+            onBack={onBack}
+            onReview={() => setReviewing(true)}
+            onFillRequested={fillRequested}
+            busy={scanning || submitting || saving}
+            scanInputRef={scanInputRef}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -804,154 +1173,167 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
             />
           </Toolbar>
 
-          <Card>
-            <CardHeader className="space-y-0">
-              <CardTitle className="text-base">
-                {submitted ? "Lignes prélevées" : "Lignes groupées à prélever"} ({session?.sales_orders?.length || 0} commande
-                {(session?.sales_orders?.length || 0) > 1 ? "s" : ""})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {!reviewing && draftOpen && (
-                <form onSubmit={handleScan} className="sticky top-0 z-10 space-y-2 rounded-lg border border-brand-200 bg-brand-50/80 p-3 backdrop-blur">
-                  <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                    <ScanBarcode className="h-4 w-4" />
-                    Code-barres article
-                  </label>
-                  <Input
-                    id="pick-scan-barcode"
-                    ref={scanInputRef}
-                    value={scanValue}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    autoFocus
-                    disabled={scanning || submitting || saving}
-                    placeholder="Scanner puis Entrée"
-                    onChange={(event) => setScanValue(event.target.value)}
-                  />
-                  <p className={`text-xs ${scanError ? "text-red-700" : "text-slate-600"}`} aria-live="polite">
-                    {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack) jusqu’à la quantité demandée."}
-                  </p>
-                </form>
-              )}
-              {!isLoading && grouped.length === 0 && (
-                <EmptyState
-                  icon={Package}
-                  title="Aucune ligne"
-                  description="Cette liste de prélèvement ne contient aucun article."
+          <h2 className="text-base font-semibold">
+            {submitted ? "Lignes prélevées" : "Lignes à prélever"} ({session?.sales_orders?.length || 0} commande
+            {(session?.sales_orders?.length || 0) > 1 ? "s" : ""})
+          </h2>
+          {!reviewing && draftOpen && (
+            <form onSubmit={handleScan} className="sticky top-0 z-10 flex flex-col gap-2 rounded-lg border border-brand-200 bg-brand-50/80 p-3 backdrop-blur">
+              <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
+                <ScanBarcode className="h-4 w-4" />
+                Code-barres article
+              </label>
+              <InputGroup className="h-10 bg-background">
+                <InputGroupInput
+                  id="pick-scan-barcode"
+                  ref={scanInputRef}
+                  value={scanValue}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoFocus
+                  disabled={scanning || submitting || saving}
+                  placeholder="Scanner puis Entrée"
+                  onChange={(event) => setScanValue(event.target.value)}
                 />
-              )}
-              {!reviewing && !filteredGroups.length && grouped.length > 0 && (
-                <p className="rounded-lg border border-dashed border-hairline-strong bg-card p-4 t-body text-muted-foreground">
-                  Aucun article ne correspond à la recherche.
-                </p>
-              )}
-              {!reviewing && filteredGroups.map((group) => {
-                const pickedQty = groupPickedQty(group, picked);
-                const groupKey = `${group.item_code}-${group.warehouse || ""}`;
-                return (
-                  <div
-                    key={`${group.item_code}-${group.warehouse}`}
-                    ref={(node) => {
-                      groupRefs.current[groupKey] = node;
-                    }}
-                    className={cn(
-                      "space-y-2 rounded-lg border p-3",
-                      lastScannedKey === groupKey && "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300",
-                    )}
+                <InputGroupAddon align="inline-end">
+                  <InputGroupButton
+                    type="button"
+                    size="icon-sm"
+                    aria-label="Ouvrir la caméra"
+                    disabled={scanning || submitting || saving}
+                    onClick={openCamera}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm">
-                          {group.item_code} · {group.item_name}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {group.warehouse || "Entrepôt non défini"} · {formatQty(pickedQty)} / {formatQty(group.stock_qty)} {group.uom || ""}
-                        </div>
-                      </div>
-                      <StatusBadge tone={pickLineTone(pickedQty, group.stock_qty)} size="sm">
-                        {pickLineLabel(pickedQty, group.stock_qty)}
-                      </StatusBadge>
-                    </div>
-                    {getPickGroupLocations(group).map((loc) => {
-                      const locationDraft = pickLists.find((item) => item.name === loc.pick_list)?.docstatus === 0;
-                      const locationQty = picked[loc.name] ?? loc.picked_qty ?? 0;
-                      return (
-                        <div key={loc.name} className="flex items-center justify-between gap-3 text-sm">
-                          <span className="truncate text-muted-foreground">{loc.sales_order}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="num text-xs text-muted-foreground">
-                              {formatQty(loc.stock_qty)} {loc.stock_uom || loc.uom}
-                            </span>
-                            {locationDraft ? (
-                              <Input
-                                type="number"
-                                min={0}
-                                max={loc.stock_qty}
-                                step="any"
-                                className="h-8 w-24"
-                                value={locationQty}
-                                onChange={(e) =>
-                                  setPicked((prev) => {
-                                    const next = { ...prev, [loc.name]: Number(e.target.value) };
-                                    pickedRef.current = next;
-                                    return next;
-                                  })
-                                }
-                              />
-                            ) : (
-                              <span className="num w-24 text-right font-semibold">{formatQty(locationQty)}</span>
-                            )}
+                    <Camera />
+                  </InputGroupButton>
+                </InputGroupAddon>
+              </InputGroup>
+              <p className={`text-xs ${scanError ? "text-red-700" : "text-slate-600"}`} aria-live="polite">
+                {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack) jusqu’à la quantité demandée."}
+              </p>
+              <BarcodeScannerDialog
+                open={cameraOpen}
+                onOpenChange={setCameraOpen}
+                onScan={(text) => void applyScan(text, false)}
+                feedback={scanning ? "Lecture…" : scanError || scanMessage}
+                feedbackTone={scanError ? "error" : scanMessage ? "success" : undefined}
+                scanResult={lastScan}
+              />
+            </form>
+          )}
+          {!isLoading && grouped.length === 0 && (
+            <EmptyState
+              icon={Package}
+              title="Aucune ligne"
+              description="Cette liste de prélèvement ne contient aucun article."
+            />
+          )}
+          {!reviewing && !filteredGroups.length && grouped.length > 0 && (
+            <p className="rounded-lg border border-dashed border-hairline-strong bg-card p-4 t-body text-muted-foreground">
+              Aucun article ne correspond à la recherche.
+            </p>
+          )}
+          {!reviewing && filteredGroups.length > 0 && (
+            <>
+              <div className="hidden md:block">
+                <DataTable
+                  label="Lignes à prélever"
+                  columns={pickLineColumns}
+                  rows={pickLineRows}
+                  rowKey={(row) => row.location.name}
+                  isRowActive={(row) => lastScannedKey === row.groupKey}
+                  rowClassName={(row) =>
+                    lastScannedKey === row.groupKey
+                      ? "bg-emerald-50 ring-inset ring-1 ring-emerald-300"
+                      : undefined
+                  }
+                />
+              </div>
+              <div className="space-y-2 md:hidden">
+                {filteredGroups.map((group) => {
+                  const pickedQty = groupPickedQty(group, picked);
+                  const groupKey = `${group.item_code}-${group.warehouse || ""}`;
+                  return (
+                    <div
+                      key={`${group.item_code}-${group.warehouse}`}
+                      ref={(node) => {
+                        groupRefs.current[groupKey] = node;
+                      }}
+                      className={cn(
+                        "space-y-2 rounded-lg border p-3",
+                        lastScannedKey === groupKey && "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300",
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm">
+                            {group.item_code} · {group.item_name}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {group.warehouse || "Entrepôt non défini"} · {formatQty(pickedQty)} / {formatQty(group.stock_qty)} {group.uom || ""}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-              {reviewing && (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <div className="flex gap-3">
-                      <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
-                      <div>
-                        <h3 className="font-semibold text-amber-900">Vérifiez les écarts avant création des BL</h3>
-                        <p className="mt-1 text-sm text-amber-800">
-                          Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.
-                        </p>
+                        <StatusBadge tone={pickLineTone(pickedQty, group.stock_qty)} size="sm">
+                          {pickLineLabel(pickedQty, group.stock_qty)}
+                        </StatusBadge>
                       </div>
+                      {getPickGroupLocations(group).map((loc) => renderPickedQtyControl(loc))}
                     </div>
-                  </div>
-                  {grouped.map((group) => {
-                    const pickedTotal = groupPickedQty(group, picked);
-                    const difference = pickedTotal - group.stock_qty;
-                    return (
-                      <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-hairline p-4 sm:grid-cols-[1fr_auto_auto_auto]">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">{group.item_code} · {group.item_name}</p>
-                          <p className="text-xs text-muted-foreground">{group.warehouse || "Emplacement non défini"}</p>
-                        </div>
-                        <p className="text-sm"><span className="block text-xs text-muted-foreground">Demandé</span><strong>{formatQty(group.stock_qty)}</strong></p>
-                        <p className="text-sm"><span className="block text-xs text-muted-foreground">Prélevé</span><strong>{formatQty(pickedTotal)}</strong></p>
-                        <p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}>
-                          <span className="block text-xs">Écart</span>
-                          <strong>{difference > 0 ? "+" : ""}{formatQty(difference)}</strong>
-                        </p>
-                      </div>
-                    );
-                  })}
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button>
-                    <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving}>
-                      <CheckCircle />
-                      Confirmer et créer les BL
-                    </Button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {reviewing && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="mt-0.5 h-5 w-5 text-amber-700" />
+                  <div>
+                    <h3 className="font-semibold text-amber-900">Vérifiez les écarts avant création des BL</h3>
+                    <p className="mt-1 text-sm text-amber-800">
+                      Après confirmation, les quantités sont enregistrées sur le serveur, la liste de prélèvement est soumise et les bons de livraison sont créés.
+                    </p>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+              <div className="hidden md:block">
+                <DataTable
+                  label="Contrôle des écarts"
+                  columns={reviewColumns}
+                  rows={grouped}
+                  rowKey={(group) => `${group.item_code}-${group.warehouse}-review`}
+                />
+              </div>
+              <div className="space-y-2 md:hidden">
+                {grouped.map((group) => {
+                  const pickedTotal = groupPickedQty(group, picked);
+                  const difference = pickedTotal - group.stock_qty;
+                  return (
+                    <div key={`${group.item_code}-${group.warehouse}-review`} className="grid gap-3 rounded-xl border border-hairline p-4 sm:grid-cols-[1fr_auto_auto_auto]">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{group.item_code} · {group.item_name}</p>
+                        <p className="text-xs text-muted-foreground">{group.warehouse || "Emplacement non défini"}</p>
+                      </div>
+                      <p className="text-sm"><span className="block text-xs text-muted-foreground">Demandé</span><strong>{formatQty(group.stock_qty)}</strong></p>
+                      <p className="text-sm"><span className="block text-xs text-muted-foreground">Prélevé</span><strong>{formatQty(pickedTotal)}</strong></p>
+                      <p className={`text-sm ${difference === 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                        <span className="block text-xs">Écart</span>
+                        <strong>{difference > 0 ? "+" : ""}{formatQty(difference)}</strong>
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button>
+                <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving}>
+                  <CheckCircle />
+                  Confirmer et créer les BL
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
 

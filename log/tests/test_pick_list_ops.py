@@ -5,11 +5,24 @@ import frappe
 
 from log.pick_list_ops import (
 	_attach_commune_names,
+	_covering_pick_lists_for_orders,
+	pick_list_covers_remaining_items,
 	scan_pick_item,
+	serialize_pick_list,
 	serialize_pick_session,
 	stock_shortages_for_items,
 	unreserve_sales_order_stock,
 )
+
+
+class _PickListItemLike:
+	"""Document enfant ERPNext : attribut manquant → AttributeError, .get() retourne None."""
+
+	def __init__(self, **values):
+		self.__dict__.update(values)
+
+	def get(self, key, default=None):
+		return self.__dict__.get(key, default)
 
 
 def _raise_throw(msg, *args, **kwargs):
@@ -66,6 +79,50 @@ class TestPickListSerialization(unittest.TestCase):
 		self.assertNotIn("rows", session["grouped"][0])
 		self.assertEqual(session["delivery_notes"], [])
 
+	@patch("log.pick_list_ops._bin_actual_qty", return_value=8)
+	@patch("log.pick_list_ops._get_delivery_note_names", return_value=[])
+	def test_v15_pick_list_item_reads_actual_qty_from_bin(self, _names, bin_qty):
+		location = _PickListItemLike(
+			name="PLI-1",
+			item_code="ART-1",
+			item_name="Article test",
+			warehouse="DEPOT",
+			qty=2,
+			stock_qty=2,
+			picked_qty=1,
+			uom="Unité",
+			stock_uom="Unité",
+			sales_order="SO-1",
+			sales_order_item="SOI-1",
+			batch_no=None,
+			serial_no=None,
+		)
+		self.assertFalse(hasattr(location, "actual_qty"))
+		doc = self._pick_list_doc()
+		doc.locations = [location]
+		result = serialize_pick_list(doc)
+
+		self.assertEqual(result["locations"][0]["actual_qty"], 8)
+		bin_qty.assert_called_once_with("ART-1", "DEPOT")
+
+	@patch("log.pick_list_ops._bin_actual_qty")
+	@patch("log.pick_list_ops._get_delivery_note_names", return_value=[])
+	def test_v16_pick_list_item_keeps_stored_actual_qty(self, _names, bin_qty):
+		result = serialize_pick_list(self._pick_list_doc())
+
+		self.assertEqual(result["locations"][0]["actual_qty"], 10)
+		bin_qty.assert_not_called()
+
+	@patch("log.pick_list_ops._bin_actual_qty", return_value=8)
+	@patch("log.pick_list_ops._get_delivery_note_names", return_value=[])
+	def test_v16_zero_actual_qty_is_not_replaced_by_bin(self, _names, bin_qty):
+		doc = self._pick_list_doc()
+		doc.locations[0].actual_qty = 0
+		result = serialize_pick_list(doc)
+
+		self.assertEqual(result["locations"][0]["actual_qty"], 0)
+		bin_qty.assert_not_called()
+
 	@patch("log.pick_list_ops.serialize_delivery_note", return_value={"name": "DN-1", "customer_name": "Client Test"})
 	@patch("log.pick_list_ops.frappe.get_doc")
 	@patch("log.pick_list_ops._get_delivery_note_names", return_value=["DN-1"])
@@ -75,6 +132,65 @@ class TestPickListSerialization(unittest.TestCase):
 		self.assertEqual([note["name"] for note in session["delivery_notes"]], ["DN-1"])
 		self.assertEqual(session["pick_lists"][0]["delivery_notes"][0]["name"], "DN-1")
 		get_doc.assert_called_once_with("Delivery Note", "DN-1")
+
+
+class TestPickListCoverage(unittest.TestCase):
+	def test_covers_when_pick_list_has_all_remaining_qty(self):
+		self.assertTrue(pick_list_covers_remaining_items({"SOI-1": 5}, {"SOI-1": 5}))
+
+	def test_missing_line_after_order_change_is_not_covering(self):
+		self.assertFalse(pick_list_covers_remaining_items({"SOI-1": 5, "SOI-2": 3}, {"SOI-1": 5}))
+
+	def test_insufficient_qty_on_pick_list_is_not_covering(self):
+		self.assertFalse(pick_list_covers_remaining_items({"SOI-1": 8}, {"SOI-1": 5}))
+
+	def test_pick_list_with_extra_qty_still_covers(self):
+		self.assertTrue(pick_list_covers_remaining_items({"SOI-1": 3}, {"SOI-1": 5}))
+
+	@patch("log.pick_list_ops.frappe.get_all")
+	def test_covering_map_returns_the_pick_list_that_covers_the_order(self, get_all):
+		so_items = [
+			frappe._dict(
+				name="SOI-1",
+				parent="SO-1",
+				qty=5,
+				picked_qty=0,
+				delivered_qty=0,
+				conversion_factor=1,
+				delivered_by_supplier=0,
+			)
+		]
+		pl_items = [frappe._dict(parent="PL-1", sales_order="SO-1", sales_order_item="SOI-1", qty=5)]
+		get_all.side_effect = [so_items, pl_items, ["PL-1"]]
+
+		self.assertEqual(_covering_pick_lists_for_orders(["SO-1"]), {"SO-1": "PL-1"})
+
+	@patch("log.pick_list_ops.frappe.get_all")
+	def test_covering_map_skips_when_a_line_is_missing(self, get_all):
+		so_items = [
+			frappe._dict(
+				name="SOI-1",
+				parent="SO-1",
+				qty=5,
+				picked_qty=0,
+				delivered_qty=0,
+				conversion_factor=1,
+				delivered_by_supplier=0,
+			),
+			frappe._dict(
+				name="SOI-2",
+				parent="SO-1",
+				qty=2,
+				picked_qty=0,
+				delivered_qty=0,
+				conversion_factor=1,
+				delivered_by_supplier=0,
+			),
+		]
+		pl_items = [frappe._dict(parent="PL-1", sales_order="SO-1", sales_order_item="SOI-1", qty=5)]
+		get_all.side_effect = [so_items, pl_items, ["PL-1"]]
+
+		self.assertEqual(_covering_pick_lists_for_orders(["SO-1"]), {})
 
 
 class TestPickListStockGuard(unittest.TestCase):

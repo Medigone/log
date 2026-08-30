@@ -36,11 +36,7 @@ const mocks = vi.hoisted(() => {
       increment: 1,
       barcode: "123456",
     }),
-    queueData: { message: [
-      { name: "SO-1", customer_name: "Client Test 1", delivery_date: tomorrowIso, total_qty: 2, custom_wilaya: "Alger", custom_commune: "COM-0001", custom_commune_nom: "Alger Centre" },
-      { name: "SO-2", customer_name: "Client Test 2", delivery_date: tomorrowIso, total_qty: 3, custom_wilaya: "Alger", custom_commune: "COM-0002", custom_commune_nom: "Bab Ezzouar" },
-      { name: "SO-3", customer_name: "Client Test 3", delivery_date: "2099-01-01", total_qty: 1, custom_wilaya: "Oran", custom_commune: "COM-0003", custom_commune_nom: "Oran" },
-    ] as Array<{
+    queueData: { message: [] as Array<{
       name: string
       customer_name: string
       delivery_date: string
@@ -48,21 +44,36 @@ const mocks = vi.hoisted(() => {
       custom_wilaya: string
       custom_commune: string
       custom_commune_nom: string
+      can_create_pick_list?: boolean
+      existing_pick_list?: string
       stock_shortages?: Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number }>
     }> },
     location,
     draftSession,
     pickListData: { message: structuredClone(draftSession) },
     returnRoutes: [] as Array<{ name: string; stock: { remainingQuantity: number; status: string; lines: unknown[] } }>,
+    baseQueue: [
+      { name: "SO-1", customer_name: "Client Test 1", delivery_date: tomorrowIso, total_qty: 2, custom_wilaya: "Alger", custom_commune: "COM-0001", custom_commune_nom: "Alger Centre" },
+      { name: "SO-2", customer_name: "Client Test 2", delivery_date: tomorrowIso, total_qty: 3, custom_wilaya: "Alger", custom_commune: "COM-0002", custom_commune_nom: "Bab Ezzouar" },
+      { name: "SO-3", customer_name: "Client Test 3", delivery_date: "2099-01-01", total_qty: 1, custom_wilaya: "Oran", custom_commune: "COM-0003", custom_commune_nom: "Oran" },
+    ],
   };
 });
+
+vi.mock("html5-qrcode", () => ({
+  Html5Qrcode: class {
+    start = vi.fn().mockResolvedValue(null);
+    stop = vi.fn().mockResolvedValue(undefined);
+    clear = vi.fn();
+    static getCameras = vi.fn().mockResolvedValue([]);
+  },
+}));
 
 vi.mock("@/shared/api/preparation", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/shared/api/preparation")>();
   return {
     ...actual,
     usePreparationQueue: () => ({ data: mocks.queueData, mutate: vi.fn(), error: undefined, isLoading: false }),
-    useRecentPickLists: () => ({ data: { message: [] }, error: undefined, isLoading: false }),
     usePickSession: () => ({ data: mocks.pickListData, mutate: vi.fn(), error: undefined, isLoading: false }),
     usePreparationMutations: () => ({
       createPickList: mocks.createPickList,
@@ -90,6 +101,14 @@ function renderWorkspace() {
   );
 }
 
+function orderCheckbox(name: string) {
+  return screen.getAllByRole("checkbox", { name: `Sélectionner ${name}` })[0];
+}
+
+function qtyInput() {
+  return screen.getAllByRole("spinbutton", { name: /quantité prélevée/i })[0];
+}
+
 describe("PreparationPage", () => {
   beforeEach(() => {
     mocks.createPickList.mockReset().mockResolvedValue({ name: "SESSION-PL-1", pick_lists: [{ name: "PL-1" }] });
@@ -101,11 +120,10 @@ describe("PreparationPage", () => {
       barcode: "123456",
     });
     mocks.pickListData.message = structuredClone(mocks.draftSession);
-    mocks.queueData.message.forEach((order) => {
-      delete order.stock_shortages;
-    });
+    mocks.queueData.message = mocks.baseQueue.map((order) => ({ ...order }));
     mocks.returnRoutes = [];
     Element.prototype.scrollIntoView = vi.fn();
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1024 });
   });
 
   it("place les retours dans un onglet dédié avec le nombre à traiter", async () => {
@@ -129,7 +147,7 @@ describe("PreparationPage", () => {
   it("passe de la file de commandes au contrôle des écarts", async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
-    await user.click(screen.getAllByRole("checkbox")[0]);
+    await user.click(orderCheckbox("SO-1"));
     await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
     expect(screen.getByRole("dialog", { name: /confirmer la création/i })).toBeInTheDocument();
     expect(screen.getByText(/une par commande sélectionnée/i)).toBeInTheDocument();
@@ -137,11 +155,11 @@ describe("PreparationPage", () => {
     await user.click(screen.getByRole("button", { name: /confirmer la création/i }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "PL-1" })).toBeInTheDocument());
     expect(screen.getByText(/liste de prélèvement créée avec succès/i)).toBeInTheDocument();
-    const quantity = screen.getByRole("spinbutton");
+    const quantity = qtyInput();
     await user.clear(quantity);
     await user.type(quantity, "1");
     await user.click(screen.getByRole("button", { name: /contrôle final/i }));
-    expect(screen.getByText("-1")).toBeInTheDocument();
+    expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /confirmer et créer les BL/i })).toBeInTheDocument();
   });
 
@@ -166,7 +184,7 @@ describe("PreparationPage", () => {
   it("permet d’annuler avant tout appel serveur", async () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
-    await user.click(screen.getAllByRole("checkbox")[0]);
+    await user.click(orderCheckbox("SO-1"));
     await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
     await user.click(screen.getByRole("button", { name: /annuler/i }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -180,8 +198,8 @@ describe("PreparationPage", () => {
     };
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
-    expect(screen.getByText("Stock insuffisant")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("checkbox")[0]);
+    expect(screen.getAllByText("Stock insuffisant").length).toBeGreaterThan(0);
+    await user.click(orderCheckbox("SO-1"));
     await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
     expect(screen.getByRole("dialog", { name: /stock insuffisant/i })).toBeInTheDocument();
     expect(screen.getByText(/12 demandé, 0 disponible/i)).toBeInTheDocument();
@@ -193,15 +211,22 @@ describe("PreparationPage", () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
 
-    await user.click(screen.getByRole("button", { name: /demain/i }));
-    await user.selectOptions(screen.getByLabelText("Wilaya"), "Alger");
+    await chooseOption(user, screen.getByRole("combobox", { name: "Échéance" }), /demain/i);
+    await chooseOption(user, screen.getByRole("combobox", { name: "Wilaya" }), "Alger");
     expect(screen.getByText("Commandes à prélever (2)")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Alger Centre" })).toHaveValue("COM-0001");
+
+    await user.click(screen.getByRole("combobox", { name: "Commune" }));
+    expect(await screen.findByRole("option", { name: "Alger Centre" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "COM-0001" })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
 
     await user.click(screen.getByRole("button", { name: /tout sélectionner/i }));
     expect(screen.getByText("2 sélectionnées")).toBeInTheDocument();
-    expect(screen.getAllByRole("checkbox").every((checkbox) => (checkbox as HTMLInputElement).checked)).toBe(true);
+    expect(
+      screen
+        .getAllByRole("checkbox", { name: /sélectionner so-/i })
+        .every((checkbox) => checkbox.getAttribute("aria-checked") === "true"),
+    ).toBe(true);
 
     await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
     expect(screen.getByText(/2 listes de prélèvement seront créées/i)).toBeInTheDocument();
@@ -213,7 +238,7 @@ describe("PreparationPage", () => {
     mocks.createPickList.mockResolvedValueOnce({ name: "SESSION-VIDE" });
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
-    await user.click(screen.getAllByRole("checkbox")[0]);
+    await user.click(orderCheckbox("SO-1"));
     await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
     await user.click(screen.getByRole("button", { name: /confirmer la création/i }));
     expect(await screen.findByText(/n’a retourné aucune liste de prélèvement/i)).toBeInTheDocument();
@@ -223,8 +248,8 @@ describe("PreparationPage", () => {
   it("initialise les quantités prélevées à 0", async () => {
     renderWorkspace();
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
-    expect(screen.getByRole("spinbutton")).toHaveValue(0);
-    expect(screen.getByRole("button", { name: /demandé/i })).toBeInTheDocument();
+    expect(qtyInput()).toHaveValue(0);
+    expect(screen.getByRole("button", { name: /quantité à prélever/i })).toBeInTheDocument();
     expect(screen.getAllByText("Restant").length).toBeGreaterThan(0);
   });
 
@@ -233,7 +258,7 @@ describe("PreparationPage", () => {
     renderWorkspace();
     const scan = await screen.findByLabelText(/code-barres article/i);
     await user.type(scan, "123456{Enter}");
-    await waitFor(() => expect(screen.getByRole("spinbutton")).toHaveValue(1));
+    await waitFor(() => expect(qtyInput()).toHaveValue(1));
     expect(mocks.scanPickItem).toHaveBeenCalledWith("123456", ["PL-1"]);
     expect(screen.getByText(/article test · \+1/i)).toBeInTheDocument();
   });
@@ -243,12 +268,12 @@ describe("PreparationPage", () => {
     renderWorkspace();
     const scan = await screen.findByLabelText(/code-barres article/i);
     await user.type(scan, "123456{Enter}");
-    await waitFor(() => expect(screen.getByRole("spinbutton")).toHaveValue(1));
+    await waitFor(() => expect(qtyInput()).toHaveValue(1));
     await user.type(scan, "123456{Enter}");
-    await waitFor(() => expect(screen.getByRole("spinbutton")).toHaveValue(2));
+    await waitFor(() => expect(qtyInput()).toHaveValue(2));
     await user.type(scan, "123456{Enter}");
     expect(await screen.findByText(/quantité demandée déjà atteinte/i)).toBeInTheDocument();
-    expect(screen.getByRole("spinbutton")).toHaveValue(2);
+    expect(qtyInput()).toHaveValue(2);
   });
 
   it("signale un article hors session de préparation", async () => {
@@ -263,7 +288,7 @@ describe("PreparationPage", () => {
     const scan = await screen.findByLabelText(/code-barres article/i);
     await user.type(scan, "999{Enter}");
     expect(await screen.findByText(/n'est pas dans la session de préparation/i)).toBeInTheDocument();
-    expect(screen.getByRole("spinbutton")).toHaveValue(0);
+    expect(qtyInput()).toHaveValue(0);
   });
 
   it("filtre les lignes restantes via le KPI", async () => {
@@ -274,7 +299,7 @@ describe("PreparationPage", () => {
     expect(screen.getByText(/aucun article ne correspond à la recherche/i)).toBeInTheDocument();
     expect(screen.queryByText(/article test/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /encore à scanner/i }));
-    expect(screen.getByText(/article test/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/article test/i).length).toBeGreaterThan(0);
   });
 
   it("affiche le recap BL d'une liste déjà soumise sans saisie", async () => {
@@ -292,7 +317,58 @@ describe("PreparationPage", () => {
     expect(screen.getAllByText("Complet").length).toBeGreaterThan(0);
     expect(screen.getByText("DN-1")).toBeInTheDocument();
     expect(screen.queryByLabelText(/code-barres article/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ouvrir la caméra" })).not.toBeInTheDocument();
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /contrôle final/i })).not.toBeInTheDocument();
+  });
+
+  it("ouvre la caméra pour scanner un code-barres", async () => {
+    const user = userEvent.setup();
+    renderWorkspace();
+    expect(await screen.findByRole("button", { name: "Ouvrir la caméra" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Ouvrir la caméra" }));
+    expect(screen.getByRole("dialog", { name: /scanner un code-barres/i })).toBeInTheDocument();
+    expect(screen.getByText(/cadrez le code dans le cadre/i)).toBeInTheDocument();
+  });
+
+  it("sur mobile, priorise le bouton Scanner et met à jour le compteur en direct", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 390 });
+    const user = userEvent.setup();
+    renderWorkspace();
+    expect(await screen.findByRole("button", { name: /^scanner$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "État" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ouvrir la caméra" })).not.toBeInTheDocument();
+    expect(screen.getByText(/scannez un article/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^scanner$/i }));
+    expect(screen.getByRole("dialog", { name: /scanner un code-barres/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /fermer/i }));
+
+    await user.click(screen.getByRole("button", { name: /saisir un code/i }));
+    await user.type(screen.getByLabelText(/code-barres article/i), "123456{Enter}");
+    expect(await screen.findByText(/reste 1/i)).toBeInTheDocument();
+    expect(screen.getByText("1/2")).toBeInTheDocument();
+    expect(mocks.scanPickItem).toHaveBeenCalledWith("123456", ["PL-1"]);
+  });
+
+  it("ouvre une liste existante et n'envoie pas la commande déjà couverte à la création", async () => {
+    mocks.queueData.message[0] = {
+      ...mocks.queueData.message[0],
+      can_create_pick_list: false,
+      existing_pick_list: "PL-COVER",
+    };
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
+
+    expect(screen.queryByRole("checkbox", { name: "Sélectionner SO-1" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /ouvrir pl-cover/i }).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /tout sélectionner/i }));
+    expect(screen.getByText("2 sélectionnées")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
+    expect(screen.getByText(/2 listes de prélèvement seront créées/i)).toBeInTheDocument();
+    expect(screen.queryByText("SO-1", { selector: "strong" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /confirmer la création/i }));
+    expect(mocks.createPickList).toHaveBeenCalledWith(["SO-2", "SO-3"]);
   });
 });

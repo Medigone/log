@@ -41,6 +41,30 @@ def _parse_list(value):
 	return [v for v in value if v]
 
 
+def _child_get(row, field, default=None):
+	"""Lit un champ enfant sans AttributeError si le schéma ERPNext v15/v16 diverge."""
+	if row is None:
+		return default
+	if hasattr(row, "get"):
+		value = row.get(field)
+		return default if value is None else value
+	return getattr(row, field, default)
+
+
+def _bin_actual_qty(item_code, warehouse):
+	if not item_code or not warehouse:
+		return 0.0
+	return flt(frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, "actual_qty"))
+
+
+def _location_actual_qty(loc):
+	"""v16 stocke actual_qty sur Pick List Item ; v15 ne l'a pas — on lit le Bin."""
+	stored = _child_get(loc, "actual_qty")
+	if stored is not None:
+		return flt(stored)
+	return _bin_actual_qty(_child_get(loc, "item_code"), _child_get(loc, "warehouse"))
+
+
 def _sales_order_pickable(name):
 	so = frappe.get_doc("Sales Order", name)
 	if so.docstatus != 1:
@@ -223,6 +247,86 @@ def _draft_pick_lists_for_orders(sales_orders):
 	return [{"name": name, "sales_orders": by_parent[name]} for name in drafts]
 
 
+def pick_list_covers_remaining_items(remaining_by_so_item, pick_list_qty_by_so_item) -> bool:
+	"""True si une Pick List couvre toutes les lignes encore à prélever de la commande."""
+	if not remaining_by_so_item:
+		return False
+	for so_item, required in remaining_by_so_item.items():
+		if flt(pick_list_qty_by_so_item.get(so_item)) + 0.000001 < flt(required):
+			return False
+	return True
+
+
+def _remaining_qty_by_so_item(items) -> dict[str, float]:
+	remaining = {}
+	for item in items:
+		if item.get("delivered_by_supplier"):
+			continue
+		required = _required_pick_qty(item)
+		if required <= 0:
+			continue
+		name = item.get("name")
+		if not name:
+			continue
+		remaining[name] = remaining.get(name, 0.0) + required
+	return remaining
+
+
+def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
+	"""Commande → Pick List unique (docstatus < 2) qui couvre encore toutes les lignes à prélever."""
+	if not sales_orders:
+		return {}
+	so_items = frappe.get_all(
+		"Sales Order Item",
+		filters={"parent": ["in", list(sales_orders)]},
+		fields=["name", "parent", "qty", "picked_qty", "delivered_qty", "conversion_factor", "delivered_by_supplier"],
+	)
+	remaining_by_order: dict[str, dict[str, float]] = defaultdict(dict)
+	for item in so_items:
+		remaining_by_order[item.parent].update(_remaining_qty_by_so_item([item]))
+
+	pl_items = frappe.get_all(
+		"Pick List Item",
+		filters={"sales_order": ["in", list(sales_orders)]},
+		fields=["parent", "sales_order", "sales_order_item", "qty"],
+	)
+	parents = list({row.parent for row in pl_items})
+	if not parents:
+		return {}
+	active = set(
+		frappe.get_all(
+			"Pick List",
+			filters={"name": ["in", parents], "docstatus": ["<", 2], "purpose": "Delivery"},
+			pluck="name",
+		)
+	)
+	qty_by_pl_so: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+	orders_on_pl: dict[str, set[str]] = defaultdict(set)
+	for row in pl_items:
+		if row.parent not in active or not row.sales_order_item:
+			continue
+		orders_on_pl[row.parent].add(row.sales_order)
+		qty_by_pl_so[row.parent][row.sales_order_item] += flt(row.qty)
+
+	covering = {}
+	for so_name, remaining in remaining_by_order.items():
+		for pl_name, orders in orders_on_pl.items():
+			if so_name not in orders:
+				continue
+			if pick_list_covers_remaining_items(remaining, qty_by_pl_so[pl_name]):
+				covering[so_name] = pl_name
+				break
+	return covering
+
+
+def _delete_stale_draft_pick_list(pick_list_name: str) -> None:
+	if _get_delivery_note_names(pick_list_name):
+		frappe.throw(
+			_("Impossible de recréer : la Pick List {0} a déjà un bon de livraison.").format(pick_list_name)
+		)
+	frappe.delete_doc("Pick List", pick_list_name, ignore_permissions=True, force=True)
+
+
 def _attach_commune_names(orders):
 	"""Ajoute le libellé métier des communes sans remplacer leur identifiant Link."""
 	commune_ids = list(dict.fromkeys(order.get("custom_commune") for order in orders if order.get("custom_commune")))
@@ -245,35 +349,38 @@ def serialize_pick_list(doc):
 	grouped_map = defaultdict(lambda: {"qty": 0, "stock_qty": 0, "picked_qty": 0, "rows": []})
 	sales_orders = []
 	for loc in doc.get("locations") or []:
+		item_code = _child_get(loc, "item_code")
+		warehouse = _child_get(loc, "warehouse")
+		sales_order = _child_get(loc, "sales_order")
 		row = {
-			"name": loc.name,
+			"name": _child_get(loc, "name"),
 			"pick_list": doc.name,
-			"item_code": loc.item_code,
-			"item_name": loc.item_name,
-			"warehouse": loc.warehouse,
-			"qty": flt(loc.qty),
-			"stock_qty": flt(loc.stock_qty),
-			"picked_qty": flt(loc.picked_qty),
-			"actual_qty": flt(loc.actual_qty),
-			"uom": loc.uom,
-			"stock_uom": loc.stock_uom,
-			"sales_order": loc.sales_order,
-			"sales_order_item": loc.sales_order_item,
-			"batch_no": loc.batch_no,
-			"serial_no": loc.serial_no,
+			"item_code": item_code,
+			"item_name": _child_get(loc, "item_name"),
+			"warehouse": warehouse,
+			"qty": flt(_child_get(loc, "qty")),
+			"stock_qty": flt(_child_get(loc, "stock_qty")),
+			"picked_qty": flt(_child_get(loc, "picked_qty")),
+			"actual_qty": _location_actual_qty(loc),
+			"uom": _child_get(loc, "uom"),
+			"stock_uom": _child_get(loc, "stock_uom"),
+			"sales_order": sales_order,
+			"sales_order_item": _child_get(loc, "sales_order_item"),
+			"batch_no": _child_get(loc, "batch_no"),
+			"serial_no": _child_get(loc, "serial_no"),
 		}
 		locations.append(row)
-		if loc.sales_order and loc.sales_order not in sales_orders:
-			sales_orders.append(loc.sales_order)
-		key = (loc.item_code or "", loc.warehouse or "")
+		if sales_order and sales_order not in sales_orders:
+			sales_orders.append(sales_order)
+		key = (item_code or "", warehouse or "")
 		bucket = grouped_map[key]
-		bucket["item_code"] = loc.item_code
-		bucket["item_name"] = loc.item_name
-		bucket["warehouse"] = loc.warehouse
-		bucket["uom"] = loc.stock_uom or loc.uom
-		bucket["qty"] += flt(loc.qty)
-		bucket["stock_qty"] += flt(loc.stock_qty)
-		bucket["picked_qty"] += flt(loc.picked_qty)
+		bucket["item_code"] = item_code
+		bucket["item_name"] = _child_get(loc, "item_name")
+		bucket["warehouse"] = warehouse
+		bucket["uom"] = _child_get(loc, "stock_uom") or _child_get(loc, "uom")
+		bucket["qty"] += flt(_child_get(loc, "qty"))
+		bucket["stock_qty"] += flt(_child_get(loc, "stock_qty"))
+		bucket["picked_qty"] += flt(_child_get(loc, "picked_qty"))
 		bucket["rows"].append(row)
 
 	grouped = [
@@ -422,9 +529,13 @@ def get_sales_orders_to_pick(search=None, limit=100):
 	)
 	so_names = [o.name for o in orders]
 	drafts = {so: pl["name"] for pl in _draft_pick_lists_for_orders(so_names) for so in pl["sales_orders"]}
+	covering = _covering_pick_lists_for_orders(so_names)
 	shortages = _stock_shortages_for_orders(orders)
 	for order in orders:
+		existing = covering.get(order.name)
 		order["draft_pick_list"] = drafts.get(order.name)
+		order["existing_pick_list"] = existing
+		order["can_create_pick_list"] = not existing
 		order["stock_shortages"] = shortages.get(order.name, [])
 	return _attach_commune_names(orders)
 
@@ -469,6 +580,10 @@ def create_pick_list_from_sales_orders(sales_orders):
 
 	docs = []
 	for so_name in sales_orders:
+		covering = _covering_pick_lists_for_orders([so_name]).get(so_name)
+		if covering:
+			docs.append(frappe.get_doc("Pick List", covering))
+			continue
 		existing = _draft_pick_lists_for_orders([so_name])
 		if existing:
 			orders = existing[0]["sales_orders"]
@@ -478,8 +593,7 @@ def create_pick_list_from_sales_orders(sales_orders):
 						so_name, existing[0]["name"]
 					)
 				)
-			docs.append(frappe.get_doc("Pick List", existing[0]["name"]))
-			continue
+			_delete_stale_draft_pick_list(existing[0]["name"])
 		_throw_if_insufficient_stock(so_name)
 		unreserve_sales_order_stock(so_name)
 		target = create_pick_list(so_name)

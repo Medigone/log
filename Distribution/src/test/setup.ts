@@ -4,6 +4,18 @@ import { afterEach } from "vitest";
 
 afterEach(cleanup);
 
+class PointerEventPolyfill extends MouseEvent {
+  constructor(type: string, init?: PointerEventInit) {
+    super(type, init);
+  }
+}
+
+Object.defineProperty(window, "PointerEvent", {
+  writable: true,
+  configurable: true,
+  value: PointerEventPolyfill,
+});
+
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: (query: string) => ({
