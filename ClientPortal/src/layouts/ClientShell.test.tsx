@@ -9,10 +9,6 @@ vi.mock("@/layouts/AppSidebar", () => ({
   AppSidebar: () => <aside>Navigation</aside>,
 }))
 
-vi.mock("@/layouts/MobileBottomNav", () => ({
-  MobileBottomNav: () => <nav>Navigation mobile</nav>,
-}))
-
 vi.mock("@/shared/api", () => ({
   useStorefront: () => ({
     data: { message: { hero: { title: "", cta: { type: "catalog", label: "" } }, banners: [], categories: [], rails: [] } },
@@ -76,7 +72,7 @@ describe("bandeau livraison en cours", () => {
     expect(screen.queryByText(/Livraison commande/)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Voir la commande" })).toHaveAttribute("href", "/orders/SAL-ORD-2026-00005")
     expect(screen.getAllByRole("button", { name: "Panier" }).length).toBeGreaterThan(0)
-    expect(screen.getByLabelText("Rechercher un article ou un rayon")).toBeVisible()
+    expect(screen.getByLabelText("Rechercher un article, une référence ou un rayon")).toBeVisible()
   })
 
   it("n'affiche rien sans tournée démarrée", () => {

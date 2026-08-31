@@ -55,6 +55,7 @@ export interface CatalogItem {
   campaignTitle?: string | null
   placement?: string | null
   currency: string
+  lastQuantity?: number
 }
 
 export interface StorefrontCta {
@@ -97,6 +98,7 @@ export interface CatalogPage {
   page: number
   pageLength: number
   hasNext: boolean
+  total?: number
 }
 
 export interface CartLine extends CatalogItem {

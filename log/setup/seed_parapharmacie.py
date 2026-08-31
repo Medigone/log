@@ -252,9 +252,11 @@ def _ensure_store_settings():
 
 def _image_search_dirs() -> list[Path]:
 	dirs = [Path(__file__).resolve().parent / "parapharmacie_images"]
-	cursor_assets = Path.home() / ".cursor/projects/Users-aminemelizi-Frappe-frappe-bench-apps-log/assets"
-	if cursor_assets.is_dir():
-		dirs.append(cursor_assets)
+	projects = Path.home() / ".cursor/projects"
+	if projects.is_dir():
+		for assets in sorted(projects.glob("*/assets")):
+			if assets.is_dir():
+				dirs.append(assets)
 	return dirs
 
 

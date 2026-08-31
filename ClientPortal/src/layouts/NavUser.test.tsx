@@ -46,9 +46,6 @@ function renderNav() {
         <NavUser context={context} />
         <Routes>
           <Route path="/" element={<div>Accueil</div>} />
-          <Route path="/orders" element={<div>Page commandes</div>} />
-          <Route path="/deliveries" element={<div>Page livraisons</div>} />
-          <Route path="/payments" element={<div>Page paiements</div>} />
           <Route path="/account" element={<div>Page compte</div>} />
         </Routes>
       </SidebarProvider>
@@ -62,36 +59,35 @@ describe("NavUser suivi de compte", () => {
     logout.mockReset()
   })
 
-  it("ouvre le suivi de compte avec commandes, livraisons, paiements et profil", async () => {
+  it("n’affiche que le profil, mon compte et la déconnexion", async () => {
     const user = userEvent.setup()
     renderNav()
     const trigger = screen.getByRole("button", { name: /Client test/ })
     trigger.focus()
     await user.keyboard("{Enter}")
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: /Commandes/ })).toBeVisible())
-    expect(screen.getByRole("menuitem", { name: /Commandes/ })).toHaveTextContent("1")
-    expect(screen.getByRole("menuitem", { name: /Bons de livraison/ })).toBeVisible()
-    expect(screen.getByRole("menuitem", { name: /Paiements/ })).toBeVisible()
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
+    expect(screen.queryByRole("menuitem", { name: /Commandes/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole("menuitem", { name: /Bons de livraison/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole("menuitem", { name: /Paiements/ })).not.toBeInTheDocument()
     expect(screen.queryByText(/150/)).not.toBeInTheDocument()
-    expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible()
     expect(screen.getByRole("menuitem", { name: "Déconnexion" })).toBeVisible()
     expect(screen.getAllByText("Client")).toHaveLength(2)
     expect(screen.queryByText("client@example.com")).not.toBeInTheDocument()
     expect(document.querySelector("[data-slot=avatar-fallback]")).toHaveClass("bg-black", "text-white")
   })
 
-  it("navigue vers les commandes depuis le menu", async () => {
+  it("navigue vers le compte depuis le menu", async () => {
     const user = userEvent.setup()
     renderNav()
     const trigger = screen.getByRole("button", { name: /Client test/ })
     trigger.focus()
     await user.keyboard("{Enter}")
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: /Commandes/ })).toBeVisible())
-    await user.click(screen.getByRole("menuitem", { name: /Commandes/ }))
-    expect(screen.getByText("Page commandes")).toBeVisible()
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
+    await user.click(screen.getByRole("menuitem", { name: "Mon compte" }))
+    expect(screen.getByText("Page compte")).toBeVisible()
   })
 
-  it("en variante barre n'affiche que l'avatar et ouvre le même suivi de compte", async () => {
+  it("en variante barre n’affiche que l’avatar et ouvre le même menu", async () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
@@ -104,8 +100,8 @@ describe("NavUser suivi de compte", () => {
     const trigger = screen.getByRole("button", { name: "Client test" })
     trigger.focus()
     await user.keyboard("{Enter}")
-    await waitFor(() => expect(screen.getByRole("menuitem", { name: /Commandes/ })).toBeVisible())
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
     expect(screen.getByText("Client")).toBeVisible()
-    expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible()
+    expect(screen.getByRole("menuitem", { name: "Déconnexion" })).toBeVisible()
   })
 })

@@ -1,8 +1,7 @@
 import { useFrappeAuth } from "frappe-react-sdk"
 import { useNavigate } from "react-router-dom"
-import { Banknote, ChevronsUpDown, ClipboardList, LogOut, PackageCheck, UserRound } from "lucide-react"
+import { ChevronsUpDown, LogOut, UserRound } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -45,7 +44,6 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
   const navigate = useNavigate()
   const displayName = context.customer.customerName || context.user.fullName
   const contactName = context.user.fullName || context.user.email
-  const inProgressCount = context.inProgressOrders?.length ?? 0
   const compact = variant === "bar"
 
   const go = (to: string) => {
@@ -102,19 +100,6 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => go("/orders")}>
-            <ClipboardList />
-            Commandes
-            {inProgressCount > 0 && <Badge variant="warning" className="ml-auto">{inProgressCount}</Badge>}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => go("/deliveries")}>
-            <PackageCheck />
-            Bons de livraison
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => go("/payments")}>
-            <Banknote />
-            Paiements
-          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => go("/account")}>
             <UserRound />
             Mon compte

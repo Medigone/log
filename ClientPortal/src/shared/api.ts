@@ -1,6 +1,7 @@
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk"
 import type {
   Balance,
+  CatalogItem,
   CatalogPage,
   CommuneOption,
   DeliverySummary,
@@ -43,11 +44,34 @@ export function usePortalContext(currentUser?: string | null) {
   )
 }
 
-export function useCatalog(search: string, itemGroup: string, page: number, enabled = true, pageLength = 12) {
+export function useCatalog(
+  search: string,
+  itemGroup: string,
+  page: number,
+  enabled = true,
+  pageLength = 12,
+  orderBy = "relevance",
+  offersOnly = false,
+) {
   return useFrappeGetCall<FrappeMessage<CatalogPage>>(
     `${API}.get_catalog`,
-    { search, item_group: itemGroup, page, page_length: pageLength },
-    enabled ? `client-catalog-${search}-${itemGroup}-${page}-${pageLength}` : null,
+    {
+      search,
+      item_group: itemGroup,
+      page,
+      page_length: pageLength,
+      order_by: orderBy,
+      offers_only: offersOnly ? 1 : 0,
+    },
+    enabled ? `client-catalog-${search}-${itemGroup}-${page}-${pageLength}-${orderBy}-${offersOnly ? 1 : 0}` : null,
+  )
+}
+
+export function useRecentOrderItems(enabled = true, limit = 8) {
+  return useFrappeGetCall<FrappeMessage<{ items: CatalogItem[] }>>(
+    `${API}.get_recent_order_items`,
+    { limit },
+    enabled ? `client-recent-order-items-${limit}` : null,
   )
 }
 

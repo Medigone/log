@@ -66,7 +66,7 @@ describe("recherche globale", () => {
 
   it("ne montre pas la liste tant que la requête est vide", () => {
     renderSearch()
-    expect(screen.getByLabelText("Rechercher un article ou un rayon")).toBeVisible()
+    expect(screen.getByLabelText("Rechercher un article, une référence ou un rayon")).toBeVisible()
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
   })
 

@@ -19,7 +19,6 @@ export function crumbsFromPath(pathname: string, search = ""): Crumb[] {
   if (!section) {
     if (group) return [{ label: "Boutique", to: "/" }, { label: group }]
     if (view === "offres") return [{ label: "Boutique", to: "/" }, { label: "Offres" }]
-    if (view === "catalog") return [{ label: "Boutique", to: "/" }, { label: "Catalogue" }]
     return [{ label: "Boutique" }]
   }
   if (section === "store") return [{ label: "Boutique" }]

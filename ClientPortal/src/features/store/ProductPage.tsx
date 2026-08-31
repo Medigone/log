@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { ImageOff, ShoppingCart } from "lucide-react"
+import { Check, ShoppingCart } from "lucide-react"
 import { useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { useCart } from "@/cart/CartContext"
@@ -8,7 +8,10 @@ import { ErrorState } from "@/components/LoadState"
 import { PageTitle } from "@/components/PageTitle"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { InCartBadge, ProductPrice, QuantityInput, plainText } from "@/features/store/ProductCard"
+import { Spinner } from "@/components/ui/spinner"
+import { InCartBadge, ProductPrice, plainText } from "@/features/store/ProductCard"
+import { ProductImage } from "@/features/store/ProductImage"
+import { QuantitySelector } from "@/features/store/QuantitySelector"
 import { useProduct, usePromotionEvents } from "@/shared/api"
 
 export function ProductPage() {
@@ -19,6 +22,8 @@ export function ProductPage() {
   const cart = useCart()
   const events = usePromotionEvents()
   const [quantity, setQuantity] = useState(1)
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded] = useState(false)
 
   if (isLoading) return <Skeleton className="h-96 rounded-xl" />
   if (error || !item) return <ErrorState error={error || new Error("Article introuvable.")} />
@@ -26,6 +31,8 @@ export function ProductPage() {
   const cartQuantity = cart.lines.find((line) => line.itemCode === item.itemCode)?.quantity ?? 0
 
   const add = () => {
+    if (adding) return
+    setAdding(true)
     cart.add(item, quantity)
     void events.track({
       eventType: "add_to_cart",
@@ -34,29 +41,32 @@ export function ProductPage() {
       itemCode: item.itemCode,
     })
     toast.success(quantity > 1 ? `${quantity} × ${item.itemName} ajoutés au panier` : `${item.itemName} ajouté au panier`)
+    setAdded(true)
+    window.setTimeout(() => {
+      setAdded(false)
+      setAdding(false)
+    }, 1200)
   }
 
   return (
     <>
-      <DetailBackButton to="/" label="Retour à la boutique" />
+      <DetailBackButton to="/" label="Retour à l'accueil" />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]">
-        <div className="relative grid aspect-square place-items-center overflow-hidden rounded-xl bg-muted/60">
-          {item.image ? (
-            <img src={item.image} alt={item.itemName} className="h-full w-full object-contain p-8" />
-          ) : (
-            <ImageOff className="text-muted-foreground/50" />
-          )}
+        <div className="relative overflow-hidden rounded-xl bg-muted/60">
+          <ProductImage src={item.image} alt={item.itemName} className="aspect-square w-full" />
           <InCartBadge quantity={cartQuantity} />
         </div>
         <div className="flex flex-col gap-5">
           <PageTitle title={item.itemName} description={item.itemGroup} />
-          <p className="text-sm text-muted-foreground">{plainText(item.description) || item.itemCode}</p>
-          <p className="text-sm">Unité : {item.uom}</p>
+          {plainText(item.description) ? (
+            <p className="text-sm text-muted-foreground">{plainText(item.description)}</p>
+          ) : null}
+          <p className="text-sm text-muted-foreground">Réf. {item.itemCode} · {item.uom}</p>
           <ProductPrice item={item} />
-          <QuantityInput value={quantity} onChange={setQuantity} name={item.itemName} />
-          <Button onClick={add}>
-            <ShoppingCart data-icon="inline-start" />
-            {cartQuantity > 0 ? "Ajouter encore" : "Ajouter au panier"}
+          <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} />
+          <Button disabled={adding} onClick={add}>
+            {adding && !added ? <Spinner data-icon="inline-start" /> : added ? <Check data-icon="inline-start" /> : <ShoppingCart data-icon="inline-start" />}
+            {added ? "Ajouté" : "Ajouter au panier"}
           </Button>
         </div>
       </div>

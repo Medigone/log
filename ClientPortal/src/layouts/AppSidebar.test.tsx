@@ -32,12 +32,12 @@ const context: PortalContext = {
   balances: [],
 }
 
-function stubMatchMedia() {
+function stubMatchMedia(mobile = false) {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     configurable: true,
     value: (query: string) => ({
-      matches: false,
+      matches: mobile && query.includes("max-width: 767px"),
       media: query,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
@@ -67,45 +67,44 @@ describe("AppSidebar boutique", () => {
     mocks.storefront.data = {
       message: {
         hero: { title: "Promo", cta: { type: "catalog", label: "Voir" } },
-        banners: [],
+        banners: [{ title: "Promo", campaign: "CAMP-1", cta: { type: "catalog", label: "Voir" } }],
         categories: [{ name: "Boissons" }, { name: "Épicerie" }],
-        rails: [],
+        rails: [
+          {
+            campaign: "CAMP-1",
+            kind: "campaign",
+            title: "Offres",
+            cta: { type: "catalog", label: "Voir" },
+            items: [],
+          },
+        ],
       },
     }
   })
 
-  it("affiche le menu vente et les rayons, sans le suivi de compte", () => {
+  it("affiche le menu portail sans l’arborescence des rayons", () => {
     renderSidebar()
     expect(screen.getByRole("link", { name: "Accueil" })).toHaveAttribute("href", "/")
+    expect(screen.queryByRole("link", { name: "Catalogue" })).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Offres" })).toHaveAttribute("href", "/?view=offres")
-    expect(screen.getByRole("link", { name: "Catalogue" })).toHaveAttribute("href", "/?view=catalog")
-    expect(screen.getByRole("link", { name: "Boissons" })).toHaveAttribute("href", "/?group=Boissons")
-    expect(screen.getByRole("link", { name: "Épicerie" })).toHaveAttribute("href", "/?group=%C3%89picerie")
-    expect(screen.queryByRole("link", { name: "Commandes" })).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Mes commandes" })).toHaveAttribute("href", "/orders")
+    expect(screen.getByRole("link", { name: "Bons de livraison" })).toHaveAttribute("href", "/deliveries")
+    expect(screen.getByRole("link", { name: "Paiements" })).toHaveAttribute("href", "/payments")
+    expect(screen.queryByRole("link", { name: "Boissons" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Épicerie" })).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Panier" })).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Mon compte" })).not.toBeInTheDocument()
+    expect(screen.getByText("1")).toBeVisible()
   })
 
-  it("marque le rayon courant comme actif", () => {
+  it("marque l'accueil comme actif lorsqu’un rayon est filtré", () => {
     renderSidebar("/?group=Boissons")
-    expect(screen.getByRole("link", { name: "Boissons" })).toHaveAttribute("data-active")
-    expect(screen.getByRole("link", { name: "Accueil" })).not.toHaveAttribute("data-active")
+    expect(screen.getByRole("link", { name: "Accueil" })).toHaveAttribute("data-active")
+    expect(screen.getByRole("link", { name: "Offres" })).not.toHaveAttribute("data-active")
   })
 
-  it("n'affiche pas la sidebar sur mobile", () => {
-    Object.defineProperty(window, "matchMedia", {
-      writable: true,
-      configurable: true,
-      value: (query: string) => ({
-        matches: query.includes("max-width: 767px"),
-        media: query,
-        addEventListener: () => undefined,
-        removeEventListener: () => undefined,
-        addListener: () => undefined,
-        removeListener: () => undefined,
-        dispatchEvent: () => false,
-      }),
-    })
+  it("monte sans contenu visible tant que la feuille mobile est fermée", () => {
+    stubMatchMedia(true)
     renderSidebar()
     expect(screen.queryByRole("link", { name: "Accueil" })).not.toBeInTheDocument()
   })

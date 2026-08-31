@@ -44,6 +44,12 @@ DELIVERY_SORT_CLAUSES = {
 	"qty_desc": "total_qty desc, posting_date desc",
 	"qty_asc": "total_qty asc, posting_date asc",
 }
+CATALOG_SORT_CLAUSES = {
+	"relevance": "item_name asc, name asc",
+	"name_asc": "item_name asc, name asc",
+	"name_desc": "item_name desc, name desc",
+	"recent": "creation desc, item_name asc",
+}
 _CLOSED_ORDER_STATUSES = ["Closed", "Clôturé"]
 _HELD_ORDER_STATUSES = ["On Hold", "En pause"]
 _BLOCKED_PROGRESS_STATUSES = _CLOSED_ORDER_STATUSES + _HELD_ORDER_STATUSES
@@ -1132,8 +1138,42 @@ def change_initial_password(payload):
 	return {"success": True, "mustChangePassword": False}
 
 
+def _catalog_or_filters(search: Any):
+	term = cstr(search).strip()
+	if not term:
+		return None
+	like = f"%{term}%"
+	return [
+		["name", "like", like],
+		["item_name", "like", like],
+		["description", "like", like],
+		["item_group", "like", like],
+	]
+
+
+def _catalog_total(filters: dict[str, Any], or_filters) -> int:
+	if or_filters:
+		return len(frappe.get_all("Item", filters=filters, or_filters=or_filters, pluck="name"))
+	return cint(frappe.db.count("Item", filters))
+
+
+def _catalog_groups() -> list[str]:
+	return frappe.get_all("Item Group", filters={"is_group": 0}, pluck="name", order_by="name asc")
+
+
+def _empty_catalog(page_number: int, length: int) -> dict[str, Any]:
+	return {
+		"items": [],
+		"groups": _catalog_groups(),
+		"page": page_number,
+		"pageLength": length,
+		"hasNext": False,
+		"total": 0,
+	}
+
+
 @frappe.whitelist()
-def get_catalog(search=None, item_group=None, page=1, page_length=12):
+def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=None, offers_only=0):
 	from log.services import portal_merchandising as merchandising
 
 	customer_name, user = _current_portal_customer()
@@ -1141,15 +1181,13 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12):
 	filters = _catalog_item_filters()
 	if item_group:
 		filters["item_group"] = cstr(item_group)
-	or_filters = None
-	if search and cstr(search).strip():
-		like = f"%{cstr(search).strip()}%"
-		or_filters = [
-			["name", "like", like],
-			["item_name", "like", like],
-			["description", "like", like],
-			["item_group", "like", like],
-		]
+	campaigns = merchandising.campaigns_by_item(customer_name)
+	if cint(offers_only):
+		offer_codes = [code for code in campaigns if code]
+		if not offer_codes:
+			return _empty_catalog(page_number, length)
+		filters["name"] = ["in", offer_codes]
+	or_filters = _catalog_or_filters(search)
 	fields = ["name", "item_name", "description", "item_group", "stock_uom", "image"]
 	if _item_has_column(STORE_SHOW_PRICE_FIELD):
 		fields.append(STORE_SHOW_PRICE_FIELD)
@@ -1158,14 +1196,13 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12):
 		filters=filters,
 		or_filters=or_filters,
 		fields=fields,
-		order_by="item_name asc, name asc",
+		order_by=_sort_clause(order_by, CATALOG_SORT_CLAUSES, "relevance"),
 		limit_start=offset,
 		limit_page_length=length + 1,
 	)
 	has_next = len(rows) > length
 	rows = rows[:length]
 	currency = _currency(_customer_data(customer_name), _company())
-	campaigns = merchandising.campaigns_by_item(customer_name)
 	products = [
 		merchandising.serialize_item_row(
 			row,
@@ -1176,14 +1213,73 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12):
 		for row in rows
 	]
 	merchandising.apply_prices(products, customer_name, user.name)
-	groups = frappe.get_all("Item Group", filters={"is_group": 0}, pluck="name", order_by="name asc")
 	return {
 		"items": products,
-		"groups": groups,
+		"groups": _catalog_groups(),
 		"page": page_number,
 		"pageLength": length,
 		"hasNext": has_next,
+		"total": _catalog_total(filters, or_filters),
 	}
+
+
+@frappe.whitelist()
+def get_recent_order_items(limit=8):
+	from log.services import portal_merchandising as merchandising
+
+	customer_name, user = _current_portal_customer()
+	max_items = min(max(cint(limit), 1), 12)
+	order_names = frappe.get_all(
+		"Sales Order",
+		filters={"customer": customer_name, "docstatus": ["<", 2]},
+		pluck="name",
+		order_by="transaction_date desc, creation desc",
+		limit_page_length=30,
+	)
+	if not order_names:
+		return {"items": []}
+
+	item_fields = ["item_code", "item_name", "qty", "uom", "parent", "idx"]
+	has_column = getattr(getattr(frappe, "db", None), "has_column", None)
+	if has_column and has_column("Sales Order Item", "is_free_item"):
+		item_fields.append("is_free_item")
+	rows = frappe.get_all(
+		"Sales Order Item",
+		filters={"parent": ["in", order_names], "parenttype": "Sales Order"},
+		fields=item_fields,
+		order_by="idx asc",
+	)
+	order_rank = {name: index for index, name in enumerate(order_names)}
+	rows.sort(key=lambda row: (order_rank.get(row.parent, 999), cint(row.idx)))
+
+	seen: dict[str, Any] = {}
+	for row in rows:
+		code = cstr(row.item_code)
+		if not code or code in seen or cint(row.get("is_free_item")):
+			continue
+		seen[code] = row
+		if len(seen) >= max_items:
+			break
+
+	item_rows = merchandising.fetch_item_rows(list(seen))
+	currency = _currency(_customer_data(customer_name), _company())
+	campaigns = merchandising.campaigns_by_item(customer_name)
+	products = []
+	for code, row in seen.items():
+		item_row = item_rows.get(code)
+		if not item_row:
+			continue
+		campaign = campaigns.get(code)
+		payload = merchandising.serialize_item_row(
+			item_row,
+			currency=currency,
+			campaign=campaign,
+			placement=campaign.placement if campaign else None,
+		)
+		payload["lastQuantity"] = flt(row.qty) or 1
+		products.append(payload)
+	merchandising.apply_prices(products, customer_name, user.name)
+	return {"items": products}
 
 
 def _prepare_order_lines(customer: str, items: Any) -> list[dict[str, Any]]:

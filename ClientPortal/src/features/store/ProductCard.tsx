@@ -1,12 +1,14 @@
 import { useState } from "react"
-import { ImageOff, Minus, Plus, ShoppingCart } from "lucide-react"
+import { Check, ShoppingCart } from "lucide-react"
 import { NavLink } from "react-router-dom"
 import { toast } from "sonner"
 import { useCart } from "@/cart/CartContext"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
+import { Spinner } from "@/components/ui/spinner"
+import { ProductImage } from "@/features/store/ProductImage"
+import { QuantitySelector } from "@/features/store/QuantitySelector"
 import { cn } from "@/lib/utils"
 import { usePromotionEvents } from "@/shared/api"
 import { formatMoney } from "@/shared/format"
@@ -16,47 +18,30 @@ export function plainText(value?: string | null) {
   return (value || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
 }
 
-export function QuantityInput({
-  value,
-  onChange,
-  name,
-  compact = false,
-}: {
+export function QuantityInput(props: {
   value: number
   onChange: (quantity: number) => void
   name: string
+  uom?: string
   compact?: boolean
 }) {
-  return (
-    <InputGroup className={cn("w-full bg-background", compact ? "h-7" : undefined)}>
-      <InputGroupAddon>
-        <InputGroupButton size={compact ? "icon-xs" : "icon-sm"} aria-label={`Diminuer ${name}`} onClick={() => onChange(Math.max(1, value - 1))}>
-          <Minus />
-        </InputGroupButton>
-      </InputGroupAddon>
-      <InputGroupInput
-        aria-label={`Quantité ${name}`}
-        type="number"
-        min="1"
-        value={value}
-        onChange={(event) => onChange(Math.max(1, Number(event.target.value) || 1))}
-        className="text-center tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-      />
-      <InputGroupAddon align="inline-end">
-        <InputGroupButton size={compact ? "icon-xs" : "icon-sm"} aria-label={`Augmenter ${name}`} onClick={() => onChange(value + 1)}>
-          <Plus />
-        </InputGroupButton>
-      </InputGroupAddon>
-    </InputGroup>
-  )
+  return <QuantitySelector {...props} />
 }
 
 export function ProductPrice({ item, compact = false }: { item: CatalogItem; compact?: boolean }) {
   const current = item.unitPriceTtc
-  if (item.showPrice === false || current == null) {
+  if (item.showPrice === false) {
     return (
       <div className="flex min-h-[1lh] flex-col gap-0.5">
-        <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>Prix sur demande</p>
+        <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>Sur devis</p>
+        {item.offerCondition && <p className="text-xs text-muted-foreground">{item.offerCondition}</p>}
+      </div>
+    )
+  }
+  if (current == null) {
+    return (
+      <div className="flex min-h-[1lh] flex-col gap-0.5">
+        <p className={cn("text-muted-foreground", compact ? "text-xs" : "text-sm")}>Prix non disponible</p>
         {item.offerCondition && <p className="text-xs text-muted-foreground">{item.offerCondition}</p>}
       </div>
     )
@@ -65,15 +50,18 @@ export function ProductPrice({ item, compact = false }: { item: CatalogItem; com
   const onSale = catalog != null && catalog - current > 0.009
   return (
     <div className="flex min-h-[1lh] flex-col gap-0.5">
-      <p className={cn("flex flex-wrap items-center gap-1.5 font-normal", compact ? "text-xs" : "text-sm")}>
+      <p className={cn("flex flex-wrap items-baseline gap-1.5 font-semibold", compact ? "text-sm" : "text-base")}>
         {onSale && (
           <span className="text-xs font-normal text-muted-foreground line-through">
             {formatMoney(catalog, item.currency)}
           </span>
         )}
-        <span>{formatMoney(current, item.currency)}</span>
+        <span>
+          {formatMoney(current, item.currency)}{" "}
+          <span className="text-xs font-normal text-muted-foreground">TTC</span>
+        </span>
         {item.offerLabel && (
-          <Badge variant="destructive" className="px-1.5 py-0 text-[0.65rem]">
+          <Badge variant="warning" className="px-1.5 py-0 text-[0.65rem]">
             {item.offerLabel}
           </Badge>
         )}
@@ -97,32 +85,42 @@ export function InCartBadge({ quantity, compact = false }: { quantity: number; c
   )
 }
 
-export function ProductCard({ item, size = "default" }: { item: CatalogItem; size?: "default" | "sm" }) {
+export function ProductCard({ item }: { item: CatalogItem; size?: "default" | "sm" }) {
   const cart = useCart()
   const events = usePromotionEvents()
-  const [quantity, setQuantity] = useState(1)
-  const compact = size === "sm"
+  const [quantity, setQuantity] = useState(Math.max(1, Math.round(item.lastQuantity || 1)))
+  const [adding, setAdding] = useState(false)
+  const [added, setAdded] = useState(false)
   const cartQuantity = cart.lines.find((line) => line.itemCode === item.itemCode)?.quantity ?? 0
+  const details = [`Réf. ${item.itemCode}`, item.uom].filter(Boolean).join(" · ")
 
-  const add = () => {
-    cart.add(item, quantity)
-    void events.track({
-      eventType: "add_to_cart",
-      campaign: item.campaign,
-      placement: item.placement,
-      itemCode: item.itemCode,
-    })
-    toast.success(quantity > 1 ? `${quantity} × ${item.itemName} ajoutés au panier` : `${item.itemName} ajouté au panier`)
+  const add = async () => {
+    if (adding) return
+    setAdding(true)
+    try {
+      cart.add(item, quantity)
+      void events.track({
+        eventType: "add_to_cart",
+        campaign: item.campaign,
+        placement: item.placement,
+        itemCode: item.itemCode,
+      })
+      setAdded(true)
+      window.setTimeout(() => {
+        setAdded(false)
+        setAdding(false)
+      }, 1400)
+    } catch {
+      toast.error("Impossible d’ajouter cet article au panier.")
+      setAdding(false)
+    }
   }
 
   return (
-    <Card
-      size="sm"
-      className="h-full gap-2 overflow-hidden rounded-2xl p-3 shadow-none has-data-[slot=card-footer]:pb-3"
-    >
+    <Card size="sm" className="h-full min-w-0 gap-1.5 overflow-hidden rounded-xl p-2 shadow-none ring-foreground/10 has-data-[slot=card-footer]:pb-2">
       <NavLink
         to={`/products/${encodeURIComponent(item.itemCode)}`}
-        className="relative block aspect-square w-full shrink-0 overflow-hidden rounded-2xl bg-muted"
+        className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden rounded-lg bg-muted"
         onClick={() =>
           void events.track({
             eventType: "select_promotion",
@@ -132,41 +130,24 @@ export function ProductCard({ item, size = "default" }: { item: CatalogItem; siz
           })
         }
       >
-        {item.image ? (
-          <img
-            src={item.image}
-            alt={item.itemName}
-            className={cn("absolute inset-0 size-full object-contain", compact ? "p-2" : "p-4")}
-          />
-        ) : (
-          <ImageOff
-            className={cn(
-              "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-muted-foreground/50",
-              compact ? "size-5" : "size-6",
-            )}
-          />
-        )}
-        <InCartBadge quantity={cartQuantity} compact={compact} />
+        <ProductImage src={item.image} alt={item.itemName} compact className="absolute inset-0 size-full" />
+        <InCartBadge quantity={cartQuantity} compact />
       </NavLink>
-      <CardHeader className="gap-1 p-0">
-        <p className="truncate text-xs text-muted-foreground">{item.itemGroup}</p>
-        <CardTitle
-          className={cn(
-            "line-clamp-2 min-h-[2lh] leading-snug font-semibold",
-            compact ? "text-sm group-data-[size=sm]/card:text-sm" : "text-base group-data-[size=sm]/card:text-base",
-          )}
-        >
+      <CardHeader className="gap-0.5 p-0">
+        <p className="truncate text-[0.65rem] text-muted-foreground">{item.itemGroup}</p>
+        <CardTitle className="line-clamp-2 text-sm leading-snug font-semibold group-data-[size=sm]/card:text-sm">
           <NavLink to={`/products/${encodeURIComponent(item.itemCode)}`}>{item.itemName}</NavLink>
         </CardTitle>
+        <p className="truncate text-[0.65rem] text-muted-foreground">{details}</p>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col p-0">
-        <ProductPrice item={item} compact={compact} />
+        <ProductPrice item={item} compact />
       </CardContent>
-      <CardFooter className="mt-auto flex-col items-stretch gap-2 border-0 bg-transparent p-0">
-        <QuantityInput value={quantity} onChange={setQuantity} name={item.itemName} compact={compact} />
-        <Button size="sm" className="w-full rounded-full" onClick={add}>
-          <ShoppingCart data-icon="inline-start" />
-          {cartQuantity > 0 ? "Ajouter encore" : "Ajouter"}
+      <CardFooter className="mt-auto flex-col items-stretch gap-1.5 border-0 bg-transparent p-0">
+        <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} compact />
+        <Button size="sm" className="h-7 w-full text-xs" disabled={adding} onClick={() => void add()}>
+          {adding ? <Spinner data-icon="inline-start" /> : added ? <Check data-icon="inline-start" /> : <ShoppingCart data-icon="inline-start" />}
+          {adding ? "Ajout…" : added ? "Ajouté" : "Ajouter au panier"}
         </Button>
       </CardFooter>
     </Card>

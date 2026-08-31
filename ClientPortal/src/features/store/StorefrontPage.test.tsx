@@ -33,8 +33,15 @@ const mocks = vi.hoisted(() => ({
         page: 1,
         pageLength: 12,
         hasNext: false,
+        total: 1,
       },
     },
+    isLoading: false,
+    error: null,
+    mutate: vi.fn(),
+  },
+  recent: {
+    data: { message: { items: [] } },
     isLoading: false,
     error: null,
   },
@@ -47,6 +54,7 @@ vi.mock("@/shared/api", async () => {
     ...actual,
     useStorefront: () => mocks.storefront,
     useCatalog: () => mocks.catalog,
+    useRecentOrderItems: () => mocks.recent,
     usePromotionEvents: () => ({ track: mocks.track }),
   }
 })
@@ -107,7 +115,7 @@ describe("boutique portail", () => {
     }
   })
 
-  it("affiche un accueil orienté achat avec promotions, sans filtres locaux", () => {
+  it("affiche un accueil identique au catalogue, sans rails merchandising", () => {
     render(
       <MemoryRouter>
         <CartProvider user="client@example.com">
@@ -119,9 +127,10 @@ describe("boutique portail", () => {
     expect(screen.queryByText(/Bonjour/)).not.toBeInTheDocument()
     expect(screen.queryByText("Promo été")).not.toBeInTheDocument()
     expect(screen.queryByRole("heading", { name: "Catégories" })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Boissons" })).not.toBeInTheDocument()
-    expect(screen.getByText("Offres du moment")).toBeVisible()
-    expect(screen.getByRole("heading", { name: "Cheveux" })).toBeVisible()
+    expect(screen.queryByText("Offres du moment")).not.toBeInTheDocument()
+    expect(screen.queryByRole("heading", { name: "Cheveux" })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Tous" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "Boissons" })).toBeVisible()
     expect(screen.getByRole("heading", { name: "Catalogue" })).toBeVisible()
     expect(screen.queryByLabelText("Rechercher un article")).not.toBeInTheDocument()
   })
@@ -134,9 +143,10 @@ describe("boutique portail", () => {
         </CartProvider>
       </MemoryRouter>,
     )
-    expect(screen.getByRole("heading", { name: "Catalogue · Boissons" })).toBeVisible()
-    expect(screen.queryByText("Promo été")).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Tous les groupes" })).toHaveAttribute("href", "/?view=catalog")
+    expect(screen.getByRole("heading", { name: "Catalogue" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "Tous" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "Boissons" })).toHaveAttribute("href", "/?group=Boissons")
+    expect(screen.queryByRole("button", { name: "Tous les groupes" })).not.toBeInTheDocument()
   })
 
   it("n'affiche que les promotions sur la vue offres", () => {
@@ -198,10 +208,10 @@ describe("boutique portail", () => {
         </CartProvider>
       </MemoryRouter>,
     )
-    expect(screen.getByText("Prix sur demande")).toBeVisible()
+    expect(screen.getByText("Sur devis")).toBeVisible()
     expect(screen.queryByText(/0/)).toBeNull()
-    await user.click(screen.getByRole("button", { name: "Ajouter" }))
-    expect(screen.getByRole("button", { name: "Ajouter encore" })).toBeEnabled()
+    await user.click(screen.getByRole("button", { name: "Ajouter au panier" }))
+    expect(screen.getByRole("button", { name: /Ajout/ })).toBeVisible()
     expect(screen.getByLabelText("Dans le panier · 1")).toBeVisible()
   })
 
@@ -228,14 +238,14 @@ describe("boutique portail", () => {
     await user.click(screen.getByRole("button", { name: "Augmenter Article quantité" }))
     expect(screen.getByLabelText("Quantité Article quantité")).toHaveValue(3)
     expect(screen.getByLabelText("Quantité Article quantité")).toHaveClass("text-center")
-    expect(screen.getByRole("button", { name: "Ajouter" })).toHaveClass("w-full", "rounded-full")
-    await user.click(screen.getByRole("button", { name: "Ajouter" }))
+    expect(screen.getByRole("button", { name: "Ajouter au panier" })).toHaveClass("w-full")
+    await user.click(screen.getByRole("button", { name: "Ajouter au panier" }))
     const stored = JSON.parse(window.localStorage.getItem("intrapro-client.cart.client@example.com") || "[]")
     expect(stored[0].itemCode).toBe("ART-QTY")
     expect(stored[0].quantity).toBe(3)
     expect(screen.getByLabelText("Dans le panier · 3")).toHaveTextContent("3")
     expect(screen.getByLabelText("Dans le panier · 3")).not.toHaveTextContent("Dans le panier")
-    expect(screen.getByRole("button", { name: "Ajouter encore" })).toBeVisible()
+    expect(screen.getByRole("button", { name: /Ajout/ })).toBeVisible()
   })
 
   it("affiche un badge compact sur les cartes rayon", async () => {
@@ -258,7 +268,7 @@ describe("boutique portail", () => {
         </CartProvider>
       </MemoryRouter>,
     )
-    await user.click(screen.getByRole("button", { name: "Ajouter" }))
+    await user.click(screen.getByRole("button", { name: "Ajouter au panier" }))
     const badge = screen.getByLabelText("Dans le panier · 1")
     expect(badge).toBeVisible()
     expect(badge).toHaveClass("bg-primary", "text-primary-foreground")
@@ -288,7 +298,7 @@ describe("boutique portail", () => {
     )
     expect(screen.getByText(/100/).closest("span")).toHaveClass("line-through")
     expect(screen.getByText("-20 %")).toBeVisible()
-    expect(screen.queryByText(/TTC/)).not.toBeInTheDocument()
+    expect(screen.getByText("TTC")).toBeVisible()
     rerender(
       <MemoryRouter>
         <CartProvider user="client@example.com">
@@ -333,9 +343,9 @@ describe("boutique portail", () => {
         </CartProvider>
       </MemoryRouter>,
     )
-    expect(container.querySelector("[data-slot=card]")).toHaveClass("h-full", "rounded-2xl")
+    expect(container.querySelector("[data-slot=card]")).toHaveClass("h-full", "rounded-xl")
     const media = container.querySelector("a[href='/products/ART-ALIGN']")
-    expect(media).toHaveClass("aspect-square", "overflow-hidden", "rounded-2xl", "bg-muted")
+    expect(media).toHaveClass("aspect-[4/3]", "overflow-hidden", "rounded-lg", "bg-muted")
     expect(container.querySelector("img")).toHaveClass("absolute", "object-contain")
     expect(container.querySelector("[data-slot=card-footer]")).toHaveClass("mt-auto", "border-0", "bg-transparent")
     expect(screen.getByText("Cheveux")).toBeVisible()

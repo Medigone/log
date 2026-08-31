@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from "react"
-import { NavLink, useSearchParams } from "react-router-dom"
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom"
 import { MapPinCheck } from "lucide-react"
-import { ProductCard } from "@/features/store/ProductCard"
-import { EmptyState, ErrorState, LoadingCards } from "@/components/LoadState"
+import { EmptyState, ErrorState } from "@/components/LoadState"
 import { Paginator } from "@/components/Paginator"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { useCatalog, usePromotionEvents, useStorefront } from "@/shared/api"
+import { CatalogToolbar } from "@/features/store/CatalogToolbar"
+import { CategoryChips } from "@/features/store/CategoryChips"
+import { parseCatalogSort, type CatalogSort } from "@/features/store/catalogQuery"
+import { ProductGrid, ProductGridSkeleton } from "@/features/store/ProductGrid"
+import { ReorderSection } from "@/features/store/ReorderSection"
+import { useCatalog, usePromotionEvents, useRecentOrderItems, useStorefront } from "@/shared/api"
 import type { PortalContext, StorefrontCta, StorefrontHero } from "@/shared/types"
 
 function ctaTo(cta: StorefrontCta) {
@@ -19,31 +23,41 @@ function ctaTo(cta: StorefrontCta) {
 
 export function StorefrontPage({ context }: { context: PortalContext }) {
   const [params] = useSearchParams()
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const search = params.get("q") || ""
-  const group = params.get("group") || "all"
+  const group = params.get("group") || ""
   const view = params.get("view") || ""
+  const sort = parseCatalogSort(params.get("sort"))
+  const offersOnly = params.get("offers") === "1"
   const showCatalog = view !== "offres"
   const storefront = useStorefront()
-  const catalog = useCatalog(search, group === "all" ? "" : group, page, showCatalog)
+  const catalog = useCatalog(search, group, page, showCatalog, 20, sort, offersOnly)
+  const recent = useRecentOrderItems(showCatalog && !search)
   const events = usePromotionEvents()
   const payload = storefront.data?.message
   const products = catalog.data?.message
   const tracked = useRef("")
-  const showMerchandising = Boolean(payload && !search && group === "all" && view !== "catalog")
+  const showMerchandising = Boolean(payload && view === "offres")
   const rails = payload?.rails ?? []
   const offerRails = view === "offres" ? rails.filter((rail) => rail.kind !== "group") : rails
-  const hasOffers = Boolean(
-    payload && (payload.banners.length > 0 || rails.some((rail) => rail.kind !== "group")),
-  )
+  const hasOffers = Boolean(payload && (payload.banners.length > 0 || rails.some((rail) => rail.kind !== "group")))
+  const categories = payload?.categories?.length ? payload.categories : (products?.groups ?? []).map((name) => ({ name }))
+  const recentItems = recent.data?.message?.items ?? []
+
+  const patch = (update: Record<string, string | null>) => {
+    const next = new URLSearchParams(params)
+    for (const [key, value] of Object.entries(update)) {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    }
+    const query = next.toString()
+    navigate({ pathname: "/", search: query ? `?${query}` : "" })
+  }
 
   useEffect(() => {
     setPage(1)
-  }, [search, group])
-
-  useEffect(() => {
-    if (view === "catalog") document.getElementById("catalogue")?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }, [view, payload])
+  }, [search, group, sort, offersOnly])
 
   useEffect(() => {
     if (!payload) return
@@ -75,7 +89,6 @@ export function StorefrontPage({ context }: { context: PortalContext }) {
         </Alert>
       )}
 
-      {storefront.isLoading && <LoadingCards />}
       {storefront.error && <ErrorState error={storefront.error} />}
       {showMerchandising && payload && (
         <>
@@ -97,11 +110,7 @@ export function StorefrontPage({ context }: { context: PortalContext }) {
                     </Button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {rail.items.map((item) => (
-                    <ProductCard key={item.itemCode} item={item} size="sm" />
-                  ))}
-                </div>
+                <ProductGrid items={rail.items} />
               </section>
             ))}
             {view === "offres" && !hasOffers && !storefront.isLoading && (
@@ -112,31 +121,64 @@ export function StorefrontPage({ context }: { context: PortalContext }) {
       )}
 
       {showCatalog && (
-      <section id="catalogue" className="flex scroll-mt-20 flex-col gap-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <h2 className="text-lg font-semibold">{group !== "all" ? `Catalogue · ${group}` : "Catalogue"}</h2>
-          {group !== "all" && (
-            <Button variant="ghost" render={<NavLink to="/?view=catalog" />} nativeButton={false}>
-              Tous les groupes
-            </Button>
+        <section id="catalogue" className="flex min-w-0 scroll-mt-20 flex-col gap-4">
+          <CatalogToolbar
+            total={products?.total}
+            itemCount={products?.items.length ?? 0}
+            hasNext={products?.hasNext ?? false}
+            page={products?.page ?? page}
+            loading={catalog.isLoading}
+            groups={products?.groups ?? categories.map((category) => category.name)}
+            group={group}
+            sort={sort}
+            offersOnly={offersOnly}
+            hasOffers={hasOffers}
+            onSortChange={(next: CatalogSort) => patch({ sort: next === "relevance" ? null : next, view: null })}
+            onGroupChange={(next) => patch({ group: next || null, view: null })}
+            onOffersChange={(next) => patch({ offers: next ? "1" : null, view: null })}
+            onResetFilters={() => patch({ group: null, offers: null, sort: null, view: null })}
+          />
+          <CategoryChips groups={categories} active={group} loading={storefront.isLoading} params={params} />
+          {showCatalog && !search && recentItems.length > 0 && <ReorderSection items={recentItems} />}
+          {catalog.isLoading && <ProductGridSkeleton />}
+          {catalog.error && (
+            <EmptyState
+              title="Impossible de charger le catalogue"
+              description="Veuillez réessayer dans un instant."
+              action={
+                <Button variant="outline" onClick={() => void catalog.mutate()}>
+                  Réessayer
+                </Button>
+              }
+            />
           )}
-        </div>
-        {catalog.isLoading && <LoadingCards />}
-        {catalog.error && <ErrorState error={catalog.error} />}
-        {products && (
-          <>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {products.items.map((item) => (
-                <ProductCard key={item.itemCode} item={item} />
-              ))}
-            </div>
-            {products.items.length === 0 && (
-              <EmptyState title="Aucun article" description="Aucun article ne correspond à votre recherche." />
-            )}
-            <Paginator page={products.page} hasNext={products.hasNext} onChange={setPage} />
-          </>
-        )}
-      </section>
+          {products && !catalog.isLoading && (
+            <>
+              {products.items.length > 0 && <ProductGrid items={products.items} />}
+              {products.items.length === 0 && (
+                <EmptyState
+                  title={search ? "Aucun article ne correspond à votre recherche." : group ? "Aucun article disponible dans ce rayon." : "Aucun article"}
+                  description={search ? "Essayez un autre mot-clé ou réinitialisez les filtres." : group ? "Changez de rayon ou réinitialisez les filtres." : "Les articles apparaîtront ici dès qu'ils seront disponibles."}
+                  action={
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {search ? (
+                        <Button variant="outline" onClick={() => patch({ q: null })}>
+                          Effacer la recherche
+                        </Button>
+                      ) : null}
+                      {(group || offersOnly) && (
+                        <Button variant="outline" onClick={() => patch({ group: null, offers: null, sort: null, view: null })}>
+                          Réinitialiser les filtres
+                        </Button>
+                      )}
+                    </div>
+                  }
+                />
+              )}
+              <Paginator page={products.page} hasNext={products.hasNext} onChange={setPage} />
+            </>
+          )}
+        </section>
       )}
     </>
   )

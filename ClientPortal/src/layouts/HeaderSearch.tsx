@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { LayoutGrid, Search, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
+import { Spinner } from "@/components/ui/spinner"
 import { useCatalog, useStorefront } from "@/shared/api"
 import { cn } from "@/lib/utils"
 import type { CatalogItem } from "@/shared/types"
@@ -125,7 +126,7 @@ export function HeaderSearch() {
   const showList = open && Boolean(term)
 
   return (
-    <div className="relative min-w-0 max-w-md flex-1">
+    <div className="relative min-w-0 w-full max-w-2xl flex-1">
       <InputGroup className="bg-background">
         <InputGroupAddon>
           <Search />
@@ -193,9 +194,30 @@ export function HeaderSearch() {
               else submitSearch()
             }
           }}
-          placeholder="Rechercher un article ou un rayon…"
-          aria-label="Rechercher un article ou un rayon"
+          placeholder="Rechercher un article, une référence ou un rayon…"
+          aria-label="Rechercher un article, une référence ou un rayon"
         />
+        {waitingItems ? (
+          <InputGroupAddon align="inline-end">
+            <Spinner className="size-4" />
+          </InputGroupAddon>
+        ) : null}
+        {value ? (
+          <InputGroupAddon align="inline-end">
+            <button
+              type="button"
+              aria-label="Effacer la recherche"
+              onClick={() => {
+                setValue("")
+                setOpen(false)
+                setActiveIndex(-1)
+                clearQuery()
+              }}
+            >
+              <X />
+            </button>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
       {showList && (
         <ul

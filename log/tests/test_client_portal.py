@@ -250,6 +250,71 @@ class TestClientPortalValidation(unittest.TestCase):
 
 		self.assertIn(["item_group", "like", "%Boissons%"], captured["or_filters"])
 
+	def test_catalog_sort_uses_allowed_clauses_only(self):
+		user = frappe._dict(name="client@example.com")
+		captured = {}
+
+		def fake_get_all(doctype, **kwargs):
+			if doctype == "Item" and kwargs.get("fields"):
+				captured["order_by"] = kwargs.get("order_by")
+			return []
+
+		db = SimpleNamespace(count=lambda *_args, **_kwargs: 0, has_column=lambda *_args: False)
+		patches = [
+			patch.object(client_portal, "_current_portal_customer", return_value=("CUST-1", user)),
+			patch.object(client_portal, "_catalog_item_filters", return_value={"disabled": 0}),
+			patch.object(client_portal, "_item_has_column", return_value=False),
+			patch.object(client_portal, "_customer_data", return_value=frappe._dict()),
+			patch.object(client_portal, "_company", return_value="IntraPro"),
+			patch.object(client_portal, "_currency", return_value="DZD"),
+			patch.object(client_portal.frappe, "get_all", side_effect=fake_get_all),
+			patch.object(client_portal.frappe, "db", db),
+			patch("log.services.portal_merchandising.campaigns_by_item", return_value={}),
+			patch("log.services.portal_merchandising.apply_prices"),
+		]
+		with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9]:
+			result = client_portal.get_catalog(order_by="name_desc")
+			self.assertEqual(captured["order_by"], client_portal.CATALOG_SORT_CLAUSES["name_desc"])
+			self.assertEqual(result["total"], 0)
+			client_portal.get_catalog(order_by="unknown")
+			self.assertEqual(captured["order_by"], client_portal.CATALOG_SORT_CLAUSES["relevance"])
+			client_portal.get_catalog(order_by="recent")
+			self.assertEqual(captured["order_by"], client_portal.CATALOG_SORT_CLAUSES["recent"])
+
+	def test_recent_order_items_are_scoped_to_the_authenticated_customer(self):
+		user = frappe._dict(name="client@example.com")
+		captured = {}
+
+		def fake_get_all(doctype, **kwargs):
+			captured.setdefault(doctype, []).append(kwargs)
+			if doctype == "Sales Order":
+				return ["SO-1"]
+			if doctype == "Sales Order Item":
+				return [
+					frappe._dict(item_code="ART-1", item_name="Article", qty=4, uom="Unité", parent="SO-1", idx=1),
+					frappe._dict(item_code="ART-FREE", item_name="Cadeau", qty=1, uom="Unité", parent="SO-1", idx=2, is_free_item=1),
+				]
+			return []
+
+		item_row = frappe._dict(name="ART-1", item_name="Article", description="", item_group="Boissons", stock_uom="Unité", image=None)
+		with patch.object(client_portal, "_current_portal_customer", return_value=("CUST-1", user)), patch.object(
+			client_portal, "_customer_data", return_value=frappe._dict()
+		), patch.object(client_portal, "_company", return_value="IntraPro"), patch.object(
+			client_portal, "_currency", return_value="DZD"
+		), patch.object(client_portal.frappe, "get_all", side_effect=fake_get_all), patch.object(
+			client_portal.frappe.db, "has_column", return_value=True
+		), patch("log.services.portal_merchandising.fetch_item_rows", return_value={"ART-1": item_row}), patch(
+			"log.services.portal_merchandising.campaigns_by_item", return_value={}
+		), patch("log.services.portal_merchandising.serialize_item_row", return_value={"itemCode": "ART-1", "itemName": "Article", "currency": "DZD", "showPrice": True, "unitPriceTtc": 10}), patch(
+			"log.services.portal_merchandising.apply_prices"
+		):
+			result = client_portal.get_recent_order_items()
+
+		self.assertEqual(captured["Sales Order"][0]["filters"]["customer"], "CUST-1")
+		self.assertEqual(result["items"][0]["itemCode"], "ART-1")
+		self.assertEqual(result["items"][0]["lastQuantity"], 4)
+		self.assertEqual(len(result["items"]), 1)
+
 	def test_store_price_is_hidden_when_the_item_flag_is_off(self):
 		with patch.object(
 			client_portal, "_item_has_column", side_effect=lambda field: field == client_portal.STORE_SHOW_PRICE_FIELD
