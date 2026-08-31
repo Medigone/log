@@ -12,6 +12,31 @@ export function formatDate(value?: string | null) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("fr-FR").format(date)
 }
 
+export function formatRelativeDateTime(value?: string | null, now = new Date()) {
+  if (!value) return "—"
+  const normalized = value.includes("T") ? value : value.replace(" ", "T")
+  const date = new Date(normalized)
+  if (Number.isNaN(date.getTime())) return value
+  const diffMs = now.getTime() - date.getTime()
+  const minute = 60_000
+  const hour = 60 * minute
+  const day = 24 * hour
+  if (diffMs < minute) return "à l’instant"
+  if (diffMs < hour) {
+    const minutes = Math.floor(diffMs / minute)
+    return `il y a ${minutes} min`
+  }
+  if (diffMs < day) {
+    const hours = Math.floor(diffMs / hour)
+    return `il y a ${hours} h`
+  }
+  if (diffMs < 7 * day) {
+    const days = Math.floor(diffMs / day)
+    return days === 1 ? "hier" : `il y a ${days} j`
+  }
+  return new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short" }).format(date)
+}
+
 const DOCUMENT_STATUS_LABELS: Record<string, string> = {
   draft: "En attente de validation",
   brouillon: "En attente de validation",
@@ -88,6 +113,10 @@ const DOCUMENT_STATUS_TONES: Record<string, DocumentStatusTone> = {
   brouillon: "warning",
   "en attente de validation": "warning",
   "en attente": "warning",
+  ouverte: "warning",
+  "commande créée": "success",
+  refusée: "destructive",
+  refusee: "destructive",
   closed: "secondary",
   clôturé: "secondary",
   clôturée: "secondary",
@@ -108,6 +137,44 @@ export function documentStatusTone(status?: string | null): DocumentStatusTone {
   if (/valid|livr|termin/.test(raw) || /valid|livr|termin/.test(label)) return "success"
   if (/prépar|prepar|enlev|livrer|cours/.test(raw) || /prépar|prepar|enlev|livrer|cours/.test(label)) return "info"
   return "secondary"
+}
+
+const FRENCH_MONTHS = [
+  "janvier",
+  "février",
+  "mars",
+  "avril",
+  "mai",
+  "juin",
+  "juillet",
+  "août",
+  "septembre",
+  "octobre",
+  "novembre",
+  "décembre",
+]
+
+export function parseCampaignDate(value?: string | null) {
+  if (!value) return null
+  const iso = value.trim()
+  const dayPart = iso.slice(0, 10)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dayPart)) {
+    const parsed = new Date(iso)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  const date = new Date(`${dayPart}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function formatCampaignUntil(value?: string | null, now = new Date()) {
+  const date = parseCampaignDate(value)
+  if (!date) return null
+  const day = date.getDate()
+  const month = FRENCH_MONTHS[date.getMonth()]
+  const dayLabel = day === 1 ? "1er" : String(day)
+  const sameYear = date.getFullYear() === now.getFullYear()
+  const suffix = sameYear ? "" : ` ${date.getFullYear()}`
+  return `Jusqu’au ${dayLabel} ${month}${suffix}`
 }
 
 export function todayIso() {

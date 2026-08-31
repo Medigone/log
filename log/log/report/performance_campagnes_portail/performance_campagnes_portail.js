@@ -23,7 +23,7 @@ frappe.query_reports["Performance Campagnes Portail"] = {
 			fieldname: "placement",
 			label: __("Emplacement"),
 			fieldtype: "Select",
-			options: "\nHero\nBandeau\nRayon produits",
+			options: "\nBandeau\nRayon produits",
 		},
 	],
 };

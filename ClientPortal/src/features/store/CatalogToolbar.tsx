@@ -1,5 +1,8 @@
+import { NavLink } from "react-router-dom"
+import { PackagePlus } from "lucide-react"
 import { CATALOG_SORTS, catalogCountLabel, selectString, type CatalogSort } from "@/features/store/catalogQuery"
 import { CatalogFilters } from "@/features/store/CatalogFilters"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger } from "@/components/ui/select"
 
@@ -46,6 +49,10 @@ export function CatalogToolbar({
         ) : null}
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <Button render={<NavLink to="/requests" />} nativeButton={false}>
+          <PackagePlus data-icon="inline-start" />
+          Demander un article
+        </Button>
         <Select
           value={sort}
           onValueChange={(next) => onSortChange(selectString(next, "relevance") as CatalogSort)}

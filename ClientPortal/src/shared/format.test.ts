@@ -1,4 +1,4 @@
-import { documentStatusTone, formatDocumentStatus } from "@/shared/format"
+import { documentStatusTone, formatCampaignUntil, formatDocumentStatus, formatRelativeDateTime } from "@/shared/format"
 
 describe("formatDocumentStatus", () => {
   it("translates ERPNext order statuses without billing language", () => {
@@ -45,5 +45,30 @@ describe("documentStatusTone", () => {
     expect(documentStatusTone("Draft")).toBe("warning")
     expect(documentStatusTone("En attente de validation")).toBe("warning")
     expect(documentStatusTone("Livraison en cours")).toBe("info")
+  })
+})
+
+describe("formatCampaignUntil", () => {
+  it("forme une date limite en français", () => {
+    expect(formatCampaignUntil("2026-09-01", new Date("2026-08-31T12:00:00"))).toBe("Jusqu’au 1er septembre")
+    expect(formatCampaignUntil("2026-09-15T23:59:59", new Date("2026-08-31T12:00:00"))).toBe("Jusqu’au 15 septembre")
+    expect(formatCampaignUntil("2026-09-01", new Date("2027-01-01T12:00:00"))).toBe("Jusqu’au 1er septembre 2026")
+    expect(formatCampaignUntil(null)).toBeNull()
+  })
+})
+
+describe("formatRelativeDateTime", () => {
+  const now = new Date("2026-08-31T16:00:00")
+
+  it("exprime un délai court en français", () => {
+    expect(formatRelativeDateTime("2026-08-31 15:59:30", now)).toBe("à l’instant")
+    expect(formatRelativeDateTime("2026-08-31 15:10:00", now)).toBe("il y a 50 min")
+    expect(formatRelativeDateTime("2026-08-31 14:00:00", now)).toBe("il y a 2 h")
+    expect(formatRelativeDateTime("2026-08-30 16:00:00", now)).toBe("hier")
+  })
+
+  it("falls back for empty values", () => {
+    expect(formatRelativeDateTime(null)).toBe("—")
+    expect(formatRelativeDateTime("")).toBe("—")
   })
 })

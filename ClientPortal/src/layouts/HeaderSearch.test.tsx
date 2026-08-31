@@ -52,7 +52,6 @@ describe("recherche globale", () => {
   beforeEach(() => {
     mocks.storefront.data = {
       message: {
-        hero: { title: "Promo", cta: { type: "catalog", label: "Voir" } },
         banners: [],
         categories: [{ name: "Boissons" }, { name: "Épicerie" }],
         rails: [],
@@ -132,5 +131,13 @@ describe("recherche globale", () => {
     expect(screen.getByRole("button", { name: "Retirer le rayon Boissons" })).toBeVisible()
     await user.click(screen.getByRole("button", { name: "Retirer le rayon Boissons" }))
     expect(screen.getByTestId("location")).toHaveTextContent("/")
+  })
+
+  it("propose de demander un article absent du catalogue", async () => {
+    const user = userEvent.setup()
+    renderSearch()
+    await user.type(screen.getByRole("combobox"), "inconnu")
+    await user.click(await screen.findByRole("button", { name: "Demander cet article" }))
+    expect(screen.getByTestId("location")).toHaveTextContent("/requests/new?q=inconnu")
   })
 })

@@ -1,5 +1,5 @@
 import { MemoryRouter } from "react-router-dom"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { vi } from "vitest"
 import { CartProvider } from "@/cart/CartContext"
@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     data: { message: null as StorefrontPayload | null },
     isLoading: false,
     error: null as Error | null,
+    mutate: vi.fn(),
   },
   catalog: {
     data: {
@@ -72,16 +73,12 @@ const context: PortalContext = {
 describe("boutique portail", () => {
   beforeEach(() => {
     window.localStorage.clear()
+    mocks.catalog.isLoading = false
+    mocks.catalog.data.message.hasNext = false
+    mocks.catalog.data.message.page = 1
     mocks.track.mockResolvedValue(undefined)
     mocks.storefront.data = {
       message: {
-        hero: {
-          campaign: "CAMP-1",
-          title: "Promo été",
-          body: "Remises automatiques",
-          cta: { type: "catalog", label: "Voir le catalogue" },
-          offerLabel: "-10 %",
-        },
         banners: [],
         categories: [{ name: "Boissons" }, { name: "Épicerie" }],
         rails: [
@@ -125,14 +122,13 @@ describe("boutique portail", () => {
     )
     expect(screen.queryByRole("heading", { name: "Boutique" })).not.toBeInTheDocument()
     expect(screen.queryByText(/Bonjour/)).not.toBeInTheDocument()
-    expect(screen.queryByText("Promo été")).not.toBeInTheDocument()
-    expect(screen.queryByRole("heading", { name: "Catégories" })).not.toBeInTheDocument()
     expect(screen.queryByText("Offres du moment")).not.toBeInTheDocument()
     expect(screen.queryByRole("heading", { name: "Cheveux" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Tous" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Boissons" })).toBeVisible()
     expect(screen.queryByRole("heading", { name: "Catalogue" })).not.toBeInTheDocument()
     expect(screen.getByText("1 article disponible")).toBeVisible()
+    expect(screen.getByRole("button", { name: "Demander un article" })).toHaveAttribute("href", "/requests")
     expect(screen.queryByLabelText("Rechercher un article")).not.toBeInTheDocument()
   })
 
@@ -168,14 +164,34 @@ describe("boutique portail", () => {
     expect(screen.queryByRole("heading", { name: "Catalogue" })).not.toBeInTheDocument()
   })
 
-  it("n'affiche pas le hero", () => {
+  it("affiche le bandeau promotionnel sur l'accueil, avant les produits", () => {
+    const banner = {
+      campaign: "pkr0i0ngle",
+      placement: "Bandeau",
+      title: "Promotion Biomil",
+      body: "Profitez de 10 % de remise sur une sélection Biomil.",
+      cta: { type: "catalog" as const, label: "Commander" },
+      offer: { type: "percentage" as const, percentage: 10, label: "-10 %" },
+      offerLabel: "-10 %",
+      validUpto: "2026-09-01",
+      itemCodes: ["ART-1"],
+      itemGroups: ["Nutrition"],
+      items: [
+        {
+          itemCode: "ART-BIO",
+          itemName: "Biomil 1",
+          itemGroup: "Nutrition",
+          uom: "Unité",
+          image: "/files/biomil.png",
+          unitPriceTtc: 90,
+          currency: "DZD",
+        },
+      ],
+    }
     mocks.storefront.data = {
       message: {
-        hero: {
-          title: "Commandez vos produits",
-          cta: { type: "catalog", label: "Parcourir le catalogue" },
-        },
-        banners: [],
+        campaigns: [banner],
+        banners: [banner],
         categories: [{ name: "Boissons" }],
         rails: [],
       },
@@ -187,8 +203,156 @@ describe("boutique portail", () => {
         </CartProvider>
       </MemoryRouter>,
     )
-    expect(screen.queryByRole("heading", { name: "Commandez vos produits" })).not.toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: "Parcourir le catalogue" })).not.toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Promotion Biomil" })).toBeVisible()
+    expect(screen.getByText("-10 %")).toBeVisible()
+    expect(screen.getByText(/Jusqu’au 1er septembre/)).toBeVisible()
+    expect(screen.getByRole("button", { name: "Commander" })).toHaveAttribute("href", "/?campaign=pkr0i0ngle")
+    expect(screen.getByText("Article promo")).toBeVisible()
+  })
+
+  it("place les contrôles du carrousel sous les bandeaux, sans recouvrir le texte", () => {
+    const first = {
+      campaign: "CAMP-A",
+      placement: "Bandeau",
+      title: "Promo A",
+      body: "Première offre",
+      cta: { type: "catalog" as const, label: "Commander" },
+      items: [],
+    }
+    const second = {
+      campaign: "CAMP-B",
+      placement: "Bandeau",
+      title: "Promo B",
+      body: "Deuxième offre",
+      cta: { type: "catalog" as const, label: "Commander" },
+      items: [],
+    }
+    mocks.storefront.data = {
+      message: {
+        campaigns: [first, second],
+        banners: [first, second],
+        categories: [{ name: "Boissons" }],
+        rails: [],
+      },
+    }
+    render(
+      <MemoryRouter>
+        <CartProvider user="client@example.com">
+          <StorefrontPage context={context} />
+        </CartProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.getAllByRole("heading", { name: "Promo A" }).length).toBeGreaterThan(0)
+    expect(screen.getByRole("button", { name: "Promotion précédente" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Promotion suivante" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Mettre le carrousel en pause" })).toBeEnabled()
+    expect(screen.getByRole("button", { name: "Promotion précédente" }).parentElement).not.toHaveClass("absolute")
+    expect(screen.queryByRole("button", { name: "Promotion précédente" })?.closest(".relative")).toBeNull()
+  })
+
+  it("met le carrousel en pause puis le relance", async () => {
+    const user = userEvent.setup()
+    const first = {
+      campaign: "CAMP-A",
+      placement: "Bandeau",
+      title: "Promo A",
+      cta: { type: "catalog" as const, label: "Commander" },
+      items: [],
+    }
+    const second = {
+      campaign: "CAMP-B",
+      placement: "Bandeau",
+      title: "Promo B",
+      cta: { type: "catalog" as const, label: "Commander" },
+      items: [],
+    }
+    mocks.storefront.data = {
+      message: {
+        campaigns: [first, second],
+        banners: [first, second],
+        categories: [{ name: "Boissons" }],
+        rails: [],
+      },
+    }
+    render(
+      <MemoryRouter>
+        <CartProvider user="client@example.com">
+          <StorefrontPage context={context} />
+        </CartProvider>
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole("button", { name: "Mettre le carrousel en pause" }))
+    expect(screen.getByRole("button", { name: "Lire le carrousel" })).toHaveAttribute("aria-pressed", "true")
+    await user.click(screen.getByRole("button", { name: "Lire le carrousel" }))
+    expect(screen.getByRole("button", { name: "Mettre le carrousel en pause" })).toHaveAttribute("aria-pressed", "false")
+  })
+
+  it("filtre le catalogue Accueil lorsqu'une campagne est active", () => {
+    const banner = {
+      campaign: "pkr0i0ngle",
+      placement: "Bandeau",
+      title: "Promotion Biomil",
+      cta: { type: "catalog" as const, label: "Commander" },
+      items: [],
+    }
+    mocks.storefront.data = {
+      message: {
+        campaigns: [banner],
+        banners: [banner],
+        categories: [{ name: "Boissons" }],
+        rails: [],
+      },
+    }
+    render(
+      <MemoryRouter initialEntries={["/?campaign=pkr0i0ngle"]}>
+        <CartProvider user="client@example.com">
+          <StorefrontPage context={context} />
+        </CartProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.getByText("Filtre promotionnel actif")).toBeVisible()
+    expect(screen.getByRole("button", { name: "Afficher tous les articles" })).toBeVisible()
+    expect(screen.getByText("Article promo")).toBeVisible()
+    expect(screen.getByText("Promotion Biomil")).toBeVisible()
+  })
+
+  it("insère la carte rayon seulement dans le rayon concerné", () => {
+    const rail = {
+      campaign: "CAMP-RAIL",
+      placement: "Rayon produits",
+      title: "Promo nutrition",
+      body: "Sélection du rayon",
+      cta: { type: "catalog" as const, label: "Voir" },
+      offerLabel: "-15 %",
+      itemCodes: ["ART-1"],
+      itemGroups: ["Boissons"],
+      items: mocks.catalog.data.message.items,
+    }
+    mocks.storefront.data = {
+      message: {
+        campaigns: [rail],
+        banners: [],
+        categories: [{ name: "Boissons" }, { name: "Épicerie" }],
+        rails: [rail],
+      },
+    }
+    const { unmount } = render(
+      <MemoryRouter initialEntries={["/?group=Boissons"]}>
+        <CartProvider user="client@example.com">
+          <StorefrontPage context={context} />
+        </CartProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole("heading", { name: "Promo nutrition" })).toBeVisible()
+    unmount()
+    render(
+      <MemoryRouter initialEntries={["/?group=Épicerie"]}>
+        <CartProvider user="client@example.com">
+          <StorefrontPage context={context} />
+        </CartProvider>
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole("heading", { name: "Promo nutrition" })).not.toBeInTheDocument()
   })
 
   it("n'affiche pas 0 DZD lorsque le prix est masqué", async () => {
@@ -325,6 +489,29 @@ describe("boutique portail", () => {
     expect(screen.queryByText("-20 %")).not.toBeInTheDocument()
   })
 
+  it("remonte en haut du catalogue après un changement de pagination", async () => {
+    const user = userEvent.setup()
+    const scrollIntoView = vi.fn()
+    const scrollTo = vi.fn()
+    HTMLElement.prototype.scrollIntoView = scrollIntoView
+    window.scrollTo = scrollTo
+    mocks.catalog.data.message.hasNext = true
+    render(
+      <MemoryRouter>
+        <CartProvider user="client@example.com">
+          <StorefrontPage context={context} />
+        </CartProvider>
+      </MemoryRouter>,
+    )
+    expect(scrollIntoView).not.toHaveBeenCalled()
+    expect(scrollTo).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Go to next page" }))
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" })
+    })
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
   it("fixe la hauteur des cartes pour aligner images et actions", () => {
     const { container } = render(
       <MemoryRouter>
@@ -352,5 +539,28 @@ describe("boutique portail", () => {
     expect(container.querySelector("[data-slot=card-footer]")).toHaveClass("mt-auto", "border-0", "bg-transparent")
     expect(screen.getByText("Cheveux")).toBeVisible()
     expect(screen.queryByText("Soin démêlant")).not.toBeInTheDocument()
+  })
+
+  it("propose une demande hors catalogue quand la recherche est vide", () => {
+    const original = mocks.catalog.data.message
+    mocks.catalog.data = {
+      message: { ...original, items: [], total: 0, hasNext: false },
+    }
+    try {
+      render(
+        <MemoryRouter initialEntries={["/?q=crème%20inconnue"]}>
+          <CartProvider user="client@example.com">
+            <StorefrontPage context={context} />
+          </CartProvider>
+        </MemoryRouter>,
+      )
+      expect(screen.getByText("Aucun article ne correspond à votre recherche.")).toBeVisible()
+      expect(screen.getByRole("button", { name: "Demander cet article" })).toHaveAttribute(
+        "href",
+        "/requests/new?q=cr%C3%A8me%20inconnue",
+      )
+    } finally {
+      mocks.catalog.data = { message: original }
+    }
   })
 })

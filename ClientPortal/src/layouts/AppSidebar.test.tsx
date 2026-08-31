@@ -66,7 +66,6 @@ describe("AppSidebar boutique", () => {
     mocks.storefront.isLoading = false
     mocks.storefront.data = {
       message: {
-        hero: { title: "Promo", cta: { type: "catalog", label: "Voir" } },
         banners: [{ title: "Promo", campaign: "CAMP-1", cta: { type: "catalog", label: "Voir" } }],
         categories: [{ name: "Boissons" }, { name: "Épicerie" }],
         rails: [
@@ -87,6 +86,7 @@ describe("AppSidebar boutique", () => {
     expect(screen.getByRole("link", { name: "Accueil" })).toHaveAttribute("href", "/")
     expect(screen.queryByRole("link", { name: "Catalogue" })).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Offres" })).toHaveAttribute("href", "/?view=offres")
+    expect(screen.getByRole("link", { name: "Demander un article" })).toHaveAttribute("href", "/requests")
     expect(screen.getByRole("link", { name: "Mes commandes" })).toHaveAttribute("href", "/orders")
     expect(screen.getByRole("link", { name: "Bons de livraison" })).toHaveAttribute("href", "/deliveries")
     expect(screen.getByRole("link", { name: "Paiements" })).toHaveAttribute("href", "/payments")

@@ -25,3 +25,6 @@ log.patches.v1_0.initialize_item_store_visibility
 log.patches.v1_0.initialize_portal_merchandising
 log.patches.v1_0.add_portal_merchandising_indexes
 log.patches.v1_0.seed_fleet_assignment_history
+log.patches.v1_0.migrate_campaign_targets_territory_to_wilaya
+log.patches.v1_0.migrate_campaign_hero_to_banner
+log.patches.v1_0.initialize_catalog_requests

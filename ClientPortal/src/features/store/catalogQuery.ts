@@ -1,3 +1,6 @@
+import { visibleCampaigns } from "@/features/store/campaigns/campaignUtils"
+import type { StorefrontPayload } from "@/shared/types"
+
 export const CATALOG_SORTS = [
   { value: "relevance", label: "Pertinence" },
   { value: "name_asc", label: "Nom de A à Z" },
@@ -23,15 +26,9 @@ export function catalogCountLabel(total: number | undefined, itemCount: number, 
   return `${count} articles disponibles`
 }
 
-export function offerCount(payload: { banners: Array<{ campaign?: string | null }>; rails: Array<{ kind?: string; campaign?: string | null }> } | null | undefined) {
+export function offerCount(payload: StorefrontPayload | null | undefined) {
   if (!payload) return 0
-  const campaigns = new Set<string>()
-  for (const banner of payload.banners) {
-    if (banner.campaign) campaigns.add(banner.campaign)
-  }
-  for (const rail of payload.rails) {
-    if (rail.kind !== "group" && rail.campaign) campaigns.add(rail.campaign)
-  }
-  if (campaigns.size > 0) return campaigns.size
+  const unique = visibleCampaigns(payload)
+  if (unique.length > 0) return unique.length
   return payload.banners.length + payload.rails.filter((rail) => rail.kind !== "group").length
 }

@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom"
-import { Banknote, ChevronRight, ClipboardList, LifeBuoy, LogOut, PackageCheck, UserRound } from "lucide-react"
+import { Banknote, Bell, ChevronRight, ClipboardList, LifeBuoy, LogOut, PackageCheck, PackagePlus, UserRound } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item"
 import { CustomerAvatar, usePortalLogout } from "@/layouts/NavUser"
@@ -7,9 +7,11 @@ import type { PortalContext } from "@/shared/types"
 
 const ACCOUNT_LINKS = [
   { to: "/account?tab=profile", label: "Mon compte", description: "Coordonnées et préférences", icon: UserRound },
+  { to: "/account?tab=notifications", label: "Notifications", description: "Alertes commandes, livraisons et offres", icon: Bell },
   { to: "/orders", label: "Mes commandes", description: "Historique et suivi", icon: ClipboardList },
   { to: "/deliveries", label: "Bons de livraison", description: "Documents de livraison", icon: PackageCheck },
   { to: "/payments", label: "Paiements", description: "Règlements et historique", icon: Banknote },
+  { to: "/requests", label: "Demandes hors catalogue", description: "Articles absents du catalogue", icon: PackagePlus },
 ] as const
 
 export function AccountHub({ context }: { context: PortalContext }) {

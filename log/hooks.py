@@ -125,11 +125,15 @@ after_install = "log.install.after_install"
 permission_query_conditions = {
     "Livraison": "log.distribution_permissions.livraison_query_conditions",
     "Paiement Client": "log.distribution_permissions.paiement_query_conditions",
+    "Notification Portail": "log.services.portal_notifications.notification_query_conditions",
+    "Preferences Notification Portail": "log.services.portal_notifications.preferences_query_conditions",
 }
 
 has_permission = {
     "Livraison": "log.distribution_permissions.livraison_has_permission",
     "Paiement Client": "log.distribution_permissions.paiement_has_permission",
+    "Notification Portail": "log.services.portal_notifications.notification_has_permission",
+    "Preferences Notification Portail": "log.services.portal_notifications.preferences_has_permission",
 }
 
 # DocType Class
@@ -168,6 +172,7 @@ doc_events = {
             "log.livraison_hooks.update_livraisons_on_delivery_note_change",
             "log.order_change_ops.invalidate_delivery_note_distribution",
             "log.delivery_note_ops.ensure_qr_code",
+            "log.services.portal_notifications.on_delivery_note_update",
         ],
         "on_trash": "log.livraison_hooks.remove_deleted_delivery_note",
     },
@@ -176,17 +181,34 @@ doc_events = {
     },
     "Livraison": {
         "validate": "log.livraison_hooks.validate_livraison",
+        "on_update": "log.services.portal_notifications.on_livraison_update",
     },
     "Sales Order": {
-        "on_update_after_submit": "log.order_change_ops.invalidate_order_distribution",
-        "on_cancel": "log.order_change_ops.invalidate_order_distribution",
+        "on_submit": "log.services.portal_notifications.on_sales_order_submit",
+        "on_update_after_submit": [
+            "log.order_change_ops.invalidate_order_distribution",
+            "log.services.portal_notifications.on_sales_order_update_after_submit",
+        ],
+        "on_cancel": [
+            "log.order_change_ops.invalidate_order_distribution",
+            "log.services.portal_notifications.on_sales_order_cancel",
+        ],
     },
     "Paiement Client": {
         "validate": "log.paiement_hooks.validate_paiement_client",
         "after_insert": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
-        "on_update": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+        "on_update": [
+            "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+            "log.services.portal_notifications.on_paiement_client_update",
+        ],
         "on_trash": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
         "after_delete": "log.paiement_hooks.update_livraison_totals_on_paiement_change",
+    },
+    "Demande Hors Catalogue": {
+        "on_update": "log.services.portal_notifications.on_demande_hors_catalogue_update",
+    },
+    "Campagne Portail": {
+        "on_update": "log.services.portal_notifications.on_campagne_portail_update",
     },
 }
 

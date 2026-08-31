@@ -36,6 +36,12 @@ export function crumbsFromPath(pathname: string, search = ""): Crumb[] {
   }
   if (section === "payments") return [{ label: "Paiements" }]
   if (section === "account") return [{ label: "Mon compte" }]
+  if (section === "requests") {
+    if (id === "new") return [{ label: "Demandes", to: "/requests" }, { label: "Nouvelle demande" }]
+    return id
+      ? [{ label: "Demandes", to: "/requests" }, { label: id }]
+      : [{ label: "Demandes" }]
+  }
   return [{ label: "Boutique" }]
 }
 

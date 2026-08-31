@@ -37,6 +37,7 @@ export function HeaderSearch() {
   const listId = useId()
   const urlQuery = params.get("q") || ""
   const group = params.get("group") || ""
+  const campaign = params.get("campaign") || ""
   const searchString = params.toString()
   const [value, setValue] = useState(urlQuery)
   const [debounced, setDebounced] = useState(urlQuery.trim())
@@ -46,7 +47,7 @@ export function HeaderSearch() {
   const categories = storefront.data?.message?.categories ?? []
   const term = value.trim()
   const itemsReady = open && debounced === term && debounced.length >= 2
-  const catalog = useCatalog(debounced, group, 1, itemsReady, 5)
+  const catalog = useCatalog(debounced, group, 1, itemsReady, 5, "relevance", false, campaign)
   const items = itemsReady ? catalog.data?.message?.items ?? [] : []
   const waitingItems = term.length >= 2 && (debounced !== term || Boolean(catalog.isLoading))
 
@@ -91,7 +92,12 @@ export function HeaderSearch() {
     setValue("")
     setOpen(false)
     setActiveIndex(-1)
-    navigate(`/?group=${encodeURIComponent(name)}`)
+    const nextParams = new URLSearchParams(searchString)
+    nextParams.delete("view")
+    nextParams.delete("q")
+    nextParams.set("group", name)
+    const search = nextParams.toString()
+    navigate({ pathname: "/", search: search ? `?${search}` : "" })
   }
 
   function goToItem(itemCode: string) {
@@ -280,7 +286,20 @@ export function HeaderSearch() {
             )
           })}
           {matchingGroups.length === 0 && items.length === 0 && !waitingItems && (
-            <li className="px-2.5 py-2 text-sm text-muted-foreground">Aucun rayon ni article.</li>
+            <li className="flex flex-col gap-1 px-2.5 py-2 text-sm text-muted-foreground">
+              <span>Aucun rayon ni article.</span>
+              <button
+                type="button"
+                className="rounded-md px-0 py-1 text-left font-medium text-foreground hover:underline"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  setOpen(false)
+                  navigate(`/requests/new?q=${encodeURIComponent(term)}`)
+                }}
+              >
+                Demander cet article
+              </button>
+            </li>
           )}
           <li role="option" id={`${listId}-all`} aria-selected={active?.kind === "all"}>
             <button

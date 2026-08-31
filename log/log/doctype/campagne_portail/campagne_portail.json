@@ -21,9 +21,6 @@
   "headline",
   "cta_label",
   "body",
-  "column_break_media",
-  "image_desktop",
-  "image_mobile",
   "section_cta",
   "cta_type",
   "column_break_cta",
@@ -84,13 +81,13 @@
    "label": "Planification"
   },
   {
-   "default": "Hero",
+   "default": "Rayon produits",
    "fieldname": "placement",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Emplacement",
-   "options": "Hero\nBandeau\nRayon produits",
+   "options": "Bandeau\nRayon produits",
    "reqd": 1
   },
   {
@@ -139,20 +136,6 @@
    "label": "Texte"
   },
   {
-   "fieldname": "column_break_media",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "image_desktop",
-   "fieldtype": "Attach Image",
-   "label": "Image desktop"
-  },
-  {
-   "fieldname": "image_mobile",
-   "fieldtype": "Attach Image",
-   "label": "Image mobile"
-  },
-  {
    "fieldname": "section_cta",
    "fieldtype": "Section Break",
    "label": "Lien d'action"
@@ -162,7 +145,7 @@
    "fieldname": "cta_type",
    "fieldtype": "Select",
    "label": "Destination",
-   "options": "Catalogue\nGroupe d'articles\nArticle\nRayon"
+   "options": "Catalogue\nGroupe d'articles\nArticle"
   },
   {
    "fieldname": "column_break_cta",
@@ -226,6 +209,7 @@
    "options": "Coupon Code"
   },
   {
+   "description": "Sur un rayon, ces articles s'affichent dans Offres. Sur un bandeau, ils marquent le catalogue.",
    "fieldname": "section_items",
    "fieldtype": "Section Break",
    "label": "Produits mis en avant"
@@ -251,7 +235,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-08-28 18:10:00.000000",
+ "modified": "2026-08-31 14:30:00.000000",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Campagne Portail",

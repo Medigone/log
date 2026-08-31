@@ -947,6 +947,15 @@ def _notify_responsibles(order):
 	)
 
 
+def _unread_notifications(customer: str, user: str) -> int:
+	try:
+		from log.services.portal_notifications import unread_count
+
+		return unread_count(customer, user)
+	except Exception:
+		return 0
+
+
 @frappe.whitelist()
 def get_portal_context():
 	customer_name, user = _current_portal_customer()
@@ -965,6 +974,7 @@ def get_portal_context():
 		"mustChangePassword": bool(cint(user.get(PASSWORD_CHANGE_FIELD))),
 		"balances": _balance_rows(customer_name),
 		"inProgressOrders": _in_progress_order_ids(customer_name),
+		"unreadNotifications": _unread_notifications(customer_name, user.name),
 	}
 
 
@@ -1173,7 +1183,7 @@ def _empty_catalog(page_number: int, length: int) -> dict[str, Any]:
 
 
 @frappe.whitelist()
-def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=None, offers_only=0):
+def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=None, offers_only=0, campaign=None):
 	from log.services import portal_merchandising as merchandising
 
 	customer_name, user = _current_portal_customer()
@@ -1182,7 +1192,19 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=N
 	if item_group:
 		filters["item_group"] = cstr(item_group)
 	campaigns = merchandising.campaigns_by_item(customer_name)
-	if cint(offers_only):
+	campaign_name = cstr(campaign).strip()
+	live = merchandising.get_live_campaign(customer_name, campaign_name) if campaign_name else None
+	campaign_codes = merchandising.campaign_visible_item_codes(live) if live else []
+	if campaign_name and not campaign_codes:
+		return _empty_catalog(page_number, length)
+	if campaign_codes:
+		if cint(offers_only):
+			offer_set = set(campaigns)
+			campaign_codes = [code for code in campaign_codes if code in offer_set]
+			if not campaign_codes:
+				return _empty_catalog(page_number, length)
+		filters["name"] = ["in", campaign_codes]
+	elif cint(offers_only):
 		offer_codes = [code for code in campaigns if code]
 		if not offer_codes:
 			return _empty_catalog(page_number, length)
@@ -1191,27 +1213,39 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=N
 	fields = ["name", "item_name", "description", "item_group", "stock_uom", "image"]
 	if _item_has_column(STORE_SHOW_PRICE_FIELD):
 		fields.append(STORE_SHOW_PRICE_FIELD)
+	sort_key = _sort_clause(order_by, CATALOG_SORT_CLAUSES, "relevance")
+	use_campaign_order = bool(campaign_codes) and sort_key == CATALOG_SORT_CLAUSES["relevance"]
 	rows = frappe.get_all(
 		"Item",
 		filters=filters,
 		or_filters=or_filters,
 		fields=fields,
-		order_by=_sort_clause(order_by, CATALOG_SORT_CLAUSES, "relevance"),
-		limit_start=offset,
-		limit_page_length=length + 1,
+		order_by=sort_key,
+		limit_start=0 if use_campaign_order else offset,
+		limit_page_length=500 if use_campaign_order else length + 1,
 	)
-	has_next = len(rows) > length
-	rows = rows[:length]
+	if use_campaign_order:
+		rank = {code: index for index, code in enumerate(campaign_codes)}
+		rows.sort(key=lambda row: rank.get(row.name, 10_000))
+		total = len(rows)
+		has_next = offset + length < total
+		rows = rows[offset : offset + length]
+	else:
+		has_next = len(rows) > length
+		rows = rows[:length]
+		total = _catalog_total(filters, or_filters)
 	currency = _currency(_customer_data(customer_name), _company())
-	products = [
-		merchandising.serialize_item_row(
-			row,
-			currency=currency,
-			campaign=campaigns.get(row.name),
-			placement=campaigns.get(row.name).placement if campaigns.get(row.name) else None,
+	products = []
+	for row in rows:
+		linked = live or campaigns.get(row.name)
+		products.append(
+			merchandising.serialize_item_row(
+				row,
+				currency=currency,
+				campaign=linked,
+				placement=linked.placement if linked else None,
+			)
 		)
-		for row in rows
-	]
 	merchandising.apply_prices(products, customer_name, user.name)
 	return {
 		"items": products,
@@ -1219,7 +1253,7 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=N
 		"page": page_number,
 		"pageLength": length,
 		"hasNext": has_next,
-		"total": _catalog_total(filters, or_filters),
+		"total": total,
 	}
 
 

@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { Search } from "lucide-react"
 import { BrandLogo } from "@/components/BrandLogo"
 import { Button } from "@/components/ui/button"
+import { NotificationButton } from "@/features/notifications/NotificationButton"
 import { STORE_SEARCH_ID, type StoreSearchLocationState } from "@/layouts/HeaderSearch"
 import { mobileHeaderTitle, searchParamsOf } from "@/layouts/storeNav"
 
@@ -25,6 +26,7 @@ export function MobileHeader() {
         <BrandLogo compact className="size-8" />
       </NavLink>
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>
+      <NotificationButton />
       <Button
         type="button"
         variant="ghost"

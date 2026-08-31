@@ -11,9 +11,13 @@ import { InitialPasswordChangePage } from "@/features/auth/InitialPasswordChange
 import { CartPage } from "@/features/cart/CartPage"
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage"
 import { DeliveryDetailPage } from "@/features/deliveries/DeliveryDetailPage"
+import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { OrderDetailPage } from "@/features/orders/OrderDetailPage"
 import { OrdersPage } from "@/features/orders/OrdersPage"
 import { PaymentsPage } from "@/features/payments/PaymentsPage"
+import { RequestDetailPage } from "@/features/requests/RequestDetailPage"
+import { RequestFormPage } from "@/features/requests/RequestFormPage"
+import { RequestsPage } from "@/features/requests/RequestsPage"
 import { ProductPage } from "@/features/store/ProductPage"
 import { StorefrontPage } from "@/features/store/StorefrontPage"
 import { ClientShell } from "@/layouts/ClientShell"
@@ -63,6 +67,10 @@ function PortalRoutes() {
           <Route path="/deliveries" element={<DeliveriesPage />} />
           <Route path="/deliveries/:deliveryId" element={<DeliveryDetailPage />} />
           <Route path="/payments" element={<PaymentsPage context={context} />} />
+          <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/requests/new" element={<RequestFormPage />} />
+          <Route path="/requests/:requestId" element={<RequestDetailPage />} />
+          <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/account" element={<AccountPage context={context} onUpdated={mutate} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

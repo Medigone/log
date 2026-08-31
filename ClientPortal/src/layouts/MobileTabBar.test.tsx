@@ -32,7 +32,6 @@ describe("barre inférieure mobile", () => {
     window.localStorage.clear()
     mocks.storefront.data = {
       message: {
-        hero: { title: "Promo", cta: { type: "catalog", label: "Voir" } },
         banners: [{ title: "Promo", campaign: "CAMP-1", cta: { type: "catalog", label: "Voir" } }],
         categories: [],
         rails: [{ kind: "campaign", campaign: "CAMP-1", title: "Offres", cta: { type: "catalog", label: "Voir" }, items: [] }],
@@ -54,7 +53,6 @@ describe("barre inférieure mobile", () => {
   it("n’affiche pas de badge promotions sans offres", () => {
     mocks.storefront.data = {
       message: {
-        hero: { title: "", cta: { type: "catalog", label: "" } },
         banners: [],
         categories: [],
         rails: [],

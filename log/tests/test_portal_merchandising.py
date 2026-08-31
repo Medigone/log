@@ -37,7 +37,7 @@ class TestPortalMerchandising(unittest.TestCase):
 				_campaign(),
 				{
 					merchandising.TARGET_CUSTOMER_GROUP: "Grossistes",
-					merchandising.TARGET_TERRITORY: "Alger",
+					merchandising.TARGET_WILAYA: "Alger",
 					merchandising.TARGET_PRICE_LIST: "Standard",
 				},
 			)
@@ -48,7 +48,7 @@ class TestPortalMerchandising(unittest.TestCase):
 			targets=[
 				frappe._dict(target_type="Customer Group", target_value="Grossistes"),
 				frappe._dict(target_type="Customer Group", target_value="Détaillants"),
-				frappe._dict(target_type="Territory", target_value="Alger"),
+				frappe._dict(target_type="Wilaya", target_value="Alger"),
 			]
 		)
 		self.assertTrue(
@@ -56,7 +56,7 @@ class TestPortalMerchandising(unittest.TestCase):
 				campaign,
 				{
 					"Customer Group": "Détaillants",
-					"Territory": "Alger",
+					"Wilaya": "Alger",
 					"Price List": None,
 				},
 			)
@@ -66,7 +66,7 @@ class TestPortalMerchandising(unittest.TestCase):
 				campaign,
 				{
 					"Customer Group": "Grossistes",
-					"Territory": "Oran",
+					"Wilaya": "Oran",
 					"Price List": None,
 				},
 			)
@@ -97,13 +97,33 @@ class TestPortalMerchandising(unittest.TestCase):
 		self.assertEqual(merchandising.compute_campaign_status(_campaign(), now), merchandising.STATUS_ACTIVE)
 
 	def test_resolve_orders_by_priority_then_title(self):
-		low = _campaign(name="CAMP-LOW", title="Beta", priority=1)
-		high = _campaign(name="CAMP-HIGH", title="Alpha", priority=20)
+		items = [frappe._dict(item_code="ART-1", display_order=0)]
+		low = _campaign(name="CAMP-LOW", title="Beta", priority=1, items=items)
+		high = _campaign(name="CAMP-HIGH", title="Alpha", priority=20, items=items)
+		visible = {"ART-1": frappe._dict(name="ART-1", item_group="Nutrition")}
 		with patch.object(merchandising, "get_customer_segments", return_value={}), patch.object(
 			merchandising, "load_campaigns", return_value=[low, high]
-		):
+		), patch.object(merchandising, "fetch_item_rows", return_value=visible):
 			resolved = merchandising.resolve_campaigns("CUST-1", now="2026-08-28 12:00:00")
 		self.assertEqual([row.name for row in resolved], ["CAMP-HIGH", "CAMP-LOW"])
+
+	def test_resolve_orders_by_valid_from_when_priority_ties(self):
+		items = [frappe._dict(item_code="ART-1", display_order=0)]
+		older = _campaign(name="CAMP-OLD", priority=10, valid_from="2026-01-01", items=items)
+		newer = _campaign(name="CAMP-NEW", priority=10, valid_from="2026-08-01", items=items)
+		visible = {"ART-1": frappe._dict(name="ART-1", item_group="Nutrition")}
+		with patch.object(merchandising, "get_customer_segments", return_value={}), patch.object(
+			merchandising, "load_campaigns", return_value=[older, newer]
+		), patch.object(merchandising, "fetch_item_rows", return_value=visible):
+			resolved = merchandising.resolve_campaigns("CUST-1", now="2026-08-28 12:00:00")
+		self.assertEqual([row.name for row in resolved], ["CAMP-NEW", "CAMP-OLD"])
+
+	def test_campaign_without_visible_items_is_not_resolved(self):
+		campaign = _campaign(items=[frappe._dict(item_code="ART-HIDDEN", display_order=0)])
+		with patch.object(merchandising, "get_customer_segments", return_value={}), patch.object(
+			merchandising, "load_campaigns", return_value=[campaign]
+		), patch.object(merchandising, "fetch_item_rows", return_value={}):
+			self.assertEqual(merchandising.resolve_campaigns("CUST-1", now="2026-08-28 12:00:00"), [])
 
 	def test_expired_campaign_is_not_resolved(self):
 		expired = _campaign(valid_upto="2026-08-01 00:00:00")
@@ -157,7 +177,7 @@ class TestPortalMerchandising(unittest.TestCase):
 		with patch.object(merchandising, "resolve_campaigns", return_value=[]):
 			cleaned = merchandising.sanitize_line_attribution(
 				"CUST-1",
-				[{"item_code": "ART-1", "qty": 1, "campaign": "CAMP-FAKE", "placement": "Hero"}],
+				[{"item_code": "ART-1", "qty": 1, "campaign": "CAMP-FAKE", "placement": "Bandeau"}],
 			)
 		self.assertIsNone(cleaned[0]["campaign"])
 		self.assertIsNone(cleaned[0]["placement"])
@@ -167,10 +187,19 @@ class TestPortalMerchandising(unittest.TestCase):
 		with patch.object(merchandising, "resolve_campaigns", return_value=[live]):
 			cleaned = merchandising.sanitize_line_attribution(
 				"CUST-1",
-				[{"item_code": "ART-1", "qty": 1, "campaign": "CAMP-1", "placement": "Hero"}],
+				[{"item_code": "ART-1", "qty": 1, "campaign": "CAMP-1", "placement": "Bandeau"}],
 			)
 		self.assertEqual(cleaned[0]["campaign"], "CAMP-1")
-		self.assertEqual(cleaned[0]["placement"], "Hero")
+		self.assertEqual(cleaned[0]["placement"], "Bandeau")
+
+	def test_legacy_hero_and_rail_cta_are_normalized(self):
+		self.assertEqual(merchandising._normalize_placement("Hero"), merchandising.PLACEMENT_BANNER)
+		self.assertEqual(merchandising._normalize_cta_type("Rayon"), merchandising.CTA_CATALOG)
+		card = merchandising.serialize_campaign_card(_campaign(placement="Hero", cta_type="Rayon", cta_label="Voir"))
+		self.assertEqual(card["placement"], merchandising.PLACEMENT_BANNER)
+		self.assertEqual(card["cta"]["type"], "catalog")
+		self.assertNotIn("image", card)
+		self.assertNotIn("imageMobile", card)
 
 	def test_order_attribution_never_changes_item_qty_or_rate(self):
 		row = SimpleNamespace(item_code="ART-1", qty=2, rate=100, meta=SimpleNamespace(has_field=lambda _name: True))
@@ -206,6 +235,97 @@ class TestPortalMerchandising(unittest.TestCase):
 			merchandising._warn_if_rule_narrower(_campaign(), rule, {})
 		warn.assert_called_once()
 		self.assertIn("All Customer Groups", warn.call_args.args[0])
+
+	def test_legacy_territory_target_matches_wilaya_segment(self):
+		campaign = _campaign(
+			targets=[frappe._dict(target_type="Territory", target_value="Alger")],
+		)
+		self.assertTrue(
+			merchandising.campaign_matches_segments(
+				campaign,
+				{merchandising.TARGET_WILAYA: "Alger"},
+			)
+		)
+
+	def test_customer_segments_read_custom_wilaya(self):
+		with patch.object(merchandising.frappe.db, "has_column", return_value=True), patch.object(
+			merchandising.frappe.db,
+			"get_value",
+			return_value=frappe._dict(
+				customer_group="Grossistes",
+				custom_wilaya="Alger",
+				default_price_list="Standard",
+			),
+		):
+			segments = merchandising.get_customer_segments("CUST-1")
+		self.assertEqual(segments[merchandising.TARGET_WILAYA], "Alger")
+		self.assertEqual(segments[merchandising.TARGET_CUSTOMER_GROUP], "Grossistes")
+		self.assertNotIn("Territory", segments)
+
+	def test_unknown_or_empty_target_hides_campaign(self):
+		segments = {merchandising.TARGET_WILAYA: "Oran"}
+		self.assertFalse(
+			merchandising.campaign_matches_segments(
+				_campaign(targets=[frappe._dict(target_type="Unknown", target_value="Oran")]),
+				segments,
+			)
+		)
+		self.assertFalse(
+			merchandising.campaign_matches_segments(
+				_campaign(targets=[frappe._dict(target_type="Wilaya", target_value="")]),
+				segments,
+			)
+		)
+
+	def test_offer_summary_uses_pricing_rule_values(self):
+		campaign = _campaign(offer_source=merchandising.OFFER_PRICING_RULE, pricing_rule="PRLE-1")
+		rule = frappe._dict(
+			min_qty=0,
+			discount_percentage=10,
+			discount_amount=0,
+			rate_or_discount="Discount Percentage",
+			price_or_product_discount="Price",
+			currency="DZD",
+		)
+		with patch.object(merchandising.frappe.db, "get_value", return_value=rule):
+			offer = merchandising.offer_summary(campaign, currency="DZD")
+		self.assertEqual(offer["type"], "percentage")
+		self.assertEqual(offer["percentage"], 10)
+		self.assertEqual(offer["label"], "-10 %")
+
+	def test_offer_summary_hides_unreliable_percentage(self):
+		campaign = _campaign(offer_source=merchandising.OFFER_PRICING_RULE, pricing_rule="PRLE-1")
+		rule = frappe._dict(
+			min_qty=0,
+			discount_percentage=0,
+			discount_amount=0,
+			rate_or_discount="Discount Percentage",
+			price_or_product_discount="Price",
+			currency="DZD",
+		)
+		with patch.object(merchandising.frappe.db, "get_value", return_value=rule):
+			offer = merchandising.offer_summary(campaign)
+		self.assertIsNone(offer["label"])
+		self.assertIsNone(offer["type"])
+
+	def test_serialize_campaign_card_exposes_groups_and_validity(self):
+		campaign = _campaign(
+			placement="Bandeau",
+			headline="Promotion Biomil",
+			valid_upto="2026-09-01 23:59:59",
+			items=[frappe._dict(item_code="ART-1", display_order=0), frappe._dict(item_code="ART-2", display_order=1)],
+		)
+		campaign._visible_item_codes = ["ART-1", "ART-2"]
+		campaign._visible_rows = {
+			"ART-1": frappe._dict(item_group="Nutrition"),
+			"ART-2": frappe._dict(item_group="Nutrition"),
+		}
+		card = merchandising.serialize_campaign_card(campaign, items=[], currency="DZD")
+		self.assertEqual(card["placement"], merchandising.PLACEMENT_BANNER)
+		self.assertEqual(card["itemCodes"], ["ART-1", "ART-2"])
+		self.assertEqual(card["itemGroups"], ["Nutrition"])
+		self.assertTrue(card["validUpto"].startswith("2026-09-01"))
+		self.assertIn("offer", card)
 
 
 class TestPortalPromotionEvents(unittest.TestCase):

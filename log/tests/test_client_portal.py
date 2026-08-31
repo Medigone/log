@@ -199,7 +199,7 @@ class TestClientPortalValidation(unittest.TestCase):
 	def test_storefront_uses_authenticated_customer_only(self):
 		user = frappe._dict(name="client@example.com")
 		with patch.object(client_portal, "_current_portal_customer", return_value=("CUST-1", user)), patch(
-			"log.services.portal_merchandising.build_storefront", return_value={"hero": {}}
+			"log.services.portal_merchandising.build_storefront", return_value={"banners": [], "rails": []}
 		) as build:
 			client_portal.get_storefront()
 		build.assert_called_once_with("CUST-1", "client@example.com")
@@ -280,6 +280,48 @@ class TestClientPortalValidation(unittest.TestCase):
 			self.assertEqual(captured["order_by"], client_portal.CATALOG_SORT_CLAUSES["relevance"])
 			client_portal.get_catalog(order_by="recent")
 			self.assertEqual(captured["order_by"], client_portal.CATALOG_SORT_CLAUSES["recent"])
+
+	def test_catalog_campaign_filter_keeps_display_order_and_rejects_ineligible(self):
+		user = frappe._dict(name="client@example.com")
+		live = frappe._dict(name="CAMP-1", placement="Bandeau", title="Promo")
+		captured = {}
+
+		def fake_get_all(doctype, **kwargs):
+			if doctype == "Item" and kwargs.get("fields"):
+				captured["filters"] = kwargs.get("filters")
+				return [
+					frappe._dict(name="ART-B", item_name="B", description="", item_group="Nutrition", stock_uom="Unité", image=None),
+					frappe._dict(name="ART-A", item_name="A", description="", item_group="Nutrition", stock_uom="Unité", image=None),
+				]
+			if doctype == "Item Group":
+				return ["Nutrition"]
+			return []
+
+		patches = [
+			patch.object(client_portal, "_current_portal_customer", return_value=("CUST-1", user)),
+			patch.object(client_portal, "_catalog_item_filters", return_value={"disabled": 0}),
+			patch.object(client_portal, "_item_has_column", return_value=False),
+			patch.object(client_portal, "_customer_data", return_value=frappe._dict()),
+			patch.object(client_portal, "_company", return_value="IntraPro"),
+			patch.object(client_portal, "_currency", return_value="DZD"),
+			patch.object(client_portal.frappe, "get_all", side_effect=fake_get_all),
+			patch("log.services.portal_merchandising.campaigns_by_item", return_value={}),
+			patch("log.services.portal_merchandising.get_live_campaign", return_value=live),
+			patch("log.services.portal_merchandising.campaign_visible_item_codes", return_value=["ART-A", "ART-B"]),
+			patch("log.services.portal_merchandising.serialize_item_row", side_effect=lambda row, **_kwargs: {"itemCode": row.name}),
+			patch("log.services.portal_merchandising.apply_prices"),
+		]
+		with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8], patches[9], patches[10], patches[11]:
+			result = client_portal.get_catalog(campaign="CAMP-1")
+		self.assertEqual(captured["filters"]["name"], ["in", ["ART-A", "ART-B"]])
+		self.assertEqual([item["itemCode"] for item in result["items"]], ["ART-A", "ART-B"])
+
+		with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patch(
+			"log.services.portal_merchandising.get_live_campaign", return_value=None
+		), patches[9], patches[10], patches[11]:
+			empty = client_portal.get_catalog(campaign="CAMP-SECRET")
+		self.assertEqual(empty["items"], [])
+		self.assertEqual(empty["total"], 0)
 
 	def test_recent_order_items_are_scoped_to_the_authenticated_customer(self):
 		user = frappe._dict(name="client@example.com")

@@ -3,14 +3,17 @@ import type {
   Balance,
   CatalogItem,
   CatalogPage,
+  CatalogRequest,
   CommuneOption,
   DeliverySummary,
   GpsPosition,
+  NotificationPreferences,
   OrderPreview,
   OrderSummary,
   Page,
   PaymentSummary,
   PortalContext,
+  PortalNotification,
   StorefrontPayload,
 } from "@/shared/types"
 
@@ -19,6 +22,8 @@ interface FrappeMessage<T> {
 }
 
 const API = "log.api.client_portal"
+const REQUESTS_API = "log.api.catalog_requests"
+const NOTIFICATIONS_API = "log.api.portal_notifications"
 
 export function apiErrorMessage(error: unknown): string {
   if (typeof error === "string") return error
@@ -52,6 +57,7 @@ export function useCatalog(
   pageLength = 12,
   orderBy = "relevance",
   offersOnly = false,
+  campaign = "",
 ) {
   return useFrappeGetCall<FrappeMessage<CatalogPage>>(
     `${API}.get_catalog`,
@@ -62,8 +68,9 @@ export function useCatalog(
       page_length: pageLength,
       order_by: orderBy,
       offers_only: offersOnly ? 1 : 0,
+      campaign,
     },
-    enabled ? `client-catalog-${search}-${itemGroup}-${page}-${pageLength}-${orderBy}-${offersOnly ? 1 : 0}` : null,
+    enabled ? `client-catalog-${search}-${itemGroup}-${page}-${pageLength}-${orderBy}-${offersOnly ? 1 : 0}-${campaign}` : null,
   )
 }
 
@@ -283,6 +290,62 @@ export function usePasswordActions() {
   }
 }
 
+export interface CatalogRequestListQuery {
+  page: number
+  search?: string
+  status?: string
+  fromDate?: string
+  toDate?: string
+  orderBy?: string
+}
+
+export function useCatalogRequests(query: CatalogRequestListQuery) {
+  const params = {
+    page: query.page,
+    page_length: 20,
+    search: query.search || "",
+    status: query.status || "",
+    from_date: query.fromDate || "",
+    to_date: query.toDate || "",
+    order_by: query.orderBy || "date_desc",
+  }
+  return useFrappeGetCall<FrappeMessage<Page<CatalogRequest>>>(
+    `${REQUESTS_API}.get_catalog_requests`,
+    params,
+    `client-catalog-requests-${params.page}-${params.search}-${params.status}-${params.from_date}-${params.to_date}-${params.order_by}`,
+  )
+}
+
+export function useCatalogRequest(requestId?: string) {
+  return useFrappeGetCall<FrappeMessage<CatalogRequest>>(
+    `${REQUESTS_API}.get_catalog_request`,
+    { request_id: requestId },
+    requestId ? `client-catalog-request-${requestId}` : null,
+  )
+}
+
+export function useCatalogRequestActions() {
+  const create = useFrappePostCall<FrappeMessage<CatalogRequest>>(`${REQUESTS_API}.create_catalog_request`)
+  const cancel = useFrappePostCall<FrappeMessage<{ success: boolean; name: string }>>(
+    `${REQUESTS_API}.cancel_catalog_request`,
+  )
+  return {
+    create: async (payload: {
+      deliveryDate: string
+      comment?: string
+      items: Array<{
+        designation: string
+        quantity: number
+        reference?: string
+        notes?: string
+        photo?: { filename: string; imageData: string }
+      }>
+    }) => (await create.call({ payload })).message,
+    cancel: async (payload: { requestId: string }) => (await cancel.call({ payload })).message,
+    saving: create.loading || cancel.loading,
+  }
+}
+
 export function usePromotionEvents() {
   const log = useFrappePostCall<FrappeMessage<{ recorded: boolean; duplicate: boolean }>>(
     `${API}.log_promotion_event`,
@@ -297,5 +360,46 @@ export function usePromotionEvents() {
       if (!payload.campaign) return
       await log.call({ payload })
     },
+  }
+}
+
+export function useNotifications(page = 1, onlyUnread = false, enabled = true, pageLength = 20) {
+  return useFrappeGetCall<FrappeMessage<Page<PortalNotification>>>(
+    `${NOTIFICATIONS_API}.list_notifications`,
+    { page, page_length: pageLength, only_unread: onlyUnread ? 1 : 0 },
+    enabled ? `client-notifications-${page}-${onlyUnread ? 1 : 0}-${pageLength}` : null,
+  )
+}
+
+export function useNotificationActions() {
+  const markOne = useFrappePostCall<FrappeMessage<{ notification: PortalNotification; unreadCount: number }>>(
+    `${NOTIFICATIONS_API}.mark_read`,
+  )
+  const markAll = useFrappePostCall<FrappeMessage<{ success: boolean; unreadCount: number }>>(
+    `${NOTIFICATIONS_API}.mark_all_read`,
+  )
+  return {
+    markRead: async (name: string) => (await markOne.call({ payload: { name } })).message,
+    markAllRead: async () => (await markAll.call({ payload: {} })).message,
+    saving: markOne.loading || markAll.loading,
+  }
+}
+
+export function useNotificationPreferences() {
+  return useFrappeGetCall<FrappeMessage<{ categories: NotificationPreferences }>>(
+    `${NOTIFICATIONS_API}.get_preferences`,
+    undefined,
+    "client-notification-preferences",
+  )
+}
+
+export function useNotificationPreferenceActions() {
+  const update = useFrappePostCall<FrappeMessage<{ categories: NotificationPreferences }>>(
+    `${NOTIFICATIONS_API}.update_preferences`,
+  )
+  return {
+    update: async (categories: Partial<NotificationPreferences>) =>
+      (await update.call({ payload: { categories } })).message,
+    saving: update.loading,
   }
 }

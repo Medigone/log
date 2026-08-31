@@ -4,6 +4,7 @@ import { LocateFixed, MapPin, MapPinned, Save } from "lucide-react"
 import { toast } from "sonner"
 import { AccountHub } from "@/features/account/AccountHub"
 import { CommunePicker } from "@/features/account/CommunePicker"
+import { NotificationPreferencesCard } from "@/features/account/NotificationPreferencesCard"
 import { StoreLocationMap } from "@/features/account/StoreLocationMap"
 import { DetailBackButton } from "@/components/DetailBackButton"
 import { ErrorState } from "@/components/LoadState"
@@ -25,7 +26,7 @@ import { assertAccurateGps, locate } from "@/shared/geolocation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { PortalContext } from "@/shared/types"
 
-const ACCOUNT_TABS = ["profile", "localisation"] as const
+const ACCOUNT_TABS = ["profile", "localisation", "notifications"] as const
 type AccountTab = (typeof ACCOUNT_TABS)[number]
 type CaptureMode = GpsSource
 
@@ -360,7 +361,7 @@ export function AccountPage({
   return (
     <>
       {isMobile ? <DetailBackButton to="/account" label="Retour au compte" /> : null}
-      <PageTitle title="Mon compte" description="Coordonnées client et localisation du magasin." />
+      <PageTitle title="Mon compte" description="Coordonnées, localisation et préférences de notification." />
       <Tabs
         value={tab}
         onValueChange={(value) => {
@@ -373,12 +374,16 @@ export function AccountPage({
         <TabsList variant="line">
           <TabsTrigger value="profile">Profil</TabsTrigger>
           <TabsTrigger value="localisation">Localisation</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
         <TabsContent value="profile">
           <ProfileTab context={context} onUpdated={onUpdated} />
         </TabsContent>
         <TabsContent value="localisation">
           <LocationTab context={context} onUpdated={onUpdated} />
+        </TabsContent>
+        <TabsContent value="notifications">
+          <NotificationPreferencesCard />
         </TabsContent>
       </Tabs>
     </>

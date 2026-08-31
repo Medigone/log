@@ -37,7 +37,6 @@ function preview_campaign(frm) {
 }
 
 function show_preview(frm, payload) {
-	const hero = payload.hero || {};
 	const rails = payload.rails || [];
 	const banners = payload.banners || [];
 	const products = rails.flatMap((rail) => rail.items || []);
@@ -61,14 +60,13 @@ function show_preview(frm, payload) {
 	const pricingHint =
 		frm.doc.offer_source === "Pricing Rule" && priced.length && !discounted.length
 			? `<p class="text-danger">${__(
-					"ERPNext n'a pas appliqué de remise à ce client. Vérifiez le ciblage de la règle de prix (groupe client, territoire, dates, société) : il doit correspondre au client de test.",
+					"ERPNext n'a pas appliqué de remise à ce client. Vérifiez le ciblage de la règle de prix (groupe client, wilaya, dates, société) : il doit correspondre au client de test.",
 				)}</p>`
 			: "";
 	const html = `
 		<p><strong>${frappe.utils.escape_html(payload.customerName || "")}</strong>
 		— ${frappe.utils.escape_html(payload.computedStatus || frm.doc.computed_status || "")}</p>
-		<p>${__("Hero")} : ${frappe.utils.escape_html(hero.title || hero.headline || __("aucun"))}</p>
-		<p>${__("Bandeaux")} : ${banners.length}</p>
+		<p>${__("Bandeaux")} : ${banners.map((banner) => frappe.utils.escape_html(banner.title)).join(", ") || __("aucun")}</p>
 		<p>${__("Rayons")} : ${rails.map((rail) => frappe.utils.escape_html(rail.title)).join(", ") || __("aucun")}</p>
 		${productLines ? `<p>${__("Prix calculés")}</p><ul>${productLines}</ul>` : ""}
 		${pricingHint}

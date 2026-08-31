@@ -9,9 +9,17 @@ vi.mock("@/layouts/AppSidebar", () => ({
   AppSidebar: () => <aside>Navigation</aside>,
 }))
 
+vi.mock("@/features/notifications/NotificationButton", () => ({
+  NotificationButton: () => (
+    <button type="button" aria-label="Notifications">
+      Notifications
+    </button>
+  ),
+}))
+
 vi.mock("@/shared/api", () => ({
   useStorefront: () => ({
-    data: { message: { hero: { title: "", cta: { type: "catalog", label: "" } }, banners: [], categories: [], rails: [] } },
+    data: { message: { banners: [], categories: [], rails: [] } },
     isLoading: false,
     error: null,
   }),
@@ -72,6 +80,7 @@ describe("bandeau livraison en cours", () => {
     expect(screen.queryByText(/Livraison commande/)).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Voir la commande" })).toHaveAttribute("href", "/orders/SAL-ORD-2026-00005")
     expect(screen.getAllByRole("button", { name: "Panier" }).length).toBeGreaterThan(0)
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeVisible()
     expect(screen.getByLabelText("Rechercher un article, une référence ou un rayon")).toBeVisible()
   })
 
@@ -108,6 +117,7 @@ describe("coquille mobile", () => {
     expect(screen.getByRole("link", { name: "Panier" })).toHaveAttribute("href", "/cart")
     expect(screen.getByRole("link", { name: "Compte" })).toHaveAttribute("href", "/account")
     expect(screen.getByRole("heading", { name: "Boutique" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "Notifications" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Rechercher un article, une référence ou un rayon" })).toBeVisible()
     expect(screen.getByRole("link", { name: "IntraPro" })).toBeVisible()
   })

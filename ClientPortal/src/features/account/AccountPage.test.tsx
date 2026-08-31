@@ -31,6 +31,17 @@ vi.mock("@/shared/api", async () => {
     }),
     useProfileActions: () => ({ update: mocks.updateProfile, saving: false }),
     useCustomerImageActions: () => ({ update: mocks.updateImage, saving: false }),
+    useNotificationPreferences: () => ({
+      data: {
+        message: {
+          categories: { commandes: 1, livraisons: 1, paiements: 1, demandes: 1, promotions: 0 },
+        },
+      },
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+    }),
+    useNotificationPreferenceActions: () => ({ update: vi.fn(), saving: false }),
   }
 })
 
@@ -149,6 +160,7 @@ describe("onglet Profil", () => {
     expect(screen.getByText("Client")).toBeVisible()
     expect(screen.queryByText("Compte portail : client@example.com")).not.toBeInTheDocument()
     expect(screen.getByLabelText("Photo du client")).toBeEnabled()
+    expect(screen.getByRole("tab", { name: "Notifications" })).toBeVisible()
     expect(screen.queryByRole("tab", { name: "Solde comptable" })).not.toBeInTheDocument()
     await user.clear(screen.getByLabelText("Utilisateur"))
     await user.type(screen.getByLabelText("Utilisateur"), "Amine Test")

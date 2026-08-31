@@ -1,0 +1,152 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:customer",
+ "creation": "2026-08-31 16:30:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "customer",
+  "section_in_app",
+  "commandes",
+  "livraisons",
+  "paiements",
+  "demandes",
+  "promotions",
+  "section_email",
+  "email_commandes",
+  "email_livraisons",
+  "email_paiements",
+  "email_demandes",
+  "email_promotions"
+ ],
+ "fields": [
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Client",
+   "options": "Customer",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "section_in_app",
+   "fieldtype": "Section Break",
+   "label": "Notifications in-app"
+  },
+  {
+   "default": "1",
+   "fieldname": "commandes",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Commandes"
+  },
+  {
+   "default": "1",
+   "fieldname": "livraisons",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Livraisons"
+  },
+  {
+   "default": "1",
+   "fieldname": "paiements",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Paiements"
+  },
+  {
+   "default": "1",
+   "fieldname": "demandes",
+   "fieldtype": "Check",
+   "label": "Demandes hors catalogue"
+  },
+  {
+   "default": "0",
+   "fieldname": "promotions",
+   "fieldtype": "Check",
+   "label": "Promotions"
+  },
+  {
+   "fieldname": "section_email",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "E-mail (réservé)"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_commandes",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "E-mail commandes"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_livraisons",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "E-mail livraisons"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_paiements",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "E-mail paiements"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_demandes",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "E-mail demandes"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_promotions",
+   "fieldtype": "Check",
+   "hidden": 1,
+   "label": "E-mail promotions"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-31 16:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Preferences Notification Portail",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

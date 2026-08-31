@@ -11,6 +11,7 @@ import { HeaderSearch } from "@/layouts/HeaderSearch"
 import { MobileHeader } from "@/layouts/MobileHeader"
 import { MobileTabBar } from "@/layouts/MobileTabBar"
 import { PortalBreadcrumb } from "@/layouts/PortalBreadcrumb"
+import { NotificationButton } from "@/features/notifications/NotificationButton"
 import { useIsMobile } from "@/hooks/use-mobile"
 import type { PortalContext } from "@/shared/types"
 
@@ -78,6 +79,7 @@ function DesktopShell({ context, children }: { context: PortalContext; children:
             <HeaderSearch />
           </div>
           <div className="flex items-center gap-2 px-3 sm:px-4">
+            <NotificationButton />
             <CartButton />
           </div>
         </header>

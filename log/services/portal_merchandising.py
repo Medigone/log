@@ -3,19 +3,20 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import timedelta
 from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import cint, cstr, flt, get_datetime, now_datetime
+from frappe.utils import cint, cstr, flt, fmt_money, get_datetime, now_datetime
 
 STORE_VISIBLE_FIELD = "custom_afficher_dans_store"
 STORE_SHOW_PRICE_FIELD = "custom_afficher_prix_store"
 
-PLACEMENT_HERO = "Hero"
 PLACEMENT_BANNER = "Bandeau"
 PLACEMENT_RAIL = "Rayon produits"
-PLACEMENTS = (PLACEMENT_HERO, PLACEMENT_BANNER, PLACEMENT_RAIL)
+PLACEMENTS = (PLACEMENT_BANNER, PLACEMENT_RAIL)
+LEGACY_PLACEMENT_HERO = "Hero"
 
 STATUS_ACTIVE = "Active"
 STATUS_SCHEDULED = "Planifiée"
@@ -31,15 +32,20 @@ OFFER_COUPON = "Coupon Code"
 CTA_CATALOG = "Catalogue"
 CTA_GROUP = "Groupe d'articles"
 CTA_ITEM = "Article"
-CTA_RAIL = "Rayon"
+LEGACY_CTA_RAIL = "Rayon"
 
 CACHE_TTL_SECONDS = 60
 RAIL_LIMIT_DEFAULT = 8
 EVENT_RETENTION_DAYS = 90
+BANNER_PREVIEW_ITEMS = 2
+BANNER_CAROUSEL_LIMIT = 3
+EXPIRING_SOON_HOURS = 72
 
 TARGET_CUSTOMER_GROUP = "Customer Group"
-TARGET_TERRITORY = "Territory"
+TARGET_WILAYA = "Wilaya"
 TARGET_PRICE_LIST = "Price List"
+LEGACY_TARGET_TERRITORY = "Territory"
+VALID_TARGET_TYPES = {TARGET_CUSTOMER_GROUP, TARGET_WILAYA, TARGET_PRICE_LIST}
 
 
 def compute_campaign_status(campaign, now=None) -> str:
@@ -61,12 +67,21 @@ def campaign_is_live(campaign, now=None) -> bool:
 	return compute_campaign_status(campaign, now) == STATUS_ACTIVE
 
 
+def _normalize_target_type(target_type: str) -> str:
+	value = cstr(target_type).strip()
+	if value == LEGACY_TARGET_TERRITORY:
+		return TARGET_WILAYA
+	return value
+
+
 def get_customer_segments(customer: str) -> dict[str, str | None]:
-	fields = ["customer_group", "territory", "default_price_list"]
+	fields = ["customer_group", "default_price_list"]
+	if frappe.db.has_column("Customer", "custom_wilaya"):
+		fields.append("custom_wilaya")
 	row = frappe.db.get_value("Customer", customer, fields, as_dict=True) or {}
 	return {
 		TARGET_CUSTOMER_GROUP: row.get("customer_group"),
-		TARGET_TERRITORY: row.get("territory"),
+		TARGET_WILAYA: row.get("custom_wilaya"),
 		TARGET_PRICE_LIST: row.get("default_price_list"),
 	}
 
@@ -74,10 +89,13 @@ def get_customer_segments(customer: str) -> dict[str, str | None]:
 def campaign_matches_segments(campaign, segments: dict[str, str | None]) -> bool:
 	grouped: dict[str, set[str]] = defaultdict(set)
 	for row in campaign.get("targets") or []:
-		target_type = cstr(row.get("target_type")).strip()
+		target_type = _normalize_target_type(row.get("target_type"))
 		target_value = cstr(row.get("target_value")).strip()
-		if target_type and target_value:
-			grouped[target_type].add(target_value)
+		if not target_type and not target_value:
+			continue
+		if target_type not in VALID_TARGET_TYPES or not target_value:
+			return False
+		grouped[target_type].add(target_value)
 	if not grouped:
 		return True
 	for dimension, allowed in grouped.items():
@@ -88,15 +106,17 @@ def campaign_matches_segments(campaign, segments: dict[str, str | None]) -> bool
 
 
 def _campaign_sort_key(campaign) -> tuple:
+	valid_from = get_datetime(campaign.get("valid_from")) if campaign.get("valid_from") else None
 	return (
 		-cint(campaign.get("priority") or 0),
-		cstr(campaign.get("title") or ""),
+		-(valid_from.timestamp() if valid_from else 0),
 		cstr(campaign.get("name") or ""),
 	)
 
 
 def validate_campaign(campaign) -> None:
 	campaign.computed_status = compute_campaign_status(campaign)
+	campaign.placement = _normalize_placement(campaign.placement)
 	if campaign.placement not in PLACEMENTS:
 		frappe.throw(_("L'emplacement de la campagne est invalide."))
 	if campaign.get("priority") in (None, ""):
@@ -115,8 +135,23 @@ def validate_campaign(campaign) -> None:
 	_warn_overlapping_campaigns(campaign)
 
 
+def _normalize_placement(placement: str) -> str:
+	value = cstr(placement).strip()
+	if value == LEGACY_PLACEMENT_HERO:
+		return PLACEMENT_BANNER
+	return value
+
+
+def _normalize_cta_type(cta_type: str) -> str:
+	value = cstr(cta_type).strip() or CTA_CATALOG
+	if value == LEGACY_CTA_RAIL:
+		return CTA_CATALOG
+	return value
+
+
 def _validate_cta(campaign) -> None:
-	cta_type = cstr(campaign.cta_type) or CTA_CATALOG
+	campaign.cta_type = _normalize_cta_type(campaign.cta_type)
+	cta_type = campaign.cta_type
 	if cta_type == CTA_GROUP and not campaign.cta_item_group:
 		frappe.throw(_("Le groupe d'articles de destination est obligatoire."))
 	if cta_type == CTA_ITEM:
@@ -172,31 +207,31 @@ def _assert_offer_alignment(campaign, source: str) -> None:
 
 
 def _warn_if_rule_narrower(campaign, rule, campaign_targets: dict[str, set[str]]) -> None:
-	mapping = {
-		"Customer Group": (TARGET_CUSTOMER_GROUP, rule.get("customer_group")),
-		"Territory": (TARGET_TERRITORY, rule.get("territory")),
-	}
 	applicable = cstr(rule.get("applicable_for"))
-	if applicable in mapping:
-		dimension, value = mapping[applicable]
+	if applicable == TARGET_CUSTOMER_GROUP:
+		value = rule.get("customer_group")
+		campaign_values = campaign_targets.get(TARGET_CUSTOMER_GROUP) or set()
 		if value:
-			campaign_values = campaign_targets.get(dimension) or set()
 			if campaign_values and value not in campaign_values:
 				frappe.msgprint(
 					_("Le ciblage de la règle de prix ({0}) est plus étroit que celui de la campagne.").format(value),
 					indicator="orange",
 					alert=True,
 				)
-			elif not campaign_values and not _is_tree_root(dimension, value):
+			elif not campaign_values and not _is_tree_root(TARGET_CUSTOMER_GROUP, value):
+				_warn_rule_narrower_than_untargeted_campaign(value)
+	elif applicable == LEGACY_TARGET_TERRITORY:
+		value = cstr(rule.get("territory"))
+		campaign_values = campaign_targets.get(TARGET_WILAYA) or set()
+		if value:
+			if campaign_values and not _territory_overlaps_wilayas(value, campaign_values):
 				frappe.msgprint(
-					_(
-						"La campagne s'applique à tous les clients, mais la règle de prix ne cible que {0}. "
-						"Les clients hors de ce groupe ne bénéficieront pas de la remise. "
-						"Pour une offre générale, choisissez le groupe racine ou videz le champ « Applicable For » de la règle."
-					).format(value),
+					_("Le ciblage de la règle de prix ({0}) est plus étroit que celui de la campagne.").format(value),
 					indicator="orange",
 					alert=True,
 				)
+			elif not campaign_values and not _is_tree_root(LEGACY_TARGET_TERRITORY, value):
+				_warn_rule_narrower_than_untargeted_campaign(value)
 	price_list = cstr(rule.get("for_price_list"))
 	if price_list and campaign_targets.get(TARGET_PRICE_LIST) and price_list not in campaign_targets[TARGET_PRICE_LIST]:
 		frappe.msgprint(
@@ -206,10 +241,32 @@ def _warn_if_rule_narrower(campaign, rule, campaign_targets: dict[str, set[str]]
 		)
 
 
+def _warn_rule_narrower_than_untargeted_campaign(value: str) -> None:
+	frappe.msgprint(
+		_(
+			"La campagne s'applique à tous les clients, mais la règle de prix ne cible que {0}. "
+			"Les clients hors de ce groupe ne bénéficieront pas de la remise. "
+			"Pour une offre générale, choisissez le groupe racine ou videz le champ « Applicable For » de la règle."
+		).format(value),
+		indicator="orange",
+		alert=True,
+	)
+
+
+def _territory_overlaps_wilayas(territory: str, wilayas: set[str]) -> bool:
+	if territory in wilayas:
+		return True
+	for wilaya in wilayas:
+		region = cstr(frappe.db.get_value("Wilaya", wilaya, "region") or "")
+		if region and region == territory:
+			return True
+	return False
+
+
 def _is_tree_root(doctype: str, name: str) -> bool:
 	parent_field = {
 		TARGET_CUSTOMER_GROUP: "parent_customer_group",
-		TARGET_TERRITORY: "parent_territory",
+		LEGACY_TARGET_TERRITORY: "parent_territory",
 	}.get(doctype)
 	if not parent_field or not frappe.db.exists(doctype, name):
 		return False
@@ -220,7 +277,7 @@ def _target_values_by_type(campaign) -> dict[str, set[str]]:
 	grouped: dict[str, set[str]] = defaultdict(set)
 	for row in campaign.get("targets") or []:
 		if row.get("target_type") and row.get("target_value"):
-			grouped[cstr(row.target_type)].add(cstr(row.target_value))
+			grouped[_normalize_target_type(row.target_type)].add(cstr(row.target_value))
 	return grouped
 
 
@@ -250,8 +307,10 @@ def _assert_store_item(item_code: str) -> None:
 
 
 def _validate_targets(campaign) -> None:
+	valid = {TARGET_CUSTOMER_GROUP, TARGET_WILAYA, TARGET_PRICE_LIST}
 	for row in campaign.get("targets") or []:
-		if cstr(row.target_type) not in {TARGET_CUSTOMER_GROUP, TARGET_TERRITORY, TARGET_PRICE_LIST}:
+		row.target_type = _normalize_target_type(row.target_type)
+		if cstr(row.target_type) not in valid:
 			frappe.throw(_("La dimension de ciblage est invalide."))
 		if not row.target_value:
 			frappe.throw(_("Chaque cible doit avoir une valeur."))
@@ -311,7 +370,7 @@ def load_campaigns(*, include_unpublished: str | None = None) -> list:
 def resolve_campaigns(customer: str, *, now=None, include_unpublished: str | None = None) -> list:
 	now = get_datetime(now or now_datetime())
 	segments = get_customer_segments(customer)
-	resolved = []
+	candidates = []
 	for campaign in load_campaigns(include_unpublished=include_unpublished):
 		status = compute_campaign_status(campaign, now)
 		if campaign.name == include_unpublished:
@@ -321,8 +380,66 @@ def resolve_campaigns(customer: str, *, now=None, include_unpublished: str | Non
 			continue
 		if not campaign_matches_segments(campaign, segments):
 			continue
+		candidates.append(campaign)
+	all_codes: list[str] = []
+	for campaign in candidates:
+		all_codes.extend(campaign_item_codes(campaign))
+	visible_rows = fetch_item_rows(list(dict.fromkeys(all_codes)))
+	resolved = []
+	for campaign in candidates:
+		codes = campaign_visible_item_codes(campaign, visible_rows)
+		if not codes:
+			continue
+		campaign._visible_item_codes = codes
+		campaign._visible_rows = {code: visible_rows[code] for code in codes}
 		resolved.append(campaign)
 	return sorted(resolved, key=_campaign_sort_key)
+
+
+def get_live_campaign(customer: str, campaign_name: str, *, now=None):
+	name = cstr(campaign_name).strip()
+	if not name:
+		return None
+	for campaign in resolve_campaigns(customer, now=now):
+		if campaign.name == name:
+			return campaign
+	return None
+
+
+def campaign_item_codes(campaign) -> list[str]:
+	ordered = sorted(
+		campaign.get("items") or [],
+		key=lambda row: (cint(row.get("display_order")), cstr(row.get("item_code"))),
+	)
+	return [cstr(row.item_code).strip() for row in ordered if cstr(row.get("item_code")).strip()]
+
+
+def campaign_visible_item_codes(campaign, visible_rows: dict | None = None) -> list[str]:
+	codes = list(getattr(campaign, "_visible_item_codes", None) or campaign_item_codes(campaign))
+	if not codes:
+		return []
+	rows = visible_rows if visible_rows is not None else getattr(campaign, "_visible_rows", None)
+	if rows is None:
+		rows = fetch_item_rows(codes)
+	return [code for code in codes if code in rows]
+
+
+def campaign_item_groups(campaign, visible_rows: dict | None = None) -> list[str]:
+	rows = visible_rows if visible_rows is not None else getattr(campaign, "_visible_rows", None)
+	codes = campaign_visible_item_codes(campaign, rows)
+	if rows is None:
+		rows = fetch_item_rows(codes)
+	groups: list[str] = []
+	seen: set[str] = set()
+	for code in codes:
+		row = rows.get(code) if rows else None
+		if not row:
+			continue
+		group = cstr(row.get("item_group") or "")
+		if group and group not in seen:
+			seen.add(group)
+			groups.append(group)
+	return groups
 
 
 def get_store_settings() -> frappe._dict:
@@ -360,13 +477,12 @@ def rail_limit(settings=None) -> int:
 
 
 def serialize_cta(campaign) -> dict[str, Any]:
-	cta_type = cstr(campaign.get("cta_type") or CTA_CATALOG)
+	cta_type = _normalize_cta_type(campaign.get("cta_type"))
 	return {
 		"type": {
 			CTA_CATALOG: "catalog",
 			CTA_GROUP: "group",
 			CTA_ITEM: "item",
-			CTA_RAIL: "rail",
 		}.get(cta_type, "catalog"),
 		"itemGroup": campaign.get("cta_item_group"),
 		"itemCode": campaign.get("cta_item"),
@@ -374,66 +490,127 @@ def serialize_cta(campaign) -> dict[str, Any]:
 	}
 
 
-def serialize_campaign_card(campaign, *, items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-	offer = offer_summary(campaign)
+def serialize_campaign_card(campaign, *, items: list[dict[str, Any]] | None = None, currency: str | None = None) -> dict[str, Any]:
+	offer = offer_summary(campaign, currency=currency)
+	visible_codes = campaign_visible_item_codes(campaign)
+	preview = (items or [])[:BANNER_PREVIEW_ITEMS]
+	item_groups = campaign_item_groups(campaign)
+	valid_upto = campaign.get("valid_upto")
+	valid_from = campaign.get("valid_from")
+	now = now_datetime()
 	return {
 		"campaign": campaign.name,
 		"campaignTitle": campaign.title,
-		"placement": campaign.placement,
+		"placement": _normalize_placement(campaign.placement),
+		"priority": cint(campaign.get("priority") or 0),
 		"title": campaign.headline or campaign.title,
 		"body": campaign.body,
-		"image": campaign.image_desktop,
-		"imageMobile": campaign.image_mobile or campaign.image_desktop,
 		"cta": serialize_cta(campaign),
+		"offer": offer,
 		"offerLabel": offer.get("label"),
 		"offerCondition": offer.get("condition"),
-		"items": items or [],
+		"validFrom": get_datetime(valid_from).isoformat() if valid_from else None,
+		"validUpto": get_datetime(valid_upto).isoformat() if valid_upto else None,
+		"expiringSoon": _is_expiring_soon(valid_upto, now),
+		"itemCodes": visible_codes,
+		"itemGroups": item_groups,
+		"items": preview,
+		"kind": "campaign",
 	}
 
 
-def offer_summary(campaign) -> dict[str, Any]:
+def _is_expiring_soon(valid_upto, now=None) -> bool:
+	if not valid_upto:
+		return False
+	now = get_datetime(now or now_datetime())
+	upto = get_datetime(valid_upto)
+	return now <= upto <= now + timedelta(hours=EXPIRING_SOON_HOURS)
+
+
+def _empty_offer() -> dict[str, Any]:
+	return {
+		"type": None,
+		"percentage": None,
+		"amount": None,
+		"label": None,
+		"currency": None,
+		"condition": None,
+		"minQty": None,
+		"couponCode": None,
+	}
+
+
+def offer_summary(campaign, *, currency: str | None = None) -> dict[str, Any]:
 	source = cstr(campaign.get("offer_source") or OFFER_NONE)
+	empty = _empty_offer()
 	if source == OFFER_NONE:
-		return {"label": None, "condition": None, "minQty": None, "couponCode": None}
+		return empty
 	if source == OFFER_COUPON:
 		code = frappe.db.get_value("Coupon Code", campaign.coupon_code, "coupon_code") or campaign.coupon_code
-		return {"label": _("Code {0}").format(code), "condition": None, "minQty": None, "couponCode": campaign.coupon_code}
+		return {
+			**empty,
+			"type": "coupon",
+			"label": _("Code {0}").format(code) if code else None,
+			"couponCode": campaign.coupon_code,
+		}
 	if source == OFFER_SCHEME:
-		title = campaign.promotional_scheme
-		return {"label": title, "condition": None, "minQty": None, "couponCode": None}
+		return empty
 	rule = frappe.db.get_value(
 		"Pricing Rule",
 		campaign.pricing_rule,
 		[
 			"title",
-			"rule_description",
 			"min_qty",
 			"discount_percentage",
 			"discount_amount",
 			"rate_or_discount",
 			"price_or_product_discount",
-			"free_item",
-			"free_qty",
+			"currency",
 		],
 		as_dict=True,
 	)
 	if not rule:
-		return {"label": campaign.title, "condition": None, "minQty": None, "couponCode": None}
+		return empty
 	min_qty = flt(rule.min_qty)
 	condition = _("dès {0} unités").format(cint(min_qty)) if min_qty > 1 else None
-	if rule.rule_description:
-		label = rule.rule_description
-	elif rule.price_or_product_discount == "Product":
-		label = _("Produit offert")
-	elif rule.rate_or_discount == "Discount Percentage":
-		label = f"-{flt(rule.discount_percentage):g} %"
-	elif rule.rate_or_discount == "Discount Amount":
-		label = _("Remise")
-	elif rule.rate_or_discount == "Rate":
-		label = _("Prix promotionnel")
-	else:
-		label = rule.title or campaign.title
-	return {"label": label, "condition": condition, "minQty": min_qty or None, "couponCode": None}
+	rule_currency = cstr(rule.get("currency") or currency or "")
+	if rule.price_or_product_discount == "Product":
+		return {**empty, "type": "product", "label": _("Offre spéciale"), "condition": condition, "minQty": min_qty or None}
+	if rule.rate_or_discount == "Discount Percentage":
+		pct = flt(rule.discount_percentage)
+		if pct <= 0:
+			return {**empty, "condition": condition, "minQty": min_qty or None}
+		return {
+			**empty,
+			"type": "percentage",
+			"percentage": pct,
+			"label": f"-{pct:g} %",
+			"condition": condition,
+			"minQty": min_qty or None,
+		}
+	if rule.rate_or_discount == "Discount Amount":
+		amount = flt(rule.discount_amount)
+		if amount <= 0:
+			return {**empty, "condition": condition, "minQty": min_qty or None}
+		money = fmt_money(amount, currency=rule_currency) if rule_currency else f"{amount:g}"
+		return {
+			**empty,
+			"type": "amount",
+			"amount": amount,
+			"currency": rule_currency or None,
+			"label": _("{0} de remise").format(money),
+			"condition": condition,
+			"minQty": min_qty or None,
+		}
+	if rule.rate_or_discount == "Rate":
+		return {
+			**empty,
+			"type": "rate",
+			"label": _("Prix promotionnel"),
+			"condition": condition,
+			"minQty": min_qty or None,
+		}
+	return {**empty, "condition": condition, "minQty": min_qty or None}
 
 
 def _portal():
@@ -460,11 +637,11 @@ def serialize_item_row(row, *, currency: str, campaign=None, placement: str | No
 		"offerCondition": None,
 		"campaign": campaign.name if campaign else None,
 		"campaignTitle": campaign.title if campaign else None,
-		"placement": placement or (campaign.placement if campaign else None),
+		"placement": _normalize_placement(placement or (campaign.placement if campaign else "") ) or None,
 		"currency": currency,
 	}
 	if campaign:
-		offer = offer_summary(campaign)
+		offer = offer_summary(campaign, currency=currency)
 		payload["offerLabel"] = offer.get("label")
 		payload["offerCondition"] = offer.get("condition")
 	return payload
@@ -583,60 +760,27 @@ def build_storefront(customer: str, portal_user: str, *, include_unpublished: st
 
 def _build_storefront_payload(customer: str, portal_user: str, *, include_unpublished: str | None = None) -> dict[str, Any]:
 	settings = get_store_settings()
-	campaigns = resolve_campaigns(customer, include_unpublished=include_unpublished)
-	limit = rail_limit(settings)
+	campaigns = resolve_campaigns(customer, include_unpublished=include_unpublished) if cint(settings.get("show_promotions", 1)) else []
 	portal = _portal()
 	currency = portal._currency(portal._customer_data(customer), portal._company())
-	heroes = [c for c in campaigns if c.placement == PLACEMENT_HERO]
-	banners = [c for c in campaigns if c.placement == PLACEMENT_BANNER]
-	rails = [c for c in campaigns if c.placement == PLACEMENT_RAIL]
-
-	hero = serialize_campaign_card(heroes[0]) if heroes else _fallback_hero(settings)
-	banner_cards = [serialize_campaign_card(campaign) for campaign in banners]
-
-	rail_payloads = []
+	serialized: list[dict[str, Any]] = []
 	pending_items: list[dict[str, Any]] = []
-	if cint(settings.get("show_promotions", 1)):
-		for campaign in rails:
-			products = _campaign_products(campaign, currency, limit)
-			pending_items.extend(products)
-			rail_payloads.append(
-				{
-					**serialize_campaign_card(campaign, items=products),
-					"kind": "campaign",
-				}
-			)
-	if cint(settings.get("show_featured", 1)):
-		groups = sorted(settings.get("featured_groups") or [], key=lambda row: (cint(row.display_order), cstr(row.item_group)))
-		for row in groups:
-			items = [
-				serialize_item_row(item, currency=currency, placement="featured_group")
-				for item in fetch_group_items(row.item_group, limit)
-			]
-			pending_items.extend(items)
-			rail_payloads.append(
-				{
-					"campaign": None,
-					"campaignTitle": None,
-					"placement": "featured_group",
-					"kind": "group",
-					"title": row.item_group,
-					"body": None,
-					"cta": {"type": "group", "itemGroup": row.item_group, "itemCode": None, "label": _("Voir le groupe")},
-					"items": items,
-				}
-			)
-
+	for campaign in campaigns:
+		products = _campaign_products(campaign, currency, BANNER_PREVIEW_ITEMS)
+		pending_items.extend(products)
+		serialized.append(serialize_campaign_card(campaign, items=products, currency=currency))
 	apply_prices(pending_items, customer, portal_user)
+	banners = [row for row in serialized if row["placement"] == PLACEMENT_BANNER][:BANNER_CAROUSEL_LIMIT]
+	rails = [row for row in serialized if row["placement"] == PLACEMENT_RAIL]
 	categories = []
 	if cint(settings.get("show_categories", 1)):
 		categories = [{"name": name} for name in frappe.get_all("Item Group", filters={"is_group": 0}, pluck="name", order_by="name asc")]
 
 	return {
-		"hero": hero,
-		"banners": banner_cards,
+		"campaigns": serialized,
+		"banners": banners,
 		"categories": categories,
-		"rails": rail_payloads,
+		"rails": rails,
 		"customerName": frappe.db.get_value("Customer", customer, "customer_name") or customer,
 		"computedStatus": compute_campaign_status(frappe.get_doc("Campagne Portail", include_unpublished))
 		if include_unpublished
@@ -644,37 +788,22 @@ def _build_storefront_payload(customer: str, portal_user: str, *, include_unpubl
 	}
 
 
-def _fallback_hero(settings) -> dict[str, Any]:
-	return {
-		"campaign": None,
-		"campaignTitle": None,
-		"placement": PLACEMENT_HERO,
-		"title": settings.get("fallback_headline") or _("Commandez vos produits"),
-		"body": settings.get("fallback_body"),
-		"image": settings.get("fallback_image"),
-		"imageMobile": settings.get("fallback_image"),
-		"cta": {
-			"type": "catalog",
-			"itemGroup": None,
-			"itemCode": None,
-			"label": settings.get("fallback_cta_label") or _("Parcourir le catalogue"),
-		},
-		"offerLabel": None,
-		"offerCondition": None,
-		"items": [],
-	}
-
-
 def _campaign_products(campaign, currency: str, limit: int) -> list[dict[str, Any]]:
-	ordered = sorted(campaign.get("items") or [], key=lambda row: (cint(row.display_order), cstr(row.item_code)))
-	codes = [cstr(row.item_code) for row in ordered if row.item_code][:limit]
-	rows = fetch_item_rows(codes)
+	codes = campaign_visible_item_codes(campaign)[:limit]
+	rows = getattr(campaign, "_visible_rows", None) or fetch_item_rows(codes)
 	products = []
 	for code in codes:
 		row = rows.get(code)
 		if not row:
 			continue
-		products.append(serialize_item_row(row, currency=currency, campaign=campaign, placement=campaign.placement))
+		products.append(
+			serialize_item_row(
+				row,
+				currency=currency,
+				campaign=campaign,
+				placement=_normalize_placement(campaign.placement),
+			)
+		)
 	return products
 
 
@@ -685,12 +814,11 @@ def serialize_catalog_item(row, customer: str, portal_user: str, currency: str, 
 	return item
 
 
-def campaigns_by_item(customer: str) -> dict[str, Any]:
+def campaigns_by_item(customer: str, campaigns: list | None = None) -> dict[str, Any]:
 	mapping: dict[str, Any] = {}
-	for campaign in resolve_campaigns(customer):
-		for row in campaign.get("items") or []:
-			code = cstr(row.item_code)
-			if code and code not in mapping:
+	for campaign in campaigns if campaigns is not None else resolve_campaigns(customer):
+		for code in campaign_visible_item_codes(campaign):
+			if code not in mapping:
 				mapping[code] = campaign
 	return mapping
 
@@ -714,7 +842,7 @@ def sanitize_line_attribution(customer: str, lines: list[dict[str, Any]]) -> lis
 	cleaned = []
 	for line in lines:
 		campaign_name = cstr(line.get("campaign") or "").strip() or None
-		placement = cstr(line.get("placement") or "").strip() or None
+		placement = _normalize_placement(cstr(line.get("placement") or "").strip()) or None
 		campaign = live.get(campaign_name) if campaign_name else None
 		if campaign_name and not campaign:
 			campaign_name = None
@@ -724,9 +852,9 @@ def sanitize_line_attribution(customer: str, lines: list[dict[str, Any]]) -> lis
 			if item_codes and line.get("item_code") not in item_codes and line.get("itemCode") not in item_codes:
 				# Attribution last-touch remains valid for display even if the item is only
 				# linked via a pricing rule covering a group. Keep campaign if live.
-				placement = placement or campaign.placement
+				placement = placement or _normalize_placement(campaign.placement)
 			else:
-				placement = placement or campaign.placement
+				placement = placement or _normalize_placement(campaign.placement)
 		cleaned.append({**line, "campaign": campaign.name if campaign else campaign_name, "placement": placement})
 	return cleaned
 

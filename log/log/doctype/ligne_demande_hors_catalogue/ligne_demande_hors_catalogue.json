@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "designation",
+  "quantite",
+  "reference",
+  "notes",
+  "photo",
+  "article"
+ ],
+ "fields": [
+  {
+   "fieldname": "designation",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Désignation",
+   "reqd": 1
+  },
+  {
+   "fieldname": "quantite",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantité",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "reference",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Référence / marque"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "photo",
+   "fieldtype": "Attach Image",
+   "in_list_view": 1,
+   "label": "Photo"
+  },
+  {
+   "fieldname": "article",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Article ERPNext",
+   "options": "Item"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-31 15:43:00.000000",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Ligne Demande Hors Catalogue",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

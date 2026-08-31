@@ -4,13 +4,14 @@ import {
   Home,
   House,
   PackageCheck,
+  PackagePlus,
   ShoppingCart,
   Tag,
   UserRound,
   type LucideIcon,
 } from "lucide-react"
 
-export type StoreNavMatch = "home" | "offres" | "orders" | "deliveries" | "payments" | "cart" | "account"
+export type StoreNavMatch = "home" | "offres" | "orders" | "deliveries" | "payments" | "cart" | "account" | "requests"
 
 export type StoreNavItem = {
   to: string
@@ -22,6 +23,7 @@ export type StoreNavItem = {
 export const storeNav: StoreNavItem[] = [
   { to: "/", label: "Accueil", icon: Home, match: "home" },
   { to: "/?view=offres", label: "Offres", icon: Tag, match: "offres" },
+  { to: "/requests", label: "Demander un article", icon: PackagePlus, match: "requests" },
   { to: "/orders", label: "Mes commandes", icon: ClipboardList, match: "orders" },
   { to: "/deliveries", label: "Bons de livraison", icon: PackageCheck, match: "deliveries" },
   { to: "/payments", label: "Paiements", icon: Banknote, match: "payments" },
@@ -46,11 +48,19 @@ export function isPromotionContext(pathname: string, search = "") {
 
 export function productDetailsTo(itemCode: string, search = "") {
   const path = `/products/${encodeURIComponent(itemCode)}`
-  return isPromotionContext("/", search) ? `${path}?view=offres` : path
+  const params = searchParamsOf(search)
+  if (params.get("view") === "offres") return `${path}?view=offres`
+  const campaign = params.get("campaign")
+  if (campaign) return `${path}?campaign=${encodeURIComponent(campaign)}`
+  return path
 }
 
 export function productBackTo(search = "") {
-  return isPromotionContext("/products", search) ? "/?view=offres" : "/"
+  const params = searchParamsOf(search)
+  if (params.get("view") === "offres") return "/?view=offres"
+  const campaign = params.get("campaign")
+  if (campaign) return `/?campaign=${encodeURIComponent(campaign)}`
+  return "/"
 }
 
 export function isStoreNavActive(match: StoreNavMatch, pathname: string, search = "") {
@@ -72,12 +82,15 @@ export function isStoreNavActive(match: StoreNavMatch, pathname: string, search 
       pathname === "/deliveries" ||
       pathname.startsWith("/deliveries/") ||
       pathname === "/payments" ||
-      pathname.startsWith("/payments/")
+      pathname.startsWith("/payments/") ||
+      pathname === "/notifications" ||
+      pathname.startsWith("/notifications/")
     )
   }
   if (match === "orders") return pathname === "/orders" || pathname.startsWith("/orders/")
   if (match === "deliveries") return pathname === "/deliveries" || pathname.startsWith("/deliveries/")
   if (match === "payments") return pathname === "/payments" || pathname.startsWith("/payments/")
+  if (match === "requests") return pathname === "/requests" || pathname.startsWith("/requests/")
   return false
 }
 
@@ -91,5 +104,7 @@ export function mobileHeaderTitle(pathname: string, search = "") {
   if (section === "deliveries") return "Bons de livraison"
   if (section === "payments") return "Paiements"
   if (section === "account") return params.get("tab") ? "Mon compte" : "Compte"
+  if (section === "requests") return "Demandes"
+  if (section === "notifications") return "Notifications"
   return "Boutique"
 }

@@ -20,6 +20,17 @@ vi.mock("@/shared/api", async () => {
     useCommunes: () => ({ data: { message: { items: [] } }, isLoading: false, error: null }),
     useProfileActions: () => ({ update: vi.fn(), saving: false }),
     useCustomerImageActions: () => ({ update: vi.fn(), saving: false }),
+    useNotificationPreferences: () => ({
+      data: {
+        message: {
+          categories: { commandes: 1, livraisons: 1, paiements: 1, demandes: 1, promotions: 0 },
+        },
+      },
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+    }),
+    useNotificationPreferenceActions: () => ({ update: vi.fn(), saving: false }),
   }
 })
 
@@ -70,10 +81,12 @@ describe("hub compte mobile", () => {
     expect(screen.getByText("Portail client")).toBeVisible()
     expect(screen.getByRole("link", { name: /Mon compte/ })).toHaveAttribute("href", "/account?tab=profile")
     expect(screen.getByText("Coordonnées et préférences")).toBeVisible()
+    expect(screen.getByRole("link", { name: /Notifications/ })).toHaveAttribute("href", "/account?tab=notifications")
     expect(screen.getByRole("link", { name: /Mes commandes/ })).toHaveAttribute("href", "/orders")
     expect(screen.getByText("Historique et suivi")).toBeVisible()
     expect(screen.getByRole("link", { name: /Bons de livraison/ })).toHaveAttribute("href", "/deliveries")
     expect(screen.getByRole("link", { name: /Paiements/ })).toHaveAttribute("href", "/payments")
+    expect(screen.getByRole("link", { name: /Demandes hors catalogue/ })).toHaveAttribute("href", "/requests")
     expect(screen.getByRole("heading", { name: "Assistance" })).toBeVisible()
     expect(screen.queryByText("Changer de client")).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Accueil" })).not.toBeInTheDocument()

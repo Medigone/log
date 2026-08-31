@@ -13,11 +13,27 @@ describe("catalogue", () => {
   it("compte les offres réelles sans doublon", () => {
     expect(
       offerCount({
-        banners: [{ campaign: "CAMP-1" }],
+        campaigns: [
+          { campaign: "CAMP-1", title: "A", cta: { type: "catalog", label: "Voir" } },
+          { campaign: "CAMP-2", title: "B", cta: { type: "catalog", label: "Voir" } },
+        ],
+        banners: [{ campaign: "CAMP-1", title: "A", cta: { type: "catalog", label: "Voir" } }],
+        categories: [],
         rails: [
-          { kind: "campaign", campaign: "CAMP-1" },
-          { kind: "group", campaign: null },
-          { kind: "campaign", campaign: "CAMP-2" },
+          { kind: "campaign", campaign: "CAMP-1", title: "A", cta: { type: "catalog", label: "Voir" } },
+          { kind: "group", campaign: null, title: "Rayon", cta: { type: "catalog", label: "Voir" } },
+          { kind: "campaign", campaign: "CAMP-2", title: "B", cta: { type: "catalog", label: "Voir" } },
+        ],
+      }),
+    ).toBe(2)
+    expect(
+      offerCount({
+        banners: [{ campaign: "CAMP-1", title: "A", cta: { type: "catalog", label: "Voir" } }],
+        categories: [],
+        rails: [
+          { kind: "campaign", campaign: "CAMP-1", title: "A", cta: { type: "catalog", label: "Voir" } },
+          { kind: "group", campaign: null, title: "Rayon", cta: { type: "catalog", label: "Voir" } },
+          { kind: "campaign", campaign: "CAMP-2", title: "B", cta: { type: "catalog", label: "Voir" } },
         ],
       }),
     ).toBe(2)
@@ -36,6 +52,8 @@ describe("navigation portail", () => {
     expect(isStoreNavActive("home", "/", "?group=Boissons")).toBe(true)
     expect(isStoreNavActive("home", "/", "?q=lait")).toBe(true)
     expect(isStoreNavActive("home", "/products/ART-1", "")).toBe(true)
+    expect(isStoreNavActive("home", "/", "?campaign=pkr0i0ngle")).toBe(true)
+    expect(isStoreNavActive("offres", "/", "?campaign=pkr0i0ngle")).toBe(false)
     expect(isStoreNavActive("home", "/", "?view=offres")).toBe(false)
     expect(isStoreNavActive("home", "/products/ART-1", "?view=offres")).toBe(false)
   })
@@ -60,7 +78,13 @@ describe("navigation portail", () => {
     expect(isStoreNavActive("account", "/orders/SAL-1", "")).toBe(true)
     expect(isStoreNavActive("account", "/deliveries", "")).toBe(true)
     expect(isStoreNavActive("account", "/deliveries/DN-1", "")).toBe(true)
+    expect(isStoreNavActive("account", "/notifications", "")).toBe(true)
     expect(isStoreNavActive("account", "/payments", "")).toBe(true)
+    expect(isStoreNavActive("account", "/requests", "")).toBe(false)
+    expect(isStoreNavActive("requests", "/requests", "")).toBe(true)
+    expect(isStoreNavActive("requests", "/requests/new", "")).toBe(true)
+    expect(isStoreNavActive("requests", "/requests/DHC-1", "")).toBe(true)
+    expect(isStoreNavActive("requests", "/", "")).toBe(false)
     expect(isStoreNavActive("account", "/", "")).toBe(false)
     expect(isStoreNavActive("orders", "/orders", "")).toBe(true)
     expect(isStoreNavActive("deliveries", "/deliveries/DN-1", "")).toBe(true)
@@ -70,6 +94,8 @@ describe("navigation portail", () => {
   it("conserve le contexte promotion dans les liens produit", () => {
     expect(productDetailsTo("ART-1", "?view=offres")).toBe("/products/ART-1?view=offres")
     expect(productDetailsTo("ART-1", "")).toBe("/products/ART-1")
+    expect(productDetailsTo("ART-1", "?campaign=pkr0i0ngle")).toBe("/products/ART-1?campaign=pkr0i0ngle")
+    expect(productBackTo("?campaign=pkr0i0ngle")).toBe("/?campaign=pkr0i0ngle")
     expect(productBackTo("?view=offres")).toBe("/?view=offres")
     expect(productBackTo("")).toBe("/")
   })
@@ -81,5 +107,8 @@ describe("navigation portail", () => {
     expect(mobileHeaderTitle("/account", "")).toBe("Compte")
     expect(mobileHeaderTitle("/account", "?tab=profile")).toBe("Mon compte")
     expect(mobileHeaderTitle("/orders/SAL-1", "")).toBe("Mes commandes")
+    expect(mobileHeaderTitle("/requests", "")).toBe("Demandes")
+    expect(mobileHeaderTitle("/requests/new", "")).toBe("Demandes")
+    expect(mobileHeaderTitle("/notifications", "")).toBe("Notifications")
   })
 })
