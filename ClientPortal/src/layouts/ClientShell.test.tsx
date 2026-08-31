@@ -28,12 +28,12 @@ const context: PortalContext = {
   balances: [],
 }
 
-function stubMatchMedia() {
+function stubMatchMedia(mobile = false) {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     configurable: true,
     value: (query: string) => ({
-      matches: false,
+      matches: mobile && query.includes("max-width: 767px"),
       media: query,
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
@@ -83,5 +83,49 @@ describe("bandeau livraison en cours", () => {
   it("affiche le rayon dans le fil d'Ariane", () => {
     renderShell(context, "/?group=Boissons")
     expect(screen.getByRole("navigation", { name: "breadcrumb" })).toHaveTextContent("Boissons")
+  })
+})
+
+describe("coquille mobile", () => {
+  beforeEach(() => {
+    stubMatchMedia(true)
+  })
+
+  afterEach(() => {
+    stubMatchMedia(false)
+  })
+
+  it("remplace la barre latérale par une navigation inférieure à quatre destinations", () => {
+    renderShell(context)
+    expect(screen.queryByText("Navigation")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Toggle Sidebar" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Panier" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Catalogue" })).not.toBeInTheDocument()
+    expect(screen.queryByText("Changer de client")).not.toBeInTheDocument()
+    expect(screen.getByRole("navigation", { name: "Navigation principale" })).toBeVisible()
+    expect(screen.getByRole("link", { name: "Accueil" })).toHaveAttribute("aria-current", "page")
+    expect(screen.getByRole("link", { name: "Promotions" })).toHaveAttribute("href", "/?view=offres")
+    expect(screen.getByRole("link", { name: "Panier" })).toHaveAttribute("href", "/cart")
+    expect(screen.getByRole("link", { name: "Compte" })).toHaveAttribute("href", "/account")
+    expect(screen.getByRole("heading", { name: "Boutique" })).toBeVisible()
+    expect(screen.getByRole("button", { name: "Rechercher un article, une référence ou un rayon" })).toBeVisible()
+    expect(screen.getByRole("link", { name: "IntraPro" })).toBeVisible()
+  })
+
+  it("garde Accueil actif sur un rayon et Promotions sur la vue offres", () => {
+    const { unmount } = renderShell(context, "/?group=Boissons")
+    expect(screen.getByRole("link", { name: "Accueil" })).toHaveAttribute("aria-current", "page")
+    expect(screen.getByRole("link", { name: "Promotions" })).not.toHaveAttribute("aria-current")
+    unmount()
+    renderShell(context, "/?view=offres")
+    expect(screen.getByRole("heading", { name: "Promotions" })).toBeVisible()
+    expect(screen.getByRole("link", { name: "Promotions" })).toHaveAttribute("aria-current", "page")
+    expect(screen.getByRole("link", { name: "Accueil" })).not.toHaveAttribute("aria-current")
+  })
+
+  it("marque Compte actif sur les commandes", () => {
+    renderShell(context, "/orders")
+    expect(screen.getByRole("link", { name: "Compte" })).toHaveAttribute("aria-current", "page")
+    expect(screen.getByRole("heading", { name: "Mes commandes" })).toBeVisible()
   })
 })

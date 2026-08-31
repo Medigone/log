@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Check, ShoppingCart } from "lucide-react"
-import { useParams } from "react-router-dom"
+import { productBackTo } from "@/layouts/storeNav"
+import { useParams, useLocation } from "react-router-dom"
 import { toast } from "sonner"
 import { useCart } from "@/cart/CartContext"
 import { DetailBackButton } from "@/components/DetailBackButton"
@@ -16,6 +17,7 @@ import { useProduct, usePromotionEvents } from "@/shared/api"
 
 export function ProductPage() {
   const { itemCode } = useParams()
+  const { search } = useLocation()
   const decoded = itemCode ? decodeURIComponent(itemCode) : ""
   const { data, isLoading, error } = useProduct(decoded)
   const item = data?.message
@@ -50,7 +52,7 @@ export function ProductPage() {
 
   return (
     <>
-      <DetailBackButton to="/" label="Retour à l'accueil" />
+      <DetailBackButton to={productBackTo(search)} label="Retour à l'accueil" />
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(280px,420px)]">
         <div className="relative overflow-hidden rounded-xl bg-muted/60">
           <ProductImage src={item.image} alt={item.itemName} className="aspect-square w-full" />

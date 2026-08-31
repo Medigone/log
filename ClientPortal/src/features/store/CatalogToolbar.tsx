@@ -41,7 +41,6 @@ export function CatalogToolbar({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="text-xl font-semibold tracking-tight">Catalogue</h2>
         {loading && !countLabel ? <Skeleton className="h-4 w-40" /> : countLabel ? (
           <p className="text-sm text-muted-foreground">{countLabel}</p>
         ) : null}

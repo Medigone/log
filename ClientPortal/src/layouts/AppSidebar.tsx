@@ -47,7 +47,7 @@ export function AppSidebar({ context }: { context: PortalContext }) {
             <SidebarMenu>
               {storeNav.map((item) => {
                 const Icon = item.icon
-                const active = isStoreNavActive(item, location.pathname, location.search)
+                const active = isStoreNavActive(item.match, location.pathname, location.search)
                 return (
                   <SidebarMenuItem key={item.label}>
                     <SidebarMenuButton render={<NavLink to={item.to} />} isActive={active} tooltip={item.label}>

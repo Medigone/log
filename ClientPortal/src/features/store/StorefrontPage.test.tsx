@@ -131,7 +131,8 @@ describe("boutique portail", () => {
     expect(screen.queryByRole("heading", { name: "Cheveux" })).not.toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Tous" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Boissons" })).toBeVisible()
-    expect(screen.getByRole("heading", { name: "Catalogue" })).toBeVisible()
+    expect(screen.queryByRole("heading", { name: "Catalogue" })).not.toBeInTheDocument()
+    expect(screen.getByText("1 article disponible")).toBeVisible()
     expect(screen.queryByLabelText("Rechercher un article")).not.toBeInTheDocument()
   })
 
@@ -143,7 +144,8 @@ describe("boutique portail", () => {
         </CartProvider>
       </MemoryRouter>,
     )
-    expect(screen.getByRole("heading", { name: "Catalogue" })).toBeVisible()
+    expect(screen.queryByRole("heading", { name: "Catalogue" })).not.toBeInTheDocument()
+    expect(screen.getByText("1 article disponible")).toBeVisible()
     expect(screen.getByRole("button", { name: "Tous" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Boissons" })).toHaveAttribute("href", "/?group=Boissons")
     expect(screen.queryByRole("button", { name: "Tous les groupes" })).not.toBeInTheDocument()

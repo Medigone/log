@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "
 import { NavLink, useSearchParams } from "react-router-dom"
 import { LocateFixed, MapPin, MapPinned, Save } from "lucide-react"
 import { toast } from "sonner"
+import { AccountHub } from "@/features/account/AccountHub"
 import { CommunePicker } from "@/features/account/CommunePicker"
 import { StoreLocationMap } from "@/features/account/StoreLocationMap"
+import { DetailBackButton } from "@/components/DetailBackButton"
 import { ErrorState } from "@/components/LoadState"
 import { PageTitle } from "@/components/PageTitle"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -20,6 +22,7 @@ import { CustomerAvatar } from "@/layouts/NavUser"
 import { apiErrorMessage, useCommunes, useCustomerImageActions, useGpsActions, useProfileActions, type GpsSource } from "@/shared/api"
 import { formatDate } from "@/shared/format"
 import { assertAccurateGps, locate } from "@/shared/geolocation"
+import { useIsMobile } from "@/hooks/use-mobile"
 import type { PortalContext } from "@/shared/types"
 
 const ACCOUNT_TABS = ["profile", "localisation"] as const
@@ -346,17 +349,23 @@ export function AccountPage({
   onUpdated?: () => Promise<unknown> | unknown
 }) {
   const [params, setParams] = useSearchParams()
+  const isMobile = useIsMobile()
   const requested = params.get("tab")
   const tab: AccountTab = ACCOUNT_TABS.includes(requested as AccountTab) ? (requested as AccountTab) : "profile"
 
+  if (isMobile && !requested) {
+    return <AccountHub context={context} />
+  }
+
   return (
     <>
+      {isMobile ? <DetailBackButton to="/account" label="Retour au compte" /> : null}
       <PageTitle title="Mon compte" description="Coordonnées client et localisation du magasin." />
       <Tabs
         value={tab}
         onValueChange={(value) => {
           const next = new URLSearchParams(params)
-          if (value === "profile") next.delete("tab")
+          if (value === "profile" && !isMobile) next.delete("tab")
           else next.set("tab", String(value))
           setParams(next, { replace: true })
         }}

@@ -12,6 +12,8 @@ import { CategoryChips } from "@/features/store/CategoryChips"
 import { parseCatalogSort, type CatalogSort } from "@/features/store/catalogQuery"
 import { ProductGrid, ProductGridSkeleton } from "@/features/store/ProductGrid"
 import { ReorderSection } from "@/features/store/ReorderSection"
+import { useIsMobile } from "@/hooks/use-mobile"
+import { HeaderSearch } from "@/layouts/HeaderSearch"
 import { useCatalog, usePromotionEvents, useRecentOrderItems, useStorefront } from "@/shared/api"
 import type { PortalContext, StorefrontCta, StorefrontHero } from "@/shared/types"
 
@@ -35,6 +37,7 @@ export function StorefrontPage({ context }: { context: PortalContext }) {
   const catalog = useCatalog(search, group, page, showCatalog, 20, sort, offersOnly)
   const recent = useRecentOrderItems(showCatalog && !search)
   const events = usePromotionEvents()
+  const isMobile = useIsMobile()
   const payload = storefront.data?.message
   const products = catalog.data?.message
   const tracked = useRef("")
@@ -122,6 +125,7 @@ export function StorefrontPage({ context }: { context: PortalContext }) {
 
       {showCatalog && (
         <section id="catalogue" className="flex min-w-0 scroll-mt-20 flex-col gap-4">
+          {isMobile ? <HeaderSearch /> : null}
           <CatalogToolbar
             total={products?.total}
             itemCount={products?.items.length ?? 0}

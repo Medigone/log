@@ -38,9 +38,17 @@ export function CustomerAvatar({
   )
 }
 
+export function usePortalLogout() {
+  const { logout } = useFrappeAuth()
+  return async () => {
+    await logout()
+    window.location.reload()
+  }
+}
+
 export function NavUser({ context, variant = "sidebar" }: { context: PortalContext; variant?: "sidebar" | "bar" }) {
   const { isMobile, setOpenMobile } = useSidebar()
-  const { logout } = useFrappeAuth()
+  const logout = usePortalLogout()
   const navigate = useNavigate()
   const displayName = context.customer.customerName || context.user.fullName
   const contactName = context.user.fullName || context.user.email
@@ -49,11 +57,6 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
   const go = (to: string) => {
     if (isMobile) setOpenMobile(false)
     navigate(to)
-  }
-
-  const handleLogout = async () => {
-    await logout()
-    window.location.reload()
   }
 
   const menu = (
@@ -107,7 +110,7 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => void handleLogout()}>
+          <DropdownMenuItem onClick={() => void logout()}>
             <LogOut />
             Déconnexion
           </DropdownMenuItem>

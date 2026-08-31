@@ -8,7 +8,10 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/s
 import { CartButton } from "@/layouts/CartButton"
 import { AppSidebar } from "@/layouts/AppSidebar"
 import { HeaderSearch } from "@/layouts/HeaderSearch"
+import { MobileHeader } from "@/layouts/MobileHeader"
+import { MobileTabBar } from "@/layouts/MobileTabBar"
 import { PortalBreadcrumb } from "@/layouts/PortalBreadcrumb"
+import { useIsMobile } from "@/hooks/use-mobile"
 import type { PortalContext } from "@/shared/types"
 
 export function inProgressDeliveryLabel(orderIds: string[]) {
@@ -36,9 +39,29 @@ function InProgressDeliveryAlert({ orderIds }: { orderIds: string[] }) {
   )
 }
 
-export function ClientShell({ context, children }: { context: PortalContext; children: ReactNode }) {
+function ShellBody({ context, children }: { context: PortalContext; children: ReactNode }) {
   const inProgressOrders = context.inProgressOrders ?? []
+  return (
+    <>
+      <InProgressDeliveryAlert orderIds={inProgressOrders} />
+      {children}
+    </>
+  )
+}
 
+function MobileShell({ context, children }: { context: PortalContext; children: ReactNode }) {
+  return (
+    <div className="flex min-h-svh flex-col bg-background">
+      <MobileHeader />
+      <div className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-1 flex-col gap-6 px-4 pt-4 pb-[calc(var(--mobile-tab-bar-height)+env(safe-area-inset-bottom)+1.5rem)] sm:px-6">
+        <ShellBody context={context}>{children}</ShellBody>
+      </div>
+      <MobileTabBar />
+    </div>
+  )
+}
+
+function DesktopShell({ context, children }: { context: PortalContext; children: ReactNode }) {
   return (
     <SidebarProvider>
       <AppSidebar context={context} />
@@ -59,10 +82,15 @@ export function ClientShell({ context, children }: { context: PortalContext; chi
           </div>
         </header>
         <div className="mx-auto flex w-full min-w-0 max-w-[1680px] flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-          <InProgressDeliveryAlert orderIds={inProgressOrders} />
-          {children}
+          <ShellBody context={context}>{children}</ShellBody>
         </div>
       </SidebarInset>
     </SidebarProvider>
   )
+}
+
+export function ClientShell({ context, children }: { context: PortalContext; children: ReactNode }) {
+  const isMobile = useIsMobile()
+  if (isMobile) return <MobileShell context={context}>{children}</MobileShell>
+  return <DesktopShell context={context}>{children}</DesktopShell>
 }

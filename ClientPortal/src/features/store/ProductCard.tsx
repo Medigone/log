@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Check, ShoppingCart } from "lucide-react"
-import { NavLink } from "react-router-dom"
+import { NavLink, useLocation } from "react-router-dom"
+import { productDetailsTo } from "@/layouts/storeNav"
 import { toast } from "sonner"
 import { useCart } from "@/cart/CartContext"
 import { Badge } from "@/components/ui/badge"
@@ -87,6 +88,8 @@ export function InCartBadge({ quantity, compact = false }: { quantity: number; c
 
 export function ProductCard({ item }: { item: CatalogItem; size?: "default" | "sm" }) {
   const cart = useCart()
+  const location = useLocation()
+  const detailsTo = productDetailsTo(item.itemCode, location.search)
   const events = usePromotionEvents()
   const [quantity, setQuantity] = useState(Math.max(1, Math.round(item.lastQuantity || 1)))
   const [adding, setAdding] = useState(false)
@@ -119,7 +122,7 @@ export function ProductCard({ item }: { item: CatalogItem; size?: "default" | "s
   return (
     <Card size="sm" className="h-full min-w-0 gap-1.5 overflow-hidden rounded-xl p-2 shadow-none ring-foreground/10 has-data-[slot=card-footer]:pb-2">
       <NavLink
-        to={`/products/${encodeURIComponent(item.itemCode)}`}
+        to={detailsTo}
         className="relative block aspect-[4/3] w-full shrink-0 overflow-hidden rounded-lg bg-muted"
         onClick={() =>
           void events.track({
@@ -136,7 +139,7 @@ export function ProductCard({ item }: { item: CatalogItem; size?: "default" | "s
       <CardHeader className="gap-0.5 p-0">
         <p className="truncate text-[0.65rem] text-muted-foreground">{item.itemGroup}</p>
         <CardTitle className="line-clamp-2 text-sm leading-snug font-semibold group-data-[size=sm]/card:text-sm">
-          <NavLink to={`/products/${encodeURIComponent(item.itemCode)}`}>{item.itemName}</NavLink>
+          <NavLink to={detailsTo}>{item.itemName}</NavLink>
         </CardTitle>
         <p className="truncate text-[0.65rem] text-muted-foreground">{details}</p>
       </CardHeader>

@@ -8,6 +8,12 @@ import { useCatalog, useStorefront } from "@/shared/api"
 import { cn } from "@/lib/utils"
 import type { CatalogItem } from "@/shared/types"
 
+export const STORE_SEARCH_ID = "store-search"
+
+export type StoreSearchLocationState = {
+  focusStoreSearch?: boolean
+}
+
 export function foldSearchTerm(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
 }
@@ -27,6 +33,7 @@ export function HeaderSearch() {
   const location = useLocation()
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const focusSearch = Boolean((location.state as StoreSearchLocationState | null)?.focusStoreSearch)
   const listId = useId()
   const urlQuery = params.get("q") || ""
   const group = params.get("group") || ""
@@ -71,6 +78,12 @@ export function HeaderSearch() {
   useEffect(() => {
     setActiveIndex(-1)
   }, [term])
+
+  useEffect(() => {
+    if (!focusSearch) return
+    document.getElementById(STORE_SEARCH_ID)?.focus()
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: {} })
+  }, [focusSearch, location.pathname, location.search, navigate])
 
   const active = activeIndex >= 0 ? suggestions[activeIndex] : undefined
 
@@ -146,6 +159,7 @@ export function HeaderSearch() {
           </InputGroupAddon>
         ) : null}
         <InputGroupInput
+          id={STORE_SEARCH_ID}
           role="combobox"
           aria-expanded={showList}
           aria-controls={listId}
