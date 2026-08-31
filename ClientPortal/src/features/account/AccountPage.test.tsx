@@ -42,8 +42,26 @@ vi.mock("@/shared/api", async () => {
       mutate: vi.fn(),
     }),
     useNotificationPreferenceActions: () => ({ update: vi.fn(), saving: false }),
+    usePushConfig: () => ({ data: { message: { vapidPublicKey: "key", enabled: true } }, isLoading: false, error: null }),
+    usePushSubscriptionActions: () => ({ subscribe: vi.fn(), unsubscribe: vi.fn(), saving: false }),
   }
 })
+
+vi.mock("@/pwa/usePortalPwa", () => ({
+  usePortalPwa: () => ({
+    showBanner: false,
+    isIos: false,
+    isStandalone: false,
+    canPrompt: false,
+    pushStatus: "unsupported",
+    pushError: "",
+    enablingPush: false,
+    enablePush: vi.fn(),
+    install: vi.fn(),
+    dismiss: vi.fn(),
+    installing: false,
+  }),
+}))
 
 vi.mock("leaflet", () => ({ divIcon: (options: unknown) => options }))
 vi.mock("react-leaflet", () => ({

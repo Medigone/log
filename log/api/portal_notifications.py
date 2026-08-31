@@ -71,3 +71,38 @@ def update_preferences(payload):
 	if changed:
 		doc.save(ignore_permissions=True)
 	return {"categories": service.get_preference_values(customer)}
+
+
+@frappe.whitelist()
+def get_push_config():
+	_current_portal_customer()
+	from log.services.portal_push import get_push_config as config
+
+	return config()
+
+
+@frappe.whitelist(methods=["POST"])
+def subscribe_push(payload):
+	customer, user = _current_portal_customer()
+	from log.services.portal_push import upsert_subscription
+
+	data = _payload(payload)
+	keys = data.get("keys") if isinstance(data.get("keys"), dict) else data
+	name = upsert_subscription(
+		user.name,
+		customer,
+		cstr(data.get("endpoint")),
+		cstr(keys.get("p256dh") or data.get("p256dh")),
+		cstr(keys.get("auth") or data.get("auth")),
+		cstr(data.get("userAgent") or data.get("user_agent")),
+	)
+	return {"success": True, "name": name}
+
+
+@frappe.whitelist(methods=["POST"])
+def unsubscribe_push(payload):
+	_customer, user = _current_portal_customer()
+	from log.services.portal_push import disable_subscription
+
+	data = _payload(payload)
+	return disable_subscription(user.name, cstr(data.get("endpoint")))

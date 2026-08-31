@@ -17,6 +17,10 @@ vi.mock("@/features/notifications/NotificationButton", () => ({
   ),
 }))
 
+vi.mock("@/pwa/InstallAppBanner", () => ({
+  InstallAppBanner: () => null,
+}))
+
 vi.mock("@/shared/api", () => ({
   useStorefront: () => ({
     data: { message: { banners: [], categories: [], rails: [] } },

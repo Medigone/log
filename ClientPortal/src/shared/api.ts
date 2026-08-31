@@ -403,3 +403,29 @@ export function useNotificationPreferenceActions() {
     saving: update.loading,
   }
 }
+
+export function usePushConfig(enabled = true) {
+  return useFrappeGetCall<FrappeMessage<{ vapidPublicKey: string; enabled: boolean }>>(
+    `${NOTIFICATIONS_API}.get_push_config`,
+    undefined,
+    enabled ? "client-push-config" : null,
+  )
+}
+
+export function usePushSubscriptionActions() {
+  const subscribe = useFrappePostCall<FrappeMessage<{ success: boolean; name: string }>>(
+    `${NOTIFICATIONS_API}.subscribe_push`,
+  )
+  const unsubscribe = useFrappePostCall<FrappeMessage<{ success: boolean }>>(
+    `${NOTIFICATIONS_API}.unsubscribe_push`,
+  )
+  return {
+    subscribe: async (payload: {
+      endpoint: string
+      keys: { p256dh: string; auth: string }
+      userAgent?: string
+    }) => (await subscribe.call({ payload })).message,
+    unsubscribe: async (endpoint: string) => (await unsubscribe.call({ payload: { endpoint } })).message,
+    saving: subscribe.loading || unsubscribe.loading,
+  }
+}

@@ -10,6 +10,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://127.0.0.1:8000",
       "/assets": "http://127.0.0.1:8000",
+      "/sw-client.js": "http://127.0.0.1:8000",
     },
   },
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },

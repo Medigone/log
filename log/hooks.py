@@ -127,6 +127,7 @@ permission_query_conditions = {
     "Paiement Client": "log.distribution_permissions.paiement_query_conditions",
     "Notification Portail": "log.services.portal_notifications.notification_query_conditions",
     "Preferences Notification Portail": "log.services.portal_notifications.preferences_query_conditions",
+    "Abonnement Push Portail": "log.services.portal_push.subscription_query_conditions",
 }
 
 has_permission = {
@@ -134,6 +135,7 @@ has_permission = {
     "Paiement Client": "log.distribution_permissions.paiement_has_permission",
     "Notification Portail": "log.services.portal_notifications.notification_has_permission",
     "Preferences Notification Portail": "log.services.portal_notifications.preferences_has_permission",
+    "Abonnement Push Portail": "log.services.portal_push.subscription_has_permission",
 }
 
 # DocType Class
@@ -317,4 +319,7 @@ fixtures = [
 
 after_migrate = [
     "log.patches.v1_0.migrate_colis_to_delivery_note.run_after_migrate",
+    "log.services.portal_push.ensure_vapid_keys",
 ]
+
+page_renderer = ["log.pwa.ServiceWorkerRenderer"]

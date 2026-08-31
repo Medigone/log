@@ -120,7 +120,9 @@ class TestPortalNotificationDelivery(unittest.TestCase):
 		fake_db = SimpleNamespace(table_exists=lambda _name: True, exists=lambda *_args, **_kwargs: False)
 		with patch.object(service, "category_enabled", return_value=True), patch.object(
 			service, "portal_users_for_customer", return_value=["a@example.com", "b@example.com"]
-		), patch.object(service.frappe, "db", fake_db), patch.object(service.frappe, "get_doc", side_effect=get_doc):
+		), patch.object(service.frappe, "db", fake_db), patch.object(
+			service.frappe, "get_doc", side_effect=get_doc
+		), patch("log.services.portal_push.enqueue_push"):
 			created = service._deliver(
 				"CUST-1",
 				category="livraisons",

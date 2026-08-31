@@ -318,7 +318,17 @@ def _deliver(
 		)
 		doc.insert(ignore_permissions=True)
 		created.append(doc.name)
+		_enqueue_web_push(user, title=title[:140], body=body or "", link=link or "")
 	return created
+
+
+def _enqueue_web_push(user: str, *, title: str, body: str = "", link: str = "") -> None:
+	try:
+		from log.services.portal_push import enqueue_push
+
+		enqueue_push(user, title=title, body=body, link=link)
+	except Exception:
+		frappe.log_error(title="Push portail")
 
 
 def _safe_hook(handler):

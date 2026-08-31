@@ -13,6 +13,7 @@ import { MobileTabBar } from "@/layouts/MobileTabBar"
 import { PortalBreadcrumb } from "@/layouts/PortalBreadcrumb"
 import { NotificationButton } from "@/features/notifications/NotificationButton"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { InstallAppBanner } from "@/pwa/InstallAppBanner"
 import type { PortalContext } from "@/shared/types"
 
 export function inProgressDeliveryLabel(orderIds: string[]) {
@@ -44,6 +45,7 @@ function ShellBody({ context, children }: { context: PortalContext; children: Re
   const inProgressOrders = context.inProgressOrders ?? []
   return (
     <>
+      <InstallAppBanner />
       <InProgressDeliveryAlert orderIds={inProgressOrders} />
       {children}
     </>
