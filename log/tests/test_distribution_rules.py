@@ -15,6 +15,7 @@ from log.api.distribution_rules import (
 	is_repeated_request,
 	intervals_overlap,
 	load_verification_error,
+	next_free_slot,
 	planning_status_for_route,
 	parse_gps_value,
 	public_tracking_payload,
@@ -77,6 +78,33 @@ class TestDistributionRules(unittest.TestCase):
 				datetime(2026, 8, 25, 10), datetime(2026, 8, 25, 12),
 			)
 		)
+
+	def test_next_free_slot_keeps_preferred_when_free(self):
+		start, end = next_free_slot(
+			[],
+			datetime(2026, 9, 5, 8),
+			datetime(2026, 9, 5, 12),
+		)
+		self.assertEqual((start, end), (datetime(2026, 9, 5, 8), datetime(2026, 9, 5, 12)))
+
+	def test_next_free_slot_shifts_after_existing_morning(self):
+		start, end = next_free_slot(
+			[(datetime(2026, 9, 5, 8), datetime(2026, 9, 5, 12))],
+			datetime(2026, 9, 5, 8),
+			datetime(2026, 9, 5, 12),
+		)
+		self.assertEqual((start, end), (datetime(2026, 9, 5, 12), datetime(2026, 9, 5, 16)))
+
+	def test_next_free_slot_skips_two_occupied_windows(self):
+		start, end = next_free_slot(
+			[
+				(datetime(2026, 9, 5, 8), datetime(2026, 9, 5, 12)),
+				(datetime(2026, 9, 5, 12), datetime(2026, 9, 5, 16)),
+			],
+			datetime(2026, 9, 5, 8),
+			datetime(2026, 9, 5, 12),
+		)
+		self.assertEqual((start, end), (datetime(2026, 9, 5, 16), datetime(2026, 9, 5, 20)))
 
 	def test_revision_and_reopen_rules(self):
 		self.assertTrue(revision_matches(3, 3))

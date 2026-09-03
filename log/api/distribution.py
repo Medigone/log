@@ -25,6 +25,7 @@ from log.api.distribution_rules import (
 	is_repeated_request,
 	intervals_overlap,
 	load_verification_error,
+	next_free_slot,
 	planning_status_for_route,
 	parse_gps_value,
 	revision_matches,
@@ -391,6 +392,29 @@ def _schedule_conflicts(route, *, published_only: bool = False) -> list[str]:
 	return conflicts
 
 
+OCCUPIED_SLOT_STATES = ("Brouillon", "Publiée", "En cours")
+
+
+def _occupied_slots(date_value, driver, vehicle) -> list[tuple]:
+	"""Draft and active routes that already occupy this driver or vehicle on the given day."""
+	slots = []
+	for other in frappe.get_all(
+		"Livraison",
+		filters={
+			"date_liv": date_value,
+			"etat_planification": ["in", list(OCCUPIED_SLOT_STATES)],
+			"docstatus": ["<", 2],
+		},
+		fields=["livreur", "vehicule", "depart_prevu", "fin_prevue"],
+	):
+		if not other.depart_prevu or not other.fin_prevue:
+			continue
+		if not (other.livreur == driver or other.vehicule == vehicle):
+			continue
+		slots.append((get_datetime(other.depart_prevu), get_datetime(other.fin_prevue)))
+	return slots
+
+
 def _row_value(row: Any, key: str, default: Any = None) -> Any:
 	if isinstance(row, dict):
 		return row.get(key, default)
@@ -656,6 +680,34 @@ def _board_date_range(date_from=None, date_to=None, date=None, all_dates=False):
 	return start_date, end_date
 
 
+_EXCEPTION_PLANNING_STATUSES = {"À revalider", "À repréparer", "Exception"}
+
+
+def _unassigned_matches_board(
+	requested_date,
+	planning_status: str,
+	start_date,
+	end_date,
+	include_backlog: bool = False,
+) -> bool:
+	"""Whether an unscheduled Delivery Note belongs on the planning board.
+
+	Kanban backlog (`include_backlog`) lists every eligible unassigned BL,
+	regardless of requested delivery date. The table view still windows by
+	date unless bounds were cleared (`allDates`). Exception statuses always
+	appear even outside the window.
+	"""
+	if include_backlog:
+		return True
+	if (planning_status or "Non planifié") in _EXCEPTION_PLANNING_STATUSES:
+		return True
+	if not start_date or not end_date:
+		return True
+	if not requested_date:
+		return False
+	return start_date <= requested_date <= end_date
+
+
 def planning_display_status(row: dict[str, Any], day=None) -> str:
 	status = row.get("planningStatus") or "Non planifié"
 	if status not in OPEN_PLANNING_FOR_OVERDUE:
@@ -696,6 +748,7 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 		for stop in route["stops"]
 	}
 
+	include_backlog = bool(filter_data.get("includeBacklog"))
 	unassigned = []
 	eligible_names = frappe.get_all(
 		"Delivery Note",
@@ -712,14 +765,9 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 			dn = frappe.get_doc("Delivery Note", name)
 			requested = getdate(dn.get("custom_date_de_livraison")) if dn.get("custom_date_de_livraison") else None
 			planning_status = dn.get("custom_statut_planification") or "Non planifié"
-			in_window = True
-			if start_date and end_date:
-				in_window = bool(requested and start_date <= requested <= end_date)
-			if not in_window and planning_status not in {
-				"À revalider",
-				"À repréparer",
-				"Exception",
-			}:
+			if not _unassigned_matches_board(
+				requested, planning_status, start_date, end_date, include_backlog
+			):
 				continue
 			unassigned.append(_stop_from_dn(dn, len(unassigned) + 1))
 
@@ -1110,6 +1158,22 @@ def _preserve_selected_route_vehicle(route):
 		field.fetch_if_empty = 1
 
 
+def _new_draft_route(date_value, start, end, driver, vehicle):
+	doc = frappe.new_doc("Livraison")
+	doc.date_liv = date_value
+	doc.depart_prevu = start
+	doc.fin_prevue = end
+	doc.livreur = driver
+	doc.vehicule = vehicle
+	_preserve_selected_route_vehicle(doc)
+	doc.planificateur = frappe.session.user
+	doc.etat_planification = "Brouillon"
+	doc.batch_id = f"distribution:{uuid.uuid4()}"
+	doc.revision = 1
+	_assign_default_depot(doc)
+	return doc
+
+
 def _compatible_route(data: dict[str, Any], source_name: str | None = None):
 	requested_id = data.get("targetRouteId")
 	if requested_id:
@@ -1134,6 +1198,11 @@ def _compatible_route(data: dict[str, Any], source_name: str | None = None):
 		frappe.throw(_("La date, le créneau, le livreur et le véhicule sont obligatoires."))
 	if end <= start or getdate(start) != date_value:
 		frappe.throw(_("Le créneau demandé est invalide."))
+	if data.get("forceNew"):
+		start, end = next_free_slot(_occupied_slots(date_value, driver, vehicle), start, end)
+		if end <= start or getdate(start) != date_value:
+			frappe.throw(_("Le créneau demandé est invalide."))
+		return _new_draft_route(date_value, start, end, driver, vehicle)
 	candidates = frappe.get_all(
 		"Livraison",
 		filters={
@@ -1155,19 +1224,7 @@ def _compatible_route(data: dict[str, Any], source_name: str | None = None):
 		target = frappe.get_doc("Livraison", candidates[0])
 		_preserve_selected_route_vehicle(target)
 		return target
-	doc = frappe.new_doc("Livraison")
-	doc.date_liv = date_value
-	doc.depart_prevu = start
-	doc.fin_prevue = end
-	doc.livreur = driver
-	doc.vehicule = vehicle
-	_preserve_selected_route_vehicle(doc)
-	doc.planificateur = frappe.session.user
-	doc.etat_planification = "Brouillon"
-	doc.batch_id = f"distribution:{uuid.uuid4()}"
-	doc.revision = 1
-	_assign_default_depot(doc)
-	return doc
+	return _new_draft_route(date_value, start, end, driver, vehicle)
 
 
 def _same_datetime(left, right) -> bool:
@@ -1247,6 +1304,117 @@ def schedule_delivery_note(payload):
 
 
 @frappe.whitelist()
+def schedule_delivery_notes(payload):
+	"""Bulk-assign multiple Delivery Notes to an existing or new draft route atomically."""
+	_require(PLANNING_ROLES)
+	_require_schema()
+	data = _payload(payload)
+	delivery_notes = data.get("deliveryNotes") or []
+	if isinstance(delivery_notes, str):
+		try:
+			delivery_notes = json.loads(delivery_notes)
+		except json.JSONDecodeError:
+			frappe.throw(_("La liste des bons de livraison est invalide."))
+	if not isinstance(delivery_notes, list) or not delivery_notes:
+		frappe.throw(_("La liste des bons de livraison est vide."))
+	delivery_notes = [str(name).strip() for name in delivery_notes if str(name).strip()]
+	if len(delivery_notes) != len(set(delivery_notes)):
+		frappe.throw(_("La liste des bons de livraison contient des doublons."))
+
+	for name in sorted(delivery_notes):
+		if not frappe.db.exists("Delivery Note", name):
+			frappe.throw(_("Bon de livraison {0} introuvable.").format(name))
+		_lock_delivery_note(name)
+
+	for name in delivery_notes:
+		dn = frappe.get_doc("Delivery Note", name)
+		if dn.docstatus != 0:
+			frappe.throw(_("Le bon {0} n'est pas un brouillon.").format(name))
+		if dn.get("custom_statut_planification") in {"À repréparer", "Exception", "Terminé"}:
+			frappe.throw(_("Le bon {0} ne peut pas être planifié dans son état actuel.").format(name))
+		existing = _active_assignment(name)
+		if existing:
+			if not data.get("forceNew"):
+				frappe.throw(_("Le bon {0} est déjà affecté à une tournée.").format(name))
+			_lock_route(existing)
+			source = frappe.get_doc("Livraison", existing)
+			if _route_state(source) != "Brouillon":
+				frappe.throw(_("Seule une tournée brouillon permet de déplacer le bon {0}.").format(name))
+			source.set(
+				"bons_de_livraison",
+				[row for row in source.bons_de_livraison if row.bon_de_livraison != name],
+			)
+			_bump_route_revision(source, None)
+			source.save(ignore_permissions=True)
+			_set_delivery_note_assignment(dn, None)
+
+	target = _compatible_route(data, None)
+	if not target.is_new() and _route_state(target) != "Brouillon":
+		frappe.throw(_("La tournée de destination n'est pas un brouillon."))
+	if not target.is_new() and not revision_matches(cint(target.revision), data.get("expectedTargetRevision")):
+		frappe.throw(_("La tournée de destination a été modifiée. Actualisez le planning."))
+
+	for name in delivery_notes:
+		_append_delivery_note(target, frappe.get_doc("Delivery Note", name), None)
+
+	warning = _validate_capacity(target, for_publication=False)
+	if target.is_new():
+		target.insert(ignore_permissions=True)
+	else:
+		_bump_route_revision(target, None)
+	target.save(ignore_permissions=True)
+
+	for name in delivery_notes:
+		dn = frappe.get_doc("Delivery Note", name)
+		_set_delivery_note_assignment(dn, target, "Planifié")
+		_record_assignment_history(name, "Planification", {"route": None}, _route_snapshot(target), revision=target.revision)
+
+	return {
+		"route": _serialize_route(frappe.get_doc("Livraison", target.name)),
+		"count": len(delivery_notes),
+		"warning": warning or capacity_warning(_capacity(target)[0]),
+	}
+
+
+@frappe.whitelist()
+def unassign_delivery_note(payload):
+	"""Remove a single Delivery Note from a draft route, returning it to backlog."""
+	_require(PLANNING_ROLES)
+	_require_schema()
+	data = _payload(payload)
+	delivery_note = str(data.get("deliveryNote") or "").strip()
+	if not delivery_note or not frappe.db.exists("Delivery Note", delivery_note):
+		frappe.throw(_("Bon de livraison introuvable."))
+	_lock_delivery_note(delivery_note)
+	route_name = _active_assignment(delivery_note)
+	if not route_name:
+		frappe.throw(_("Ce bon n'est affecté à aucune tournée active."))
+	_lock_route(route_name)
+	route = frappe.get_doc("Livraison", route_name)
+	if _route_state(route) != "Brouillon":
+		frappe.throw(_("Seule une tournée brouillon permet la désaffectation directe."))
+	if not revision_matches(cint(route.revision), data.get("expectedRouteRevision")):
+		frappe.throw(_("La tournée a été modifiée. Actualisez le planning."))
+	before = _route_snapshot(route)
+	route.set("bons_de_livraison", [row for row in route.bons_de_livraison if row.bon_de_livraison != delivery_note])
+	_bump_route_revision(route, None)
+	route.save(ignore_permissions=True)
+	dn = frappe.get_doc("Delivery Note", delivery_note)
+	_set_delivery_note_assignment(dn, None)
+	_record_assignment_history(
+		delivery_note,
+		"Retrait",
+		before,
+		{"route": None},
+		revision=route.revision,
+	)
+	return {
+		"route": _serialize_route(frappe.get_doc("Livraison", route_name)),
+		"deliveryNote": delivery_note,
+	}
+
+
+@frappe.whitelist()
 def reassign_delivery_note(payload):
 	_require(PLANNING_ROLES)
 	_require_schema()
@@ -1276,7 +1444,7 @@ def reassign_delivery_note(payload):
 	if source and not revision_matches(cint(source.revision), data.get("expectedSourceRevision")):
 		frappe.throw(_("La tournée source a été modifiée. Actualisez le planning."))
 
-	if should_update_source_in_place(source, data, delivery_note):
+	if not data.get("forceNew") and should_update_source_in_place(source, data, delivery_note):
 		before = _route_snapshot(source)
 		_apply_route_slot(source, data)
 		_bump_route_revision(source, reason)

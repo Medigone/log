@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Iterable
 
 ROUTE_TRANSITIONS = {
@@ -115,6 +115,42 @@ def driver_owns_route(route_driver: str | None, user_driver: str | None) -> bool
 
 def intervals_overlap(start: datetime, end: datetime, other_start: datetime, other_end: datetime) -> bool:
 	return start < other_end and end > other_start
+
+
+def next_free_slot(
+	occupied: list[tuple[datetime, datetime]],
+	preferred_start: datetime,
+	preferred_end: datetime,
+) -> tuple[datetime, datetime]:
+	"""Return the first slot of the same duration that does not overlap occupied intervals.
+
+	If 08:00–12:00 is taken, the next candidate starts when that occupancy ends (12:00–16:00).
+	"""
+	duration = preferred_end - preferred_start
+	if duration.total_seconds() <= 0:
+		return preferred_start, preferred_end
+	occupied_sorted = sorted(
+		((start, end) for start, end in occupied if start and end),
+		key=lambda item: item[0],
+	)
+	candidate_start = preferred_start
+	for _ in range(48):
+		candidate_end = candidate_start + duration
+		conflict = next(
+			(
+				other
+				for other in occupied_sorted
+				if intervals_overlap(candidate_start, candidate_end, other[0], other[1])
+			),
+			None,
+		)
+		if not conflict:
+			return candidate_start, candidate_end
+		next_start = conflict[1]
+		if next_start <= candidate_start:
+			next_start = candidate_start + timedelta(minutes=1)
+		candidate_start = next_start
+	return candidate_start, candidate_start + duration
 
 
 def revision_matches(current: int, expected: int | None) -> bool:

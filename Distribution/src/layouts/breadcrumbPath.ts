@@ -20,6 +20,9 @@ export function crumbsFromPath(pathname: string): Crumb[] {
   if (section === "planning" && parts[1] === "routes" && parts[2]) {
     return [{ label, to: "/planning" }, { label: decodeURIComponent(parts[2]) }]
   }
+  if (section === "preparation" && parts[1] === "commandes" && parts[2]) {
+    return [{ label, to: "/preparation" }, { label: decodeURIComponent(parts[2]) }]
+  }
   if ((section === "livreurs" || section === "vehicules") && parts[1]) {
     return [{ label, to: `/${section}` }, { label: decodeURIComponent(parts[1]) }]
   }

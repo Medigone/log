@@ -11,7 +11,6 @@ import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
@@ -35,13 +34,19 @@ import {
   usePickSession,
   usePreparationMutations,
   usePreparationQueue,
+  useRecentPickLists,
   applyBarcodeScan,
   getPickGroupLocations,
+  orderIsModified,
+  usePickListOrderChanged,
   type DeliveryNoteResult,
   type PickGroup,
   type PickLocation,
   type SalesOrderRow,
 } from "@/shared/api/preparation";
+import { PickListQueue } from "@/features/preparation/PickListQueue";
+import { CreatePickListDialog } from "@/features/preparation/CreatePickListDialog";
+import { OrderModifiedAlert } from "@/features/preparation/OrderModifiedAlert";
 import { ReturnControlPanel, usePendingReturnRoutes } from "@/features/preparation/ReturnControlPanel";
 import { PickFloorView, type ScanSnapshot } from "@/features/preparation/PickFloorView";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -57,23 +62,14 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { pickLineTone, type StatusTone } from "@/shared/design/statusTone";
+import { pickLineTone, salesOrderDeskStatus, orderPickListState, orderPickListStatus } from "@/shared/design/statusTone";
 import { cn } from "@/lib/utils";
 import { formatQuantity, formatShortDate } from "@/shared/format";
 
-function priority(date?: string): { label: string; tone: StatusTone } {
-  if (!date) return { label: "Date à confirmer", tone: "neutral" };
-  const target = new Date(`${date}T00:00:00`);
-  const current = new Date();
-  current.setHours(0, 0, 0, 0);
-  if (target < current) return { label: "En retard", tone: "danger" };
-  if (target.getTime() === current.getTime()) return { label: "Aujourd’hui", tone: "warning" };
-  return { label: "Planifiée", tone: "info" };
-}
+const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
 
 type DateScope = "all" | "today" | "tomorrow" | "overdue";
-
-const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
+type ListFilter = "all" | "none" | "draft" | "submitted";
 
 function localIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -137,11 +133,76 @@ function stockShortages(order: SalesOrderRow) {
 }
 
 function orderCanCreate(order: SalesOrderRow) {
-  return order.can_create_pick_list !== false;
+  return order.can_create_pick_list !== false && !orderIsModified(order);
 }
 
-function orderExistingPickList(order: SalesOrderRow) {
-  return order.existing_pick_list || order.draft_pick_list;
+function orderPickListNames(order: SalesOrderRow): string[] {
+  if (order.pick_lists?.length) {
+    return Array.from(new Set(order.pick_lists.map((pickList) => pickList.name).filter(Boolean)));
+  }
+  if (order.draft_pick_lists?.length) return order.draft_pick_lists;
+  if (order.draft_pick_list) return [order.draft_pick_list];
+  if (order.existing_pick_list) return [order.existing_pick_list];
+  return [];
+}
+
+function orderPickProgress(order: SalesOrderRow) {
+  const requested = order.requested_qty ?? order.total_qty ?? 0;
+  let picked = order.picked_qty ?? 0;
+  if (!orderPickListNames(order).length && (order.per_picked || 0) > 0 && picked === 0) {
+    picked = requested * ((order.per_picked || 0) / 100);
+  }
+  const percent = requested > 0 ? Math.min(100, Math.round((picked / requested) * 100)) : 0;
+  return { picked, requested, percent };
+}
+
+function PickProgressBar({ order }: { order: SalesOrderRow }) {
+  const { picked, requested, percent } = orderPickProgress(order);
+  return (
+    <div className="min-w-[7.5rem]">
+      <div
+        role="progressbar"
+        aria-label={`Prélèvement ${formatQuantity(picked)} sur ${formatQuantity(requested)}`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="h-1.5 overflow-hidden rounded-full bg-muted"
+      >
+        <div className="h-full rounded-full bg-brand-600 transition-[width]" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="mt-1 num t-meta text-muted-foreground">
+        {formatQuantity(picked)} / {formatQuantity(requested)} · {percent} %
+      </p>
+    </div>
+  );
+}
+
+function OpenDraftListsButton({
+  names,
+  onOpen,
+  disabled,
+}: {
+  names: string[];
+  onOpen: (names: string[]) => void;
+  disabled?: boolean;
+}) {
+  const many = names.length > 1;
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={disabled}
+      aria-label={
+        many
+          ? `Ouvrir les ${names.length} listes de prélèvement`
+          : `Ouvrir la liste ${names[0]}`
+      }
+      onClick={() => onOpen(names)}
+    >
+      {many ? "Ouvrir les listes" : "Ouvrir la liste"}
+    </Button>
+  );
 }
 
 function isoDateWithOffset(days: number) {
@@ -163,32 +224,43 @@ function printQr(note: DeliveryNoteResult) {
   win.print();
 }
 
-function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string[], created?: boolean) => void }) {
+function SalesOrderPicker({
+  onOpenPickLists,
+  onShowPickLists,
+}: {
+  onOpenPickLists: (names: string[], created?: boolean) => void;
+  onShowPickLists: () => void;
+}) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [confirming, setConfirming] = useState(false);
+  const [pendingOrders, setPendingOrders] = useState<SalesOrderRow[]>([]);
   const [dateScope, setDateScope] = useState<DateScope>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [wilaya, setWilaya] = useState("");
   const [commune, setCommune] = useState("");
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const [customer, setCustomer] = useState("");
+  const [listFilter, setListFilter] = useState<ListFilter>("all");
 
   const { data, mutate, error, isLoading } = usePreparationQueue();
   const { createPickList, creating } = usePreparationMutations();
 
   const orders = useMemo(() => data?.message || [], [data?.message]);
+  const visible = orders;
+  const pickable = useMemo(() => visible.filter(orderCanCreate), [visible]);
   const selectedOrders = useMemo(
-    () => orders.filter((order) => selected.has(order.name) && orderCanCreate(order)),
-    [orders, selected],
+    () => pickable.filter((order) => selected.has(order.name)),
+    [pickable, selected],
   );
   const wilayas = useMemo(
-    () => Array.from(new Set(orders.map((order) => order.custom_wilaya).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "fr")),
-    [orders],
+    () => Array.from(new Set(visible.map((order) => order.custom_wilaya).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "fr")),
+    [visible],
   );
   const communes = useMemo(
-    () => Array.from(orders
+    () => Array.from(visible
       .filter((order) => (!wilaya || order.custom_wilaya === wilaya) && order.custom_commune)
       .reduce((values, order) => {
         const value = order.custom_commune as string;
@@ -197,19 +269,32 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
       }, new Map<string, string>()))
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label, "fr")),
-    [orders, wilaya],
+    [visible, wilaya],
+  );
+  const customers = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          visible
+            .map((order) => order.customer_name || order.customer)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((a, b) => a.localeCompare(b, "fr")),
+    [visible],
   );
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const today = isoDateWithOffset(0);
     const tomorrow = isoDateWithOffset(1);
-    return orders.filter((row) => {
+    return visible.filter((row) => {
       const matchesSearch = !q || [row.name, row.customer, row.customer_name, row.custom_commune, row.custom_commune_nom, row.custom_wilaya]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(q));
       if (!matchesSearch) return false;
       if (wilaya && row.custom_wilaya !== wilaya) return false;
       if (commune && row.custom_commune !== commune) return false;
+      if (customer && (row.customer_name || row.customer) !== customer) return false;
+      if (listFilter !== "all" && orderPickListState(row) !== listFilter) return false;
 
       const orderDate = row.delivery_date || row.transaction_date || "";
       if (dateScope === "today" && orderDate !== today) return false;
@@ -219,32 +304,24 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
       if (dateTo && (!orderDate || orderDate > dateTo)) return false;
       return true;
     });
-  }, [commune, dateFrom, dateScope, dateTo, orders, search, wilaya]);
+  }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, visible, search, wilaya]);
 
-  const creatableFiltered = filtered.filter(orderCanCreate);
+  const creatableFiltered = useMemo(() => filtered.filter(orderCanCreate), [filtered]);
   const allSelected = creatableFiltered.length > 0 && creatableFiltered.every((row) => selected.has(row.name));
   const someSelected = !allSelected && creatableFiltered.some((row) => selected.has(row.name));
-  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune);
-  const insufficientOrders = selectedOrders.filter((order) => stockShortages(order).length > 0);
-
-  // Le Dialog gère Échap et le piège de focus ; on force seulement le focus initial
-  // sur l'action de confirmation plutôt que sur « Annuler ».
-  useEffect(() => {
-    if (confirming) confirmButtonRef.current?.focus();
-  }, [confirming]);
-
-  const toggle = (order: SalesOrderRow) => {
-    if (!orderCanCreate(order)) return;
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(order.name)) next.delete(order.name);
-      else next.add(order.name);
-      return next;
-    });
-  };
+  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune || customer || listFilter !== "all");
 
   const toggleAllFiltered = () => {
     handleSelectAll(!allSelected);
+  };
+
+  const openDetail = (order: SalesOrderRow) => {
+    navigate(`/preparation/commandes/${encodeURIComponent(order.name)}`);
+  };
+
+  const openCreate = (orders: SalesOrderRow[]) => {
+    setPendingOrders(orders);
+    setConfirming(true);
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -259,7 +336,6 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
   };
 
   const handleSelectRow = (order: SalesOrderRow, checked: boolean) => {
-    if (!orderCanCreate(order)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (checked) next.add(order.name);
@@ -275,11 +351,13 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
     setDateTo("");
     setWilaya("");
     setCommune("");
+    setCustomer("");
+    setListFilter("all");
   };
 
   const handleCreate = async () => {
-    const names = selectedOrders.map((order) => order.name);
-    if (!names.length || insufficientOrders.length) return;
+    const names = pendingOrders.map((order) => order.name);
+    if (!names.length || pendingOrders.every((order) => order.has_available_stock === false)) return;
     setErrorMessage("");
     try {
       const session = await createPickList(names);
@@ -297,27 +375,151 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
     }
   };
 
-  const openExisting = (order: SalesOrderRow) => {
-    const name = orderExistingPickList(order);
-    if (name) onOpenPickLists([name]);
-  };
-
   const emptyOrders = (
     <Empty className="border border-dashed">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Package />
         </EmptyMedia>
-        <EmptyTitle>Aucune commande ne correspond</EmptyTitle>
-        <EmptyDescription>Modifiez ou réinitialisez les filtres.</EmptyDescription>
+        <EmptyTitle>{visible.length ? "Aucune commande ne correspond" : "Aucune commande"}</EmptyTitle>
+        <EmptyDescription>
+          {visible.length
+            ? "Modifiez ou réinitialisez les filtres."
+            : "Les commandes soumises apparaîtront ici, qu’une liste de prélèvement existe ou non."}
+        </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
-        <Button variant="outline" size="sm" onClick={resetFilters}>
-          Réinitialiser
-        </Button>
+        {visible.length ? (
+          <Button variant="outline" size="sm" onClick={resetFilters}>
+            Réinitialiser
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" onClick={onShowPickLists}>
+            Voir les listes
+          </Button>
+        )}
       </EmptyContent>
     </Empty>
   );
+
+  const orderColumns: Array<DataTableColumn<SalesOrderRow>> = [
+    {
+      id: "select",
+      header: (
+        <Checkbox
+          aria-label="Tout sélectionner"
+          checked={allSelected}
+          indeterminate={someSelected}
+          disabled={!creatableFiltered.length}
+          onCheckedChange={(checked) => handleSelectAll(checked === true)}
+        />
+      ),
+      width: "40px",
+      cell: (row) =>
+        orderCanCreate(row) ? (
+          <span onClick={(event) => event.stopPropagation()}>
+            <Checkbox
+              aria-label={`Sélectionner ${row.name}`}
+              checked={selected.has(row.name)}
+              onCheckedChange={(checked) => handleSelectRow(row, checked === true)}
+            />
+          </span>
+        ) : null,
+    },
+    {
+      id: "name",
+      header: "Commande",
+      sortValue: (row) => row.name,
+      cell: (row) => (
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="font-medium">{row.name}</span>
+          <span className="text-muted-foreground">{row.total_qty || 0} art.</span>
+        </div>
+      ),
+    },
+    {
+      id: "customer",
+      header: "Client",
+      hideBelow: "md",
+      sortValue: (row) => row.customer_name || row.customer || "",
+      cell: (row) => <span className="truncate">{row.customer_name || row.customer || "—"}</span>,
+    },
+    {
+      id: "place",
+      header: "Lieu",
+      hideBelow: "md",
+      sortValue: (row) => row.custom_commune_nom || row.custom_commune || "",
+      cell: (row) => (
+        <span className="truncate">
+          {[row.custom_commune_nom || row.custom_commune, row.custom_wilaya].filter(Boolean).join(" · ") || "—"}
+        </span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Statut",
+      sortValue: (row) => `${row.status || ""}-${orderPickListState(row)}`,
+      cell: (row) => {
+        const desk = salesOrderDeskStatus(row.status);
+        const pick = orderPickListStatus(orderPickListState(row));
+        return (
+          <div className="flex flex-col gap-1">
+            <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
+            <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
+            {orderIsModified(row) ? <StatusBadge tone="warning" size="sm">Modifiée</StatusBadge> : null}
+            <span className="text-muted-foreground">{formatShortDate(row.delivery_date || row.transaction_date)}</span>
+          </div>
+        );
+      },
+    },
+    {
+      id: "progress",
+      header: "Prélevé",
+      width: "150px",
+      sortValue: (row) => orderPickProgress(row).percent,
+      cell: (row) => <PickProgressBar order={row} />,
+    },
+    {
+      id: "stock",
+      header: "Stock",
+      width: "140px",
+      sortValue: (row) => stockShortages(row).length,
+      cell: (row) => (
+        stockShortages(row).length > 0 ? (
+          <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
+        ) : (
+          <span className="text-muted-foreground">OK</span>
+        )
+      ),
+    },
+    {
+      id: "actions",
+      header: "Actions",
+      align: "right",
+      width: "148px",
+      cell: (row) => {
+        const lists = orderPickListNames(row);
+        return (
+          <span onClick={(event) => event.stopPropagation()}>
+            {lists.length ? (
+              <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={creating || orderIsModified(row)}
+                aria-label={`Créer la liste de ${row.name}`}
+                onClick={() => openCreate([row])}
+              >
+                Créer
+              </Button>
+            )}
+          </span>
+        );
+      },
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-5">
@@ -331,7 +533,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold">Commandes à prélever ({filtered.length})</h2>
+          <h2 className="text-base font-semibold">Commandes ({filtered.length})</h2>
           {selectedOrders.length > 0 && (
             <Badge aria-live="polite" className="bg-brand-100 text-brand-800 hover:bg-brand-100">
               {selectedOrders.length} sélectionnée{selectedOrders.length > 1 ? "s" : ""}
@@ -342,7 +544,7 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
           <Button variant="outline" size="sm" onClick={toggleAllFiltered} disabled={!creatableFiltered.length}>
             {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
           </Button>
-          <Button size="sm" onClick={() => setConfirming(true)} disabled={!selectedOrders.length || creating}>
+          <Button size="sm" onClick={() => openCreate(selectedOrders)} disabled={!selectedOrders.length || creating}>
             <ClipboardList data-icon="inline-start" />
             {creating ? "Création…" : "Créer la liste de prélèvement"}
           </Button>
@@ -377,6 +579,17 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
           ]}
         />
         <FilterSelect
+          label="Liste"
+          value={listFilter}
+          onChange={(value) => setListFilter(value as ListFilter)}
+          options={[
+            { value: "all", label: "Toutes" },
+            { value: "none", label: "Sans liste" },
+            { value: "draft", label: "Brouillon" },
+            { value: "submitted", label: "Soumise" },
+          ]}
+        />
+        <FilterSelect
           label="Wilaya"
           value={wilaya || "all"}
           onChange={(value) => {
@@ -390,6 +603,12 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
           value={commune || "all"}
           onChange={(value) => setCommune(value === "all" ? "" : value)}
           options={[{ value: "all", label: "Toutes" }, ...communes.map((option) => ({ value: option.value, label: option.label }))]}
+        />
+        <FilterSelect
+          label="Client"
+          value={customer || "all"}
+          onChange={(value) => setCustomer(value === "all" ? "" : value)}
+          options={[{ value: "all", label: "Tous" }, ...customers.map((value) => ({ value, label: value }))]}
         />
         <DateRangeFilter
           from={dateFrom}
@@ -417,207 +636,76 @@ function SalesOrderPicker({ onOpenPickLists }: { onOpenPickLists: (names: string
         emptyOrders
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-xl border md:block">
-            <Table aria-label="Commandes à prélever">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-8">
-                    <Checkbox
-                      aria-label="Tout sélectionner"
-                      checked={allSelected}
-                      indeterminate={someSelected}
-                      disabled={!creatableFiltered.length}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  <TableHead>Commande</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Lieu</TableHead>
-                  <TableHead>Échéance</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead className="text-right">Liste</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((row) => {
-                  const existing = orderExistingPickList(row);
-                  const creatable = orderCanCreate(row);
-                  const isSelected = selected.has(row.name);
-                  return (
-                    <TableRow
-                      key={row.name}
-                      data-state={isSelected ? "selected" : undefined}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        if (creatable) toggle(row);
-                        else openExisting(row);
-                      }}
-                    >
-                      <TableCell
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {creatable ? (
-                          <Checkbox
-                            aria-label={`Sélectionner ${row.name}`}
-                            checked={isSelected}
-                            onCheckedChange={(checked) => handleSelectRow(row, checked)}
-                          />
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <div className="flex min-w-0 flex-col gap-0.5">
-                          <span className="font-medium">{row.name}</span>
-                          <span className="text-muted-foreground">{row.total_qty || 0} art.</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="truncate">{row.customer_name || row.customer || "—"}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="truncate">
-                          {[row.custom_commune_nom || row.custom_commune, row.custom_wilaya].filter(Boolean).join(" · ") || "—"}
-                        </span>
-                      </TableCell>
-                      <TableCell className="whitespace-normal">
-                        <div className="flex flex-col gap-1">
-                          <StatusBadge tone={priority(row.delivery_date).tone} size="sm">
-                            {priority(row.delivery_date).label}
-                          </StatusBadge>
-                          <span className="text-muted-foreground">{formatShortDate(row.delivery_date || row.transaction_date)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {stockShortages(row).length > 0 ? (
-                          <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
-                        ) : (
-                          <span className="text-muted-foreground">OK</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {existing && !creatable ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openExisting(row);
-                            }}
-                          >
-                            Ouvrir {existing}
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground">{Math.round(row.per_picked || 0)}% prélevé</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+          <div className="hidden md:block">
+            <DataTable
+              label="Commandes"
+              columns={orderColumns}
+              rows={filtered}
+              rowKey={(row) => row.name}
+              isRowActive={(row) => selected.has(row.name)}
+              onRowClick={openDetail}
+            />
           </div>
           <div className="flex flex-col gap-2 md:hidden">
             {filtered.map((row) => {
-              const existing = orderExistingPickList(row);
-              const creatable = orderCanCreate(row);
+              const lists = orderPickListNames(row);
+              const desk = salesOrderDeskStatus(row.status);
+              const pick = orderPickListStatus(orderPickListState(row));
               return (
-                <div key={row.name} className="flex items-center justify-between gap-3 rounded-lg border p-3">
+              <div key={row.name} className="flex flex-col gap-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    {creatable ? (
+                    {orderCanCreate(row) ? (
                       <Checkbox
                         aria-label={`Sélectionner ${row.name}`}
                         checked={selected.has(row.name)}
-                        onCheckedChange={(checked) => handleSelectRow(row, checked)}
+                        onCheckedChange={(checked) => handleSelectRow(row, checked === true)}
                       />
                     ) : null}
-                    <div className="min-w-0">
+                    <button type="button" className="min-w-0 text-left" onClick={() => openDetail(row)}>
                       <div className="text-sm font-medium">{row.name}</div>
                       <div className="truncate text-xs text-muted-foreground">
                         {row.customer_name || row.customer} · {row.custom_commune_nom || row.custom_commune || "—"} ·{" "}
                         {formatShortDate(row.delivery_date || row.transaction_date)} · {row.total_qty || 0} art.
                       </div>
-                    </div>
+                    </button>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {stockShortages(row).length > 0 && <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>}
-                    <StatusBadge tone={priority(row.delivery_date).tone} size="sm">{priority(row.delivery_date).label}</StatusBadge>
-                    {existing && !creatable ? (
-                      <Button type="button" size="sm" variant="outline" onClick={() => openExisting(row)}>
-                        Ouvrir {existing}
-                      </Button>
-                    ) : null}
-                  </div>
+                  {lists.length ? (
+                    <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={creating || orderIsModified(row)}
+                      aria-label={`Créer la liste de ${row.name}`}
+                      onClick={() => openCreate([row])}
+                    >
+                      Créer
+                    </Button>
+                  )}
                 </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
+                  <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
+                  {orderIsModified(row) && <StatusBadge tone="warning" size="sm">Modifiée</StatusBadge>}
+                  {stockShortages(row).length > 0 && <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>}
+                </div>
+                <PickProgressBar order={row} />
+              </div>
               );
             })}
           </div>
         </>
       )}
 
-      <Dialog open={confirming} onOpenChange={(open) => !open && !creating && setConfirming(false)}>
-        <DialogContent>
-          <DialogHeader>
-            <div className="flex items-start gap-3">
-              <div
-                className={`shrink-0 rounded-md p-2 ${insufficientOrders.length ? "bg-red-50 text-red-700" : "bg-brand-50 text-brand-700"}`}
-              >
-                {insufficientOrders.length ? <AlertTriangle className="size-5" /> : <ClipboardList className="size-5" />}
-              </div>
-              <div>
-                <DialogTitle>{insufficientOrders.length ? "Stock insuffisant" : "Confirmer la création"}</DialogTitle>
-                <DialogDescription className="mt-1">
-                  {insufficientOrders.length
-                    ? "Réapprovisionnez l’entrepôt avant de créer la liste. ERPNext ne peut pas prélever un article sans stock disponible."
-                    : `${selectedOrders.length} ${selectedOrders.length > 1 ? "listes de prélèvement seront créées" : "liste de prélèvement sera créée"}, une par commande sélectionnée.`}
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-
-          <DialogBody>
-            <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-hairline bg-surface-subtle p-3">
-              {selectedOrders.map((order) => {
-                const shortages = stockShortages(order);
-                return (
-                  <div key={order.name} className="space-y-1">
-                    <div className="flex items-center justify-between gap-3 text-sm">
-                      <strong className="text-foreground">{order.name}</strong>
-                      <span className="truncate text-muted-foreground">{order.customer_name || order.customer || "Client non renseigné"}</span>
-                    </div>
-                    {shortages.map((shortage) => (
-                      <p key={`${order.name}-${shortage.item_code}`} className="text-xs text-red-700">
-                        {shortage.item_name || shortage.item_code} : {formatQty(shortage.required)} demandé, {formatQty(shortage.available)} disponible
-                        {shortage.warehouse ? ` · ${shortage.warehouse}` : ""}
-                      </p>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-
-            <p className="mt-4 t-meta text-muted-foreground">
-              {insufficientOrders.length
-                ? "Désélectionnez les commandes en rupture ou réceptionnez le stock, puis réessayez."
-                : "Les listes seront créées en brouillon et pourront être contrôlées avant la génération des bons de livraison."}
-            </p>
-          </DialogBody>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirming(false)} disabled={creating}>
-              Annuler
-            </Button>
-            <Button
-              ref={confirmButtonRef}
-              type="button"
-              onClick={handleCreate}
-              disabled={creating || insufficientOrders.length > 0}
-            >
-              <ClipboardList />
-              {creating ? "Création…" : "Confirmer la création"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreatePickListDialog
+        open={confirming}
+        orders={pendingOrders}
+        creating={creating}
+        onOpenChange={setConfirming}
+        onConfirm={handleCreate}
+      />
     </div>
   );
 }
@@ -636,6 +724,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const [lastScannedKey, setLastScannedKey] = useState("");
   const [search, setSearch] = useState("");
   const [focus, setFocus] = useState<LineFocus>("all");
+  const [orderChangedNotice, setOrderChangedNotice] = useState("");
   const scanInputRef = useRef<HTMLInputElement>(null);
   const confirmBlButtonRef = useRef<HTMLButtonElement>(null);
   const groupRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -643,12 +732,24 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
 
   const isMobile = useIsMobile();
   const { data, mutate, error, isLoading } = usePickSession(pickListNames);
-  const { updateQuantities, submitPickList, scanPickItem, saving, submitting, scanning } = usePreparationMutations();
+  const { updateQuantities, submitPickList, scanPickItem, saving, submitting, scanning, acknowledgeModification, acknowledging } = usePreparationMutations();
 
   const session = data?.message;
   const pickLists = session?.pick_lists || [];
   const draftOpen = pickLists.some((item) => item.docstatus === 0);
+  const modificationPending = Boolean(session?.modification_pending);
   const floorMode = isMobile && draftOpen && !reviewing;
+
+  usePickListOrderChanged(pickListNames, (reason) => {
+    setOrderChangedNotice(reason || "Commande modifiée, la liste a été actualisée.");
+    mutate();
+  });
+
+  useEffect(() => {
+    if (session?.order_changed_notice) {
+      setOrderChangedNotice(session.order_changed_notice);
+    }
+  }, [session?.order_changed_notice]);
 
   useEffect(() => {
     void import("html5-qrcode");
@@ -703,6 +804,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   }, [confirmingBl]);
 
   const persistQty = async () => {
+    if (modificationPending) return;
     for (const pickList of pickLists.filter((item) => item.docstatus === 0)) {
       await updateQuantities(
         pickList.name,
@@ -713,7 +815,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   };
 
   const fillRequested = () => {
-    if (!session) return;
+    if (!session || modificationPending) return;
     const next: Record<string, number> = {};
     pickLists.flatMap((pickList) => pickList.locations || []).forEach((loc) => {
       next[loc.name] = loc.stock_qty || loc.qty || 0;
@@ -722,7 +824,25 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     setPicked(next);
   };
 
+  const handleAcknowledge = async () => {
+    const orders = session?.pending_sales_orders?.length
+      ? session.pending_sales_orders
+      : session?.sales_orders || [];
+    if (!orders.length) return;
+    setErrorMessage("");
+    try {
+      for (const salesOrder of orders) {
+        await acknowledgeModification(salesOrder);
+      }
+      setOrderChangedNotice("");
+      await mutate();
+    } catch (mutationError) {
+      setErrorMessage(apiErrorMessage(mutationError));
+    }
+  };
+
   const handleSubmit = async () => {
+    if (modificationPending) return;
     setErrorMessage("");
     try {
       await persistQty();
@@ -743,7 +863,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
 
   const applyScan = async (raw: string, restoreFocus = true) => {
     const value = raw.trim();
-    if (!value || reviewing || scanning || !draftOpen) return;
+    if (!value || reviewing || scanning || !draftOpen || modificationPending) return;
     setScanMessage("");
     setScanError("");
     const snapshotFor = (
@@ -834,7 +954,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
           <span className="num text-xs text-muted-foreground">
             {formatQty(loc.stock_qty)} {loc.stock_uom || loc.uom}
           </span>
-          {locationDraft ? (
+          {locationDraft && !modificationPending ? (
             <Input
               type="number"
               min={0}
@@ -898,7 +1018,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       cell: (row) => {
         const locationDraft = pickLists.find((item) => item.name === row.location.pick_list)?.docstatus === 0;
         const locationQty = picked[row.location.name] ?? row.location.picked_qty ?? 0;
-        if (!locationDraft) return <span className="num font-semibold">{formatQty(locationQty)}</span>;
+        if (!locationDraft || modificationPending) return <span className="num font-semibold">{formatQty(locationQty)}</span>;
         return (
           <Input
             type="number"
@@ -1000,6 +1120,20 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
             </AlertDescription>
           </Alert>
         )}
+        {modificationPending ? (
+          <OrderModifiedAlert
+            accepting={acknowledging}
+            onAccept={() => void handleAcknowledge()}
+            description="La liste a été actualisée. Confirmez que vous avez pris connaissance des changements avant de prélever."
+          />
+        ) : orderChangedNotice ? (
+          <Alert role="status" className="border-amber-200 bg-amber-50 text-amber-950">
+            <AlertTriangle className="text-amber-700" />
+            <AlertDescription>
+              <strong>Commande modifiée, la liste a été actualisée.</strong>
+            </AlertDescription>
+          </Alert>
+        ) : null}
         {(error || errorMessage) && (
           <Alert>
             <AlertDescription>{errorMessage || "Impossible de charger la liste de prélèvement."}</AlertDescription>
@@ -1024,9 +1158,11 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
             onCameraOpenChange={setCameraOpen}
             onApplyScan={(text) => void applyScan(text, false)}
             onBack={onBack}
-            onReview={() => setReviewing(true)}
+            onReview={() => {
+              if (!modificationPending) setReviewing(true);
+            }}
             onFillRequested={fillRequested}
-            busy={scanning || submitting || saving}
+            busy={scanning || submitting || saving || modificationPending}
             scanInputRef={scanInputRef}
           />
         )}
@@ -1056,10 +1192,10 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         actions={
           draftOpen && !reviewing ? (
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={fillRequested}>
+              <Button variant="outline" size="sm" onClick={fillRequested} disabled={modificationPending}>
                 Tout prélever
               </Button>
-              <Button size="sm" onClick={() => setReviewing(true)} disabled={submitting || saving || isLoading}>
+              <Button size="sm" onClick={() => setReviewing(true)} disabled={submitting || saving || isLoading || modificationPending}>
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Contrôle final
               </Button>
@@ -1088,6 +1224,21 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
           </AlertDescription>
         </Alert>
       )}
+
+      {modificationPending ? (
+        <OrderModifiedAlert
+          accepting={acknowledging}
+          onAccept={() => void handleAcknowledge()}
+          description="La liste a été actualisée. Confirmez que vous avez pris connaissance des changements avant de prélever."
+        />
+      ) : orderChangedNotice ? (
+        <Alert role="status" className="border-amber-200 bg-amber-50 text-amber-950">
+          <AlertTriangle className="text-amber-700" />
+          <AlertDescription>
+            <strong>Commande modifiée, la liste a été actualisée.</strong>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {createdNotes.length > 0 && (
         <Alert role="status" className="border-emerald-200 bg-emerald-50 text-emerald-900">
@@ -1192,7 +1343,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
                   autoCorrect="off"
                   spellCheck={false}
                   autoFocus
-                  disabled={scanning || submitting || saving}
+                  disabled={scanning || submitting || saving || modificationPending}
                   placeholder="Scanner puis Entrée"
                   onChange={(event) => setScanValue(event.target.value)}
                 />
@@ -1201,7 +1352,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
                     type="button"
                     size="icon-sm"
                     aria-label="Ouvrir la caméra"
-                    disabled={scanning || submitting || saving}
+                    disabled={scanning || submitting || saving || modificationPending}
                     onClick={openCamera}
                   >
                     <Camera />
@@ -1327,7 +1478,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                 <Button variant="outline" onClick={() => setReviewing(false)}>Retour au prélèvement</Button>
-                <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving}>
+                <Button onClick={() => setConfirmingBl(true)} disabled={submitting || saving || modificationPending}>
                   <CheckCircle />
                   Confirmer et créer les BL
                 </Button>
@@ -1421,9 +1572,16 @@ export function PreparationPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const pickListNames = (searchParams.get("pick_lists") || searchParams.get("pick_list") || "").split(",").filter(Boolean);
-  const tab = searchParams.get("tab") === "retours" ? "retours" : "commandes";
+  const tabParam = searchParams.get("tab");
+  const tab = tabParam === "listes" || tabParam === "retours" ? tabParam : "commandes";
   const { routes: pendingReturns } = usePendingReturnRoutes();
+  const { data: recentPickLists } = useRecentPickLists();
   const returnCount = pendingReturns.length;
+  const draftListCount = (recentPickLists?.message || []).filter((row) => row.docstatus === 0).length;
+
+  const openPickLists = (names: string[], created = false) => {
+    setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
+  };
 
   if (pickListNames.length) {
     return (
@@ -1438,26 +1596,35 @@ export function PreparationPage() {
     );
   }
 
+  const description =
+    tab === "retours"
+      ? "Recomptage et retour du véhicule vers l’entrepôt, indépendant du contrôle de caisse."
+      : tab === "listes"
+        ? "Rouvrez une liste de prélèvement en brouillon ou consultez les listes déjà soumises."
+        : "Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever.";
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Entrepôt"
         title="Préparation"
-        description={
-          tab === "retours"
-            ? "Recomptage et retour du véhicule vers l’entrepôt, indépendant du contrôle de caisse."
-            : "Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever."
-        }
+        description={description}
       />
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          setSearchParams(value === "retours" ? { tab: "retours" } : {});
+          setSearchParams(value === "commandes" ? {} : { tab: value });
         }}
         aria-label="Sections préparation"
       >
         <TabsList variant="line">
           <TabsTrigger value="commandes">Commandes</TabsTrigger>
+          <TabsTrigger value="listes">
+            Listes
+            <Badge variant={draftListCount > 0 ? "default" : "secondary"} aria-label={`${draftListCount} brouillon${draftListCount > 1 ? "s" : ""}`}>
+              {draftListCount}
+            </Badge>
+          </TabsTrigger>
           <TabsTrigger value="retours">
             Retours
             <Badge variant={returnCount > 0 ? "default" : "secondary"} aria-label={`${returnCount} à traiter`}>
@@ -1467,9 +1634,14 @@ export function PreparationPage() {
         </TabsList>
         <TabsContent value="commandes" className="pt-5">
           <SalesOrderPicker
-            onOpenPickLists={(names, created = false) => {
-              setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
-            }}
+            onOpenPickLists={openPickLists}
+            onShowPickLists={() => setSearchParams({ tab: "listes" })}
+          />
+        </TabsContent>
+        <TabsContent value="listes" className="pt-5">
+          <PickListQueue
+            onOpenPickList={(name) => openPickLists([name])}
+            onGoToOrders={() => setSearchParams({})}
           />
         </TabsContent>
         <TabsContent value="retours" className="pt-5">

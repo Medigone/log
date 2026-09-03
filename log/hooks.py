@@ -233,6 +233,7 @@ scheduler_events = {
 #
 override_whitelisted_methods = {
     "erpnext.selling.doctype.sales_order.sales_order.make_delivery_note": "log.pick_list_ops.block_make_delivery_note",
+    "erpnext.controllers.accounts_controller.update_child_qty_rate": "log.order_change_ops.update_child_qty_rate",
 }
 #
 # each overriding function accepts a `data` argument;

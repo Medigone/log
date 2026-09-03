@@ -519,8 +519,8 @@ def _count_shortage_orders(orders) -> int:
 		return 0
 	from log.pick_list_ops import _stock_shortages_for_orders
 
-	shortages = _stock_shortages_for_orders(orders)
-	return sum(1 for rows in shortages.values() if rows)
+	stock_status = _stock_shortages_for_orders(orders)
+	return sum(1 for status in stock_status.values() if status.get("shortages"))
 
 
 def _load_draft_pick_lists(limit=PICK_LIST_LIMIT):

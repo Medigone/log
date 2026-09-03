@@ -5,6 +5,7 @@ import { LoaderCircle, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/toast";
 import { PreparationPage } from "@/features/preparation/PreparationPage";
+import { SalesOrderDetailPage } from "@/features/preparation/SalesOrderDetailPage";
 import { TodayPage } from "@/features/today/TodayPage";
 import { useDistributionRole } from "@/features/auth/useDistributionRole";
 import { LoginPage } from "@/features/auth/LoginPage";
@@ -85,6 +86,7 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
       <Routes>
         <Route path="/today" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><TodayPage role={user.role} /></RoleGuard>} />
         <Route path="/preparation" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><PreparationPage /></RoleGuard>} />
+        <Route path="/preparation/commandes/:orderId" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><SalesOrderDetailPage /></RoleGuard>} />
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
         <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="size-7 animate-spin text-brand-600" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
         <Route path="/deliveries" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DeliveriesPage /></RoleGuard>} />

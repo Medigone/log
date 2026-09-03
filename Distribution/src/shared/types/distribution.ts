@@ -237,6 +237,8 @@ export interface PlanningFilters {
   alertsOnly?: boolean;
   /** Ignore the planning date window and return every route. */
   allDates?: boolean;
+  /** Include every unassigned BL in the backlog, regardless of requested date. */
+  includeBacklog?: boolean;
 }
 
 export interface PlanningAlert {
@@ -264,6 +266,35 @@ export interface AssignmentChange {
   reason?: string;
   expectedSourceRevision?: number;
   expectedTargetRevision?: number;
+  forceNew?: boolean;
+}
+
+export interface BulkAssignmentInput {
+  deliveryNotes: string[];
+  targetRouteId?: string;
+  expectedTargetRevision?: number;
+  plannedDate?: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  driver?: string;
+  vehicle?: string;
+  forceNew?: boolean;
+}
+
+export interface BulkAssignmentResult {
+  route: DistributionRoute;
+  count: number;
+  warning?: string;
+}
+
+export interface UnassignInput {
+  deliveryNote: string;
+  expectedRouteRevision?: number;
+}
+
+export interface UnassignResult {
+  route: DistributionRoute;
+  deliveryNote: string;
 }
 
 export interface OrderChangeImpact {

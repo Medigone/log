@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 
 interface FrappeMessage<T> { message: T }
@@ -19,13 +20,37 @@ export interface SalesOrderRow {
   grand_total?: number;
   total_qty?: number;
   per_picked?: number;
+  per_delivered?: number;
+  status?: string;
+  picked_qty?: number;
+  requested_qty?: number;
+  pick_lists?: Array<{ name: string; docstatus: number }>;
   custom_commune?: string;
   custom_commune_nom?: string;
   custom_wilaya?: string;
+  custom_preparation_status?: string | null;
+  custom_preparation_accepte_par?: string | null;
+  custom_preparation_date_acceptation?: string | null;
   draft_pick_list?: string;
+  draft_pick_lists?: string[];
   existing_pick_list?: string;
   can_create_pick_list?: boolean;
+  has_available_stock?: boolean;
   stock_shortages?: StockShortage[];
+}
+
+export interface SalesOrderPickLine {
+  item_code: string;
+  item_name?: string;
+  warehouse?: string;
+  required: number;
+  available: number;
+  uom?: string;
+  pick_list?: string | null;
+}
+
+export interface SalesOrderPickDetail extends SalesOrderRow {
+  items: SalesOrderPickLine[];
 }
 
 export interface PickLocation {
@@ -114,6 +139,8 @@ export interface PickListData {
   grouped: PickGroup[];
   sales_orders: string[];
   delivery_notes?: DeliveryNoteResult[];
+  custom_order_changed?: number;
+  custom_order_changed_reason?: string | null;
 }
 
 export interface PickSessionData {
@@ -122,6 +149,9 @@ export interface PickSessionData {
   grouped: PickGroup[];
   sales_orders: string[];
   delivery_notes?: DeliveryNoteResult[];
+  order_changed_notice?: string | null;
+  modification_pending?: boolean;
+  pending_sales_orders?: string[];
 }
 
 export interface RecentPickList {
@@ -130,7 +160,15 @@ export interface RecentPickList {
   status?: string;
   modified: string;
   sales_order_count: number;
+  sales_orders?: string[];
+  customer_names?: string[];
+  wilayas?: string[];
+  requested_qty?: number;
+  picked_qty?: number;
+  warehouses?: string[];
   delivery_notes: string[];
+  custom_order_changed?: number;
+  custom_order_changed_reason?: string | null;
 }
 
 export function usePreparationQueue(options?: { live?: boolean }) {
@@ -164,8 +202,16 @@ export function usePickSession(names: string[]) {
 export function useRecentPickLists() {
   return useFrappeGetCall<FrappeMessage<RecentPickList[]>>(
     "log.pick_list_ops.get_recent_pick_lists",
-    { limit: 25 },
+    { limit: 100 },
     "distribution-recent-pick-lists",
+  );
+}
+
+export function useSalesOrderPickDetail(name?: string) {
+  return useFrappeGetCall<FrappeMessage<SalesOrderPickDetail>>(
+    "log.pick_list_ops.get_sales_order_pick_detail",
+    name ? { sales_order: name } : undefined,
+    name ? `distribution-sales-order-pick-${name}` : null,
   );
 }
 
@@ -182,6 +228,9 @@ export function usePreparationMutations() {
   const scan = useFrappePostCall<FrappeMessage<PickScanResult>>(
     "log.pick_list_ops.scan_pick_item",
   );
+  const acknowledge = useFrappePostCall<FrappeMessage<SalesOrderPickDetail>>(
+    "log.order_change_ops.acknowledge_preparation_modification",
+  );
   return {
     createPickList: async (salesOrders: string[]) => (await create.call({ sales_orders: salesOrders })).message,
     updateQuantities: async (pickList: string, locations: Array<{ name: string; picked_qty: number }>) =>
@@ -189,9 +238,42 @@ export function usePreparationMutations() {
     submitPickList: async (pickList: string) => (await submit.call({ pick_list: pickList })).message,
     scanPickItem: async (searchValue: string, pickLists: string[]) =>
       (await scan.call({ search_value: searchValue, pick_lists: pickLists })).message,
+    acknowledgeModification: async (salesOrder: string) =>
+      (await acknowledge.call({ sales_order: salesOrder })).message,
     creating: create.loading,
     saving: update.loading,
     submitting: submit.loading,
     scanning: scan.loading,
+    acknowledging: acknowledge.loading,
   };
+}
+
+export function orderIsModified(row?: { custom_preparation_status?: string | null } | null) {
+  return row?.custom_preparation_status === "Modifiée";
+}
+
+export function usePickListOrderChanged(pickListNames: string[], onChanged: (reason?: string) => void) {
+  const namesKey = pickListNames.join("\0");
+  const callbackRef = useRef(onChanged);
+  callbackRef.current = onChanged;
+  useEffect(() => {
+    const realtime = (
+      window as Window & {
+        frappe?: { realtime?: { on: (event: string, handler: (data: unknown) => void) => void; off: (event: string, handler: (data: unknown) => void) => void } };
+      }
+    ).frappe?.realtime;
+    if (!realtime?.on) return;
+    const watched = namesKey.split("\0").filter(Boolean);
+    const handler = (payload: unknown) => {
+      const data = (payload || {}) as { pick_lists?: string[]; reason?: string };
+      const incoming = data.pick_lists || [];
+      if (incoming.some((name) => watched.includes(name))) {
+        callbackRef.current(data.reason);
+      }
+    };
+    realtime.on("log:pick_list_changed", handler);
+    return () => {
+      realtime.off?.("log:pick_list_changed", handler);
+    };
+  }, [namesKey]);
 }

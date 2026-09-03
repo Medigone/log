@@ -188,3 +188,50 @@ export function pickLineTone(picked: number, requested: number): StatusTone {
   if (picked > requested) return "danger";
   return "warning";
 }
+
+/** État d'une liste de prélèvement (brouillon vs soumise). */
+export function pickListStatusTone(docstatus?: number): StatusTone {
+  if (docstatus === 1) return "success";
+  if (docstatus === 0) return "warning";
+  return "neutral";
+}
+
+const DESK_ORDER_STATUS: Record<string, { label: string; tone: StatusTone }> = {
+  Draft: { label: "Brouillon", tone: "neutral" },
+  "On Hold": { label: "En attente", tone: "warning" },
+  "To Pay": { label: "À payer", tone: "warning" },
+  "To Deliver and Bill": { label: "À livrer et facturer", tone: "info" },
+  "To Bill": { label: "À facturer", tone: "info" },
+  "To Deliver": { label: "À livrer", tone: "info" },
+  Completed: { label: "Terminée", tone: "success" },
+  Cancelled: { label: "Annulée", tone: "danger" },
+  Closed: { label: "Clôturée", tone: "warning" },
+};
+
+/** Statut Sales Order hérité du Desk. */
+export function salesOrderDeskStatus(status?: string | null): { label: string; tone: StatusTone } {
+  if (!status) return { label: "Statut inconnu", tone: "neutral" };
+  return DESK_ORDER_STATUS[status] || { label: status, tone: "neutral" };
+}
+
+export type OrderPickListState = "none" | "draft" | "submitted";
+
+export function orderPickListState(order: {
+  pick_lists?: Array<{ name: string; docstatus: number }>;
+  draft_pick_lists?: string[];
+  draft_pick_list?: string;
+  existing_pick_list?: string;
+}): OrderPickListState {
+  const lists = order.pick_lists || [];
+  if (lists.some((pickList) => Number(pickList.docstatus) === 0)) return "draft";
+  if (lists.some((pickList) => Number(pickList.docstatus) === 1)) return "submitted";
+  if (order.draft_pick_lists?.length || order.draft_pick_list) return "draft";
+  if (order.existing_pick_list) return "draft";
+  return "none";
+}
+
+export function orderPickListStatus(state: OrderPickListState): { label: string; tone: StatusTone } {
+  if (state === "draft") return { label: "Liste brouillon", tone: "warning" };
+  if (state === "submitted") return { label: "Liste soumise", tone: "success" };
+  return { label: "Aucune liste", tone: "neutral" };
+}

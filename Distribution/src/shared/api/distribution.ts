@@ -2,6 +2,8 @@ import { useFrappeGetCall, useFrappePostCall } from "frappe-react-sdk";
 import { useSWRConfig } from "swr";
 import type {
   AssignmentChange,
+  BulkAssignmentInput,
+  BulkAssignmentResult,
   CashReconciliation,
   CashReconciliationInput,
   DeliveryNoteAssignment,
@@ -30,6 +32,8 @@ import type {
   SaveRouteResult,
   StopCompletionPayload,
   StopCompletionResult,
+  UnassignInput,
+  UnassignResult,
   VehicleStock,
   ActivityDashboardData,
 } from "@/shared/types/distribution";
@@ -248,6 +252,12 @@ export function useDistributionMutations() {
   const retryInvoice = useFrappePostCall<FrappeMessage<{ salesInvoice?: string; invoiceStatus: string; route: DistributionRoute }>>(
     "log.api.distribution.retry_delivery_invoice",
   );
+  const bulkSchedule = useFrappePostCall<FrappeMessage<BulkAssignmentResult>>(
+    "log.api.distribution.schedule_delivery_notes",
+  );
+  const unassign = useFrappePostCall<FrappeMessage<UnassignResult>>(
+    "log.api.distribution.unassign_delivery_note",
+  );
   const adjustCash = useFrappePostCall<FrappeMessage<DriverCashBox>>(
     "log.api.distribution.post_driver_cash_adjustment",
   );
@@ -292,10 +302,12 @@ export function useDistributionMutations() {
     validateCashReconciliation: async (payload: CashReconciliationInput) => (await validateCash.call({ payload })).message,
     resolveCashDiscrepancy: async (payload: CashReconciliationInput) => (await resolveCash.call({ payload })).message,
     retryDeliveryInvoice: async (deliveryNote: string) => (await retryInvoice.call({ delivery_note: deliveryNote })).message,
+    scheduleDeliveryNotes: async (payload: BulkAssignmentInput) => (await bulkSchedule.call({ payload })).message,
+    unassignDeliveryNote: async (payload: UnassignInput) => (await unassign.call({ payload })).message,
     postDriverCashAdjustment: async (payload: DriverCashAdjustmentInput) => (await adjustCash.call({ payload })).message,
     saving: save.loading || publish.loading || start.loading || load.loading || finish.loading || complete.loading
       || schedule.loading || reassign.loading || acknowledge.loading || impact.loading || reprepare.loading || resolveException.loading
-      || generateQr.loading,
+      || generateQr.loading || bulkSchedule.loading || unassign.loading,
     fulfillment: declareReturn.loading || confirmReturn.loading,
     cashier: validateCash.loading || resolveCash.loading,
     driverCash: adjustCash.loading,

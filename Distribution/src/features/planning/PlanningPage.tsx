@@ -1,26 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  AlertTriangle,
-  CalendarDays,
-  CalendarPlus,
-  Check,
-  Eye,
-  LoaderCircle,
-  LocateFixed,
-  Pencil,
-  RefreshCw,
-  Search,
-} from "lucide-react";
-import { FilterSelect, FormSelect } from "@/components/FilterSelect";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { AlertTriangle, Check, Columns3, LoaderCircle, Table2 } from "lucide-react";
+import { FormSelect } from "@/components/FilterSelect";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import { EmptyState } from "@/components/ui/empty-state";
-import { KpiTile } from "@/components/ui/kpi-tile";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   Sheet,
@@ -30,49 +14,19 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Toolbar } from "@/components/ui/toolbar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { DeliveryNotesBoard } from "@/features/planning/DeliveryNotesBoard";
+import { PlanningKanban } from "@/features/planning/PlanningKanban";
+import { isoDateWithOffset, nextFreeSlot, timePart } from "@/features/planning/planningHelpers";
+import { parseNewRouteColumnId, parseRouteColumnId } from "@/features/planning/kanbanHelpers";
+import { RoutesBoard } from "@/features/planning/RoutesBoard";
 import { apiErrorMessage, useDistributionMutations, usePlanningBoard } from "@/shared/api/distribution";
-import { planningStatusTone, routeLifecycleTone } from "@/shared/design/statusTone";
-import type {
-  AssignmentChange,
-  DeliveryNoteAssignment,
-  DistributionRoute,
-  PlanningFilters,
-  PlanningStatus,
-} from "@/shared/types/distribution";
-
-const PLANNING_STATUSES: PlanningStatus[] = [
-  "Non planifié",
-  "Planifié",
-  "Publié",
-  "En retard",
-  "À revalider",
-  "À repréparer",
-  "En cours",
-  "Terminé",
-  "Exception",
-];
-
-const LOCKED_STATUSES = ["En cours", "Terminé", "Exception"];
-
-function formatDate(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
-
-function localDate(offset = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return formatDate(date);
-}
-
-function timePart(value?: string) {
-  return value?.match(/(?:T|\s)(\d{2}:\d{2})/)?.[1] || "";
-}
+import type { AssignmentChange, DeliveryNoteAssignment, DistributionRoute } from "@/shared/types/distribution";
 
 function defaultPlannedDate(assignment: DeliveryNoteAssignment) {
   const planned = assignment.plannedDate || assignment.requestedDate || "";
-  const today = localDate();
+  const today = isoDateWithOffset();
   return !planned || planned < today ? today : planned;
 }
 
@@ -127,7 +81,7 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
     const target = compatible.find((route) => route.name === targetRouteId);
     const touchesPublished = source?.lifecycle === "Publiée" || target?.lifecycle === "Publiée";
     if (!isNewAssignment && touchesPublished && !reason.trim()) {
-      setError("Le motif est obligatoire lorsqu’une tournée publiée est reprogrammée.");
+      setError("Le motif est obligatoire lorsqu'une tournée publiée est reprogrammée.");
       return;
     }
     if (isNewAssignment && compatible.length > 1 && !targetRouteId) {
@@ -163,7 +117,8 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
 
   const resetTarget = () => setTargetRouteId("");
   const title = isNewAssignment ? "Planifier la livraison" : "Reprogrammer la livraison";
-  const dateMin = date && date < localDate() ? date : localDate();
+  const today = isoDateWithOffset();
+  const dateMin = date && date < today ? date : today;
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -351,30 +306,49 @@ function AssignmentEditor({ assignment, routes, drivers, vehicles, onClose, onSa
 }
 
 export function PlanningPage() {
-  const navigate = useNavigate();
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [filters, setFilters] = useState<PlanningFilters>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "tournees" ? "tournees" : "bl";
+  const view = (searchParams.get("view") || "kanban") as "kanban" | "table";
+  const kanbanDate = searchParams.get("date") || isoDateWithOffset();
   const [editing, setEditing] = useState<DeliveryNoteAssignment>();
   const [notice, setNotice] = useState("");
   const [failure, setFailure] = useState("");
-  const boardFilters = useMemo(
-    () => (!dateFrom && !dateTo ? { ...filters, allDates: true } : filters),
-    [dateFrom, dateTo, filters],
+  const [bulkTarget, setBulkTarget] = useState<{
+    deliveryNotes: string[];
+    driverId?: string;
+    mode?: "existing" | "new";
+  } | null>(null);
+  const [bulkError, setBulkError] = useState("");
+
+  const isKanban = tab === "bl" && view === "kanban";
+  const { data, error, isLoading, mutate } = usePlanningBoard(
+    isKanban ? kanbanDate : "",
+    isKanban ? kanbanDate : "",
+    isKanban ? { includeBacklog: true } : { allDates: true },
   );
-  const { data, error, isLoading, mutate } = usePlanningBoard(dateFrom, dateTo, boardFilters);
   const actions = useDistributionMutations();
   const board = data?.message;
-  const rows = useMemo(() => board?.assignments || [], [board?.assignments]);
-  const summary = useMemo(
-    () => ({
-      total: rows.length,
-      unplanned: rows.filter((row) => !row.route).length,
-      invalid: rows.filter((row) => ["À revalider", "À repréparer", "Exception", "En retard"].includes(row.planningStatus)).length,
-      published: board?.routes.filter((route) => ["Publiée", "En cours"].includes(route.lifecycle)).length || 0,
-    }),
-    [board?.routes, rows],
-  );
+  const rows = board?.assignments || [];
+  const routes = board?.routes || [];
+  const drivers = board?.drivers || [];
+  const vehicles = board?.vehicles || [];
+  const unplannedCount = rows.filter((row) => !row.route).length;
+  const draftRouteCount = routes.filter((route) => route.lifecycle === "Brouillon").length;
+  const description =
+    tab === "tournees"
+      ? "Ouvrez une tournée pour vérifier ses détails avant de la publier."
+      : "Planifiez à l'avance et modifiez chaque BL sans rendre une tournée hétérogène.";
+
+  const updateParams = (overrides: Record<string, string | undefined>) => {
+    const base: Record<string, string> = {};
+    const nextTab = overrides.tab ?? tab;
+    if (nextTab !== "bl") base.tab = nextTab;
+    const v = overrides.view ?? view;
+    if (v !== "kanban") base.view = v;
+    const d = overrides.date ?? kanbanDate;
+    if (d !== isoDateWithOffset()) base.date = d;
+    setSearchParams(base);
+  };
 
   const reprepare = async (row: DeliveryNoteAssignment) => {
     if (!row.salesOrder) return;
@@ -398,133 +372,141 @@ export function PlanningPage() {
     }
   };
 
-  const driverLabel = (name?: string) => board?.drivers.find((item) => item.name === name)?.label;
-  const vehicleLabel = (name?: string) => board?.vehicles.find((item) => item.name === name)?.label;
+  const handleKanbanMove = async (
+    deliveryNote: string,
+    toColumnId: string | null,
+    position: number,
+    _fromColumnId: string | null,
+  ) => {
+    setFailure("");
+    const assignment = rows.find((row) => row.deliveryNote === deliveryNote);
+    const sourceRoute = assignment?.route ? routes.find((route) => route.name === assignment.route) : undefined;
+    const targetRouteName = parseRouteColumnId(toColumnId);
+    const createDriverId = parseNewRouteColumnId(toColumnId);
 
-  const columns: Array<DataTableColumn<DeliveryNoteAssignment>> = [
-    {
-      id: "deliveryNote",
-      header: "N° BL",
-      width: "minmax(0, 1.1fr)",
-      sortValue: (row) => row.deliveryNote,
-      cell: (row) => (
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-brand-700">{row.deliveryNote}</p>
-          <p className="truncate t-meta text-muted-foreground">
-            {row.totalQuantity} article(s) restant(s)
-          </p>
-        </div>
-      ),
-    },
-    {
-      id: "customer",
-      header: "Client",
-      width: "minmax(0, 1.3fr)",
-      sortValue: (row) => row.customerName,
-      cell: (row) => (
-        <div className="min-w-0">
-          <p className="truncate font-medium">{row.customerName}</p>
-          <p className="truncate t-meta text-muted-foreground">
-            {row.wilaya || row.commune || "Localisation non renseignée"}
-          </p>
-          {row.requiresCustomerGeolocation && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-              <LocateFixed className="size-3" />
-              GPS client à collecter
-            </span>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: "requestedDate",
-      header: "Demandée",
-      width: "110px",
-      hideBelow: "lg",
-      numeric: true,
-      sortValue: (row) => row.requestedDate || "",
-      cell: (row) => (
-        <span className={row.planningStatus === "En retard" ? "font-medium text-red-700" : "text-muted-foreground"}>
-          {row.requestedDate || "—"}
-        </span>
-      ),
-    },
-    {
-      id: "plannedDate",
-      header: "Planifiée",
-      width: "110px",
-      hideBelow: "md",
-      numeric: true,
-      sortValue: (row) => row.plannedDate || "",
-      cell: (row) => row.plannedDate || <span className="text-subtle">—</span>,
-    },
-    {
-      id: "status",
-      header: "Statut",
-      width: "minmax(0, 1.2fr)",
-      sortValue: (row) => row.planningStatus,
-      cell: (row) => (
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={planningStatusTone(row.planningStatus)} size="sm">
-              {row.planningStatus}
-            </StatusBadge>
-            {row.route && (
-              <span className="truncate t-meta text-slate-600">
-                {row.route} · rév. {row.routeRevision}
-              </span>
-            )}
-          </div>
-          <p className="truncate t-meta text-muted-foreground">
-            {row.route
-              ? `${timePart(row.plannedStart) || "—"}–${timePart(row.plannedEnd) || "—"} · ${driverLabel(row.driver) || "Livreur manquant"} · ${vehicleLabel(row.vehicle) || "Véhicule manquant"}`
-              : "Aucune tournée affectée"}
-          </p>
-          {row.planningAlert && <p className="line-clamp-2 t-meta text-amber-800">{row.planningAlert}</p>}
-        </div>
-      ),
-    },
-    {
-      id: "actions",
-      header: <span className="sr-only">Actions</span>,
-      width: "180px",
-      align: "right",
-      cell: (row) => (
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            size="sm"
-            variant={row.route ? "outline" : "default"}
-            onClick={() => setEditing(row)}
-            disabled={LOCKED_STATUSES.includes(row.planningStatus)}
-          >
-            {row.route ? <Pencil /> : <CalendarPlus />}
-            {row.route ? "Reprogrammer" : "Planifier"}
-          </Button>
-          {row.planningStatus === "À repréparer" && (
-            <Button size="sm" onClick={() => void reprepare(row)}>
-              <RefreshCw />
-              Reprendre
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
+    try {
+      if (!toColumnId) {
+        if (sourceRoute) {
+          await actions.unassignDeliveryNote({
+            deliveryNote,
+            expectedRouteRevision: sourceRoute.revision,
+          });
+        }
+        await mutate();
+        return;
+      }
+
+      if (createDriverId) {
+        const driver = drivers.find((item) => item.name === createDriverId);
+        const vehicle =
+          driver?.vehicle && vehicles.some((item) => item.name === driver.vehicle && item.active)
+            ? driver.vehicle
+            : "";
+        if (!vehicle) {
+          setBulkError("");
+          setBulkTarget({ deliveryNotes: [deliveryNote], driverId: createDriverId, mode: "new" });
+          await mutate();
+          return;
+        }
+        const slot = {
+          plannedDate: kanbanDate,
+          ...nextFreeSlot(kanbanDate, routes, createDriverId, vehicle),
+          driver: createDriverId,
+          vehicle,
+          forceNew: true as const,
+        };
+        if (sourceRoute) {
+          await actions.reassignDeliveryNote({
+            deliveryNote,
+            ...slot,
+            expectedSourceRevision: sourceRoute.revision,
+          });
+        } else {
+          await actions.scheduleDeliveryNotes({
+            deliveryNotes: [deliveryNote],
+            ...slot,
+          });
+        }
+        await mutate();
+        return;
+      }
+
+      const targetRoute = targetRouteName
+        ? routes.find((route) => route.name === targetRouteName)
+        : undefined;
+      if (!targetRoute || targetRoute.lifecycle !== "Brouillon") {
+        await mutate();
+        return;
+      }
+
+      const toDriver = targetRoute.driver ?? "";
+      if (sourceRoute) {
+        await actions.reassignDeliveryNote({
+          deliveryNote,
+          targetRouteId: targetRoute.name,
+          plannedDate: targetRoute.date,
+          plannedStart: targetRoute.plannedStart ?? "",
+          plannedEnd: targetRoute.plannedEnd ?? "",
+          driver: toDriver,
+          vehicle: targetRoute.vehicle ?? "",
+          position,
+          expectedSourceRevision: sourceRoute.revision,
+          expectedTargetRevision: targetRoute.revision,
+        });
+      } else {
+        await actions.scheduleDeliveryNotes({
+          deliveryNotes: [deliveryNote],
+          targetRouteId: targetRoute.name,
+          expectedTargetRevision: targetRoute.revision,
+        });
+      }
+      await mutate();
+    } catch (moveError) {
+      setFailure(apiErrorMessage(moveError));
+      await mutate();
+    }
+  };
+
+  const handleBulkSubmit = async (payload: {
+    deliveryNotes: string[];
+    targetRouteId?: string;
+    plannedDate?: string;
+    plannedStart?: string;
+    plannedEnd?: string;
+    driver?: string;
+    vehicle?: string;
+    expectedTargetRevision?: number;
+    forceNew?: boolean;
+  }) => {
+    setFailure("");
+    setBulkError("");
+    try {
+      const result = await actions.scheduleDeliveryNotes(payload);
+      setNotice(`${result.count} BL affecté${result.count > 1 ? "s" : ""} à ${result.route.name}.`);
+      if (result.warning) setFailure(result.warning);
+      setBulkTarget(null);
+      await mutate();
+    } catch (bulkErrorValue) {
+      const message = apiErrorMessage(bulkErrorValue);
+      setBulkError(message);
+      setFailure(message);
+    }
+  };
+
+  const handleUnassign = async (deliveryNote: string, routeRevision: number) => {
+    setFailure("");
+    try {
+      await actions.unassignDeliveryNote({ deliveryNote, expectedRouteRevision: routeRevision });
+      setNotice(`${deliveryNote} retiré de la tournée.`);
+      await mutate();
+    } catch (unassignError) {
+      setFailure(apiErrorMessage(unassignError));
+    }
+  };
 
   return (
-    <>
-      <PageHeader
-        eyebrow="Exploitation multi-jours"
-        title="Planification des BL"
-        description="Planifiez à l’avance et modifiez chaque BL sans rendre une tournée hétérogène."
-      />
-
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiTile label="BL affichés" value={summary.total} />
-        <KpiTile label="Non planifiés" value={summary.unplanned} tone={summary.unplanned ? "info" : "neutral"} />
-        <KpiTile label="À traiter" value={summary.invalid} tone={summary.invalid ? "warning" : "neutral"} />
-        <KpiTile label="Tournées actives" value={summary.published} />
-      </section>
+    <div className="flex flex-col gap-6">
+      <PageHeader eyebrow="Exploitation multi-jours" title="Planification" description={description} />
 
       {(failure || error) && (
         <div role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -542,135 +524,106 @@ export function PlanningPage() {
         </div>
       )}
 
-      <Toolbar>
-        <InputGroup className="w-36 bg-background">
-          <InputGroupAddon>
-            <span className="text-muted-foreground">Du</span>
-          </InputGroupAddon>
-          <InputGroupInput type="date" aria-label="Du" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-        </InputGroup>
-        <InputGroup className="w-36 bg-background">
-          <InputGroupAddon>
-            <span className="text-muted-foreground">Au</span>
-          </InputGroupAddon>
-          <InputGroupInput type="date" aria-label="Au" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-        </InputGroup>
-        <InputGroup className="min-w-48 flex-1 bg-background">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            aria-label="Recherche"
-            value={filters.search || ""}
-            onChange={(event) => setFilters((value) => ({ ...value, search: event.target.value }))}
-            placeholder="BL, client, commune…"
-          />
-        </InputGroup>
-        <FilterSelect
-          label="Statut"
-          value={filters.status || "all"}
-          onChange={(status) => setFilters((value) => ({ ...value, status: status === "all" ? "" : (status as PlanningStatus) }))}
-          options={[{ value: "all", label: "Tous" }, ...PLANNING_STATUSES.map((status) => ({ value: status, label: status }))]}
-        />
-        <FilterSelect
-          label="Livreur"
-          value={filters.driver || "all"}
-          onChange={(driver) => setFilters((value) => ({ ...value, driver: driver === "all" ? "" : driver }))}
-          options={[{ value: "all", label: "Tous" }, ...(board?.drivers.map((item) => ({ value: item.name, label: item.label })) || [])]}
-        />
-        <FilterSelect
-          label="Véhicule"
-          value={filters.vehicle || "all"}
-          onChange={(vehicle) => setFilters((value) => ({ ...value, vehicle: vehicle === "all" ? "" : vehicle }))}
-          options={[{ value: "all", label: "Tous" }, ...(board?.vehicles.map((item) => ({ value: item.name, label: item.label })) || [])]}
-        />
-        <label className="flex h-8 cursor-pointer items-center gap-2 rounded-lg border bg-background px-2.5 text-sm font-medium">
-          <input
-            type="checkbox"
-            checked={Boolean(filters.alertsOnly)}
-            onChange={(event) => setFilters((value) => ({ ...value, alertsOnly: event.target.checked }))}
-            className="size-4 accent-primary"
-          />
-          Alertes seules
-        </label>
-      </Toolbar>
-
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="t-section">Bons de livraison</h2>
-          <span className="num t-meta text-muted-foreground">
-            {rows.length} résultat{rows.length > 1 ? "s" : ""}
-          </span>
+      <Tabs
+        value={tab}
+        onValueChange={(value) => updateParams({ tab: String(value || "bl") })}
+        aria-label="Sections planification"
+      >
+        <div className="flex items-center justify-between">
+          <TabsList variant="line">
+            <TabsTrigger value="bl">
+              BL
+              <Badge variant={unplannedCount > 0 ? "default" : "secondary"} aria-label={`${unplannedCount} non planifié${unplannedCount > 1 ? "s" : ""}`}>
+                {unplannedCount}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="tournees">
+              Tournées
+              <Badge variant={draftRouteCount > 0 ? "default" : "secondary"} aria-label={`${draftRouteCount} brouillon${draftRouteCount > 1 ? "s" : ""}`}>
+                {draftRouteCount}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+          {tab === "bl" && (
+            <div className="flex items-center gap-1 rounded-md border p-0.5" role="group" aria-label="Mode d'affichage">
+              <Button
+                variant={view === "kanban" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => updateParams({ view: "kanban" })}
+                aria-pressed={view === "kanban"}
+              >
+                <Columns3 className="size-4" />
+                Kanban
+              </Button>
+              <Button
+                variant={view === "table" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => updateParams({ view: "table" })}
+                aria-pressed={view === "table"}
+              >
+                <Table2 className="size-4" />
+                Tableau
+              </Button>
+            </div>
+          )}
         </div>
-        <DataTable
-          label="Bons de livraison à planifier"
-          columns={columns}
-          rows={rows}
-          rowKey={(row) => row.deliveryNote}
-          rowTone={(row) => planningStatusTone(row.planningStatus)}
-          isLoading={isLoading}
-          maxHeight="max-h-[60vh]"
-          empty={
-            <EmptyState
-              icon={CalendarDays}
-              title="Aucun BL à afficher"
-              description="Aucun bon ne correspond aux filtres actuels."
+        <TabsContent value="bl" className="pt-5">
+          {view === "kanban" ? (
+            <PlanningKanban
+              date={kanbanDate}
+              onDateChange={(d: string) => updateParams({ date: d })}
+              assignments={rows}
+              routes={routes}
+              drivers={drivers}
+              vehicles={vehicles}
+              onMoveItem={handleKanbanMove}
+              onBulkAssign={(dns: string[]) => {
+                setBulkError("");
+                setBulkTarget({ deliveryNotes: dns });
+              }}
+              onUnassign={handleUnassign}
+              onReprogrammer={setEditing}
+              isLoading={isLoading}
             />
-          }
-        />
-      </section>
+          ) : (
+            <DeliveryNotesBoard
+              rows={rows}
+              drivers={drivers}
+              vehicles={vehicles}
+              isLoading={isLoading}
+              onEdit={setEditing}
+              onReprepare={(row) => void reprepare(row)}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="tournees" className="pt-5">
+          <RoutesBoard routes={routes} drivers={drivers} vehicles={vehicles} isLoading={isLoading} />
+        </TabsContent>
+      </Tabs>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="t-section">{dateFrom || dateTo ? "Tournées de la période" : "Tournées"}</h2>
-          <p className="t-body text-muted-foreground">
-            Ouvrez une tournée pour vérifier ses détails avant de la publier.
-          </p>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-2">
-          {board?.routes.map((route) => (
-            <Card key={route.name}>
-              <CardHeader className="flex-row items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <CardTitle>{route.name}</CardTitle>
-                  <p className="mt-1 t-meta text-muted-foreground">
-                    {route.date} · {timePart(route.plannedStart) || "créneau manquant"}–
-                    {timePart(route.plannedEnd) || "—"} · {route.stops.length} arrêt(s)
-                  </p>
-                  <p className="t-meta text-muted-foreground">
-                    Révision {route.revision}
-                    {route.acknowledged
-                      ? " · acceptée"
-                      : route.lifecycle === "Publiée"
-                        ? " · acceptation requise"
-                        : ""}
-                  </p>
-                </div>
-                <StatusBadge tone={routeLifecycleTone(route.lifecycle)} size="sm">
-                  {route.lifecycle}
-                </StatusBadge>
-              </CardHeader>
-              <CardContent>
-                {(route.alerts.length > 0 || route.needsReview) && (
-                  <div className="rounded-md bg-amber-50 p-3 t-meta text-amber-900">
-                    {[route.reviewReason, ...route.alerts].filter(Boolean).join(" ")}
-                  </div>
-                )}
-                <div className="mt-3 flex justify-end">
-                  <Button
-                    size="sm"
-                    variant={route.lifecycle === "Brouillon" ? "default" : "outline"}
-                    onClick={() => navigate(`/planning/routes/${route.name}`)}
-                  >
-                    <Eye />
-                    {route.lifecycle === "Brouillon" ? "Vérifier avant publication" : "Ouvrir"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
+      {bulkTarget && board && (
+        <BulkAssignmentDialog
+          deliveryNotes={bulkTarget.deliveryNotes}
+          routes={routes.filter(
+            (r) =>
+              r.lifecycle === "Brouillon" &&
+              r.date === kanbanDate &&
+              (!bulkTarget.driverId || r.driver === bulkTarget.driverId),
+          )}
+          drivers={drivers}
+          vehicles={vehicles}
+          date={kanbanDate}
+          initialDriver={bulkTarget.driverId}
+          initialMode={bulkTarget.mode}
+          submitError={bulkError}
+          onSubmit={handleBulkSubmit}
+          onClose={() => {
+            setBulkTarget(null);
+            setBulkError("");
+          }}
+          saving={actions.saving}
+        />
+      )}
 
       {editing && board && (
         <AssignmentEditor
@@ -689,6 +642,215 @@ export function PlanningPage() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Bulk Assignment Dialog                                             */
+/* ------------------------------------------------------------------ */
+
+interface BulkAssignmentDialogProps {
+  deliveryNotes: string[];
+  routes: DistributionRoute[];
+  drivers: Array<{ name: string; label: string; active: boolean; vehicle?: string }>;
+  vehicles: Array<{ name: string; label: string; active: boolean }>;
+  date: string;
+  initialDriver?: string;
+  initialMode?: "existing" | "new";
+  submitError?: string;
+  onSubmit: (payload: {
+    deliveryNotes: string[];
+    targetRouteId?: string;
+    plannedDate?: string;
+    plannedStart?: string;
+    plannedEnd?: string;
+    driver?: string;
+    vehicle?: string;
+    expectedTargetRevision?: number;
+    forceNew?: boolean;
+  }) => Promise<void>;
+  onClose: () => void;
+  saving: boolean;
+}
+
+function BulkAssignmentDialog({
+  deliveryNotes,
+  routes,
+  drivers,
+  vehicles,
+  date,
+  initialDriver,
+  initialMode,
+  submitError,
+  onSubmit,
+  onClose,
+  saving,
+}: BulkAssignmentDialogProps) {
+  const [mode, setMode] = useState<"existing" | "new">(
+    initialMode ?? (routes.length > 0 ? "existing" : "new"),
+  );
+  const [targetRouteId, setTargetRouteId] = useState(routes[0]?.name ?? "");
+  const [driver, setDriver] = useState(initialDriver ?? "");
+  const [vehicle, setVehicle] = useState(() => {
+    const defaultVehicle = drivers.find((item) => item.name === initialDriver)?.vehicle;
+    return defaultVehicle && vehicles.some((item) => item.name === defaultVehicle && item.active)
+      ? defaultVehicle
+      : "";
+  });
+  const initialSlot = nextFreeSlot(
+    date,
+    routes,
+    initialDriver ?? "",
+    drivers.find((item) => item.name === initialDriver)?.vehicle,
+  );
+  const [start, setStart] = useState(timePart(initialSlot.plannedStart) || "08:00");
+  const [end, setEnd] = useState(timePart(initialSlot.plannedEnd) || "12:00");
+  const [dialogError, setDialogError] = useState("");
+  const shownError = dialogError || submitError || "";
+
+  const submit = async () => {
+    setDialogError("");
+    if (mode === "existing") {
+      if (!targetRouteId) {
+        setDialogError("Sélectionnez une tournée.");
+        return;
+      }
+      const target = routes.find((r) => r.name === targetRouteId);
+      await onSubmit({
+        deliveryNotes,
+        targetRouteId,
+        expectedTargetRevision: target?.revision,
+      });
+    } else {
+      if (!start || !end || !driver || !vehicle) {
+        setDialogError("Tous les champs sont obligatoires.");
+        return;
+      }
+      await onSubmit({
+        deliveryNotes,
+        plannedDate: date,
+        plannedStart: `${date}T${start}:00`,
+        plannedEnd: `${date}T${end}:00`,
+        driver,
+        vehicle,
+        forceNew: true,
+      });
+    }
+  };
+
+  return (
+    <Sheet open onOpenChange={(open) => !open && onClose()}>
+      <SheetContent aria-label="Affectation groupée">
+        <SheetHeader>
+          <SheetTitle className="t-display">Affecter {deliveryNotes.length} BL</SheetTitle>
+        </SheetHeader>
+        <SheetBody className="grid gap-4">
+          {shownError && (
+            <div role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <AlertTriangle className="size-4 shrink-0" />
+              {shownError}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant={mode === "existing" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMode("existing")}
+              disabled={routes.length === 0}
+            >
+              Tournée existante
+            </Button>
+            <Button
+              variant={mode === "new" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setMode("new")}
+            >
+              Nouvelle tournée
+            </Button>
+          </div>
+
+          {mode === "existing" ? (
+            <label className="flex flex-col gap-1.5">
+              <span className="t-micro text-muted-foreground">Tournée brouillon</span>
+              <FormSelect
+                aria-label="Tournée"
+                value={targetRouteId}
+                onChange={setTargetRouteId}
+                options={routes.map((r) => ({
+                  value: r.name,
+                  label: `${r.name} · ${r.driverName ?? "?"} · ${r.stops.length} arrêt(s)`,
+                }))}
+              />
+            </label>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="flex flex-col gap-1.5">
+                  <span className="t-micro text-muted-foreground">Départ</span>
+                  <Input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Départ" />
+                </label>
+                <label className="flex flex-col gap-1.5">
+                  <span className="t-micro text-muted-foreground">Fin</span>
+                  <Input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="Fin" />
+                </label>
+              </div>
+              <label className="flex flex-col gap-1.5">
+                <span className="t-micro text-muted-foreground">Livreur</span>
+                <FormSelect
+                  aria-label="Livreur"
+                  value={driver}
+                  onChange={(next) => {
+                    setDriver(next);
+                    const defaultVehicle = drivers.find((d) => d.name === next)?.vehicle;
+                    const nextVehicle =
+                      defaultVehicle && vehicles.some((v) => v.name === defaultVehicle && v.active)
+                        ? defaultVehicle
+                        : vehicle;
+                    if (defaultVehicle && vehicles.some((v) => v.name === defaultVehicle && v.active)) {
+                      setVehicle(defaultVehicle);
+                    }
+                    const slot = nextFreeSlot(date, routes, next, nextVehicle);
+                    setStart(timePart(slot.plannedStart) || "08:00");
+                    setEnd(timePart(slot.plannedEnd) || "12:00");
+                  }}
+                  options={[
+                    { value: "", label: "Sélectionner" },
+                    ...drivers.filter((d) => d.active).map((d) => ({ value: d.name, label: d.label })),
+                  ]}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5">
+                <span className="t-micro text-muted-foreground">Véhicule</span>
+                <FormSelect
+                  aria-label="Véhicule"
+                  value={vehicle}
+                  onChange={(next) => {
+                    setVehicle(next);
+                    const slot = nextFreeSlot(date, routes, driver, next);
+                    setStart(timePart(slot.plannedStart) || "08:00");
+                    setEnd(timePart(slot.plannedEnd) || "12:00");
+                  }}
+                  options={[
+                    { value: "", label: "Sélectionner" },
+                    ...vehicles.filter((v) => v.active).map((v) => ({ value: v.name, label: v.label })),
+                  ]}
+                />
+              </label>
+            </>
+          )}
+        </SheetBody>
+        <SheetFooter>
+          <Button variant="outline" size="lg" onClick={onClose}>Annuler</Button>
+          <Button size="lg" onClick={submit} disabled={saving}>
+            {saving ? <LoaderCircle className="animate-spin" /> : <Check />}
+            Affecter
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+export default PlanningPage;

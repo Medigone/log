@@ -10,7 +10,7 @@ from collections import defaultdict
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import cint, flt
 
 from log.delivery_note_ops import _apply_named_status, serialize_delivery_note
 
@@ -146,7 +146,22 @@ def stock_shortages_for_items(items, *, available_by_item: dict[str, float], bun
 	return shortages
 
 
-def _stock_shortages_for_orders(orders) -> dict[str, list[dict]]:
+def has_available_stock_for_items(items, *, available_by_item: dict[str, float], bundle_codes=None) -> bool:
+	"""True s’il reste au moins une unité prélevable (min demandé, disponible)."""
+	bundle_codes = set(bundle_codes or ())
+	for item in items:
+		item_code = item.get("item_code")
+		if not item_code or item.get("delivered_by_supplier") or item_code in bundle_codes:
+			continue
+		required = _required_pick_qty(item)
+		if required <= 0:
+			continue
+		if min(required, flt(available_by_item.get(item_code))) > 0.000001:
+			return True
+	return False
+
+
+def _stock_shortages_for_orders(orders) -> dict[str, dict]:
 	so_names = [order.name for order in orders]
 	if not so_names:
 		return {}
@@ -176,11 +191,16 @@ def _stock_shortages_for_orders(orders) -> dict[str, list[dict]]:
 		company = order.get("company")
 		if company not in available_by_company:
 			available_by_company[company] = _company_available_qty(item_codes, company)
-		result[order.name] = stock_shortages_for_items(
-			by_order.get(order.name, []),
-			available_by_item=available_by_company.get(company) or {},
-			bundle_codes=bundle_codes,
-		)
+		available = available_by_company.get(company) or {}
+		order_items = by_order.get(order.name, [])
+		result[order.name] = {
+			"shortages": stock_shortages_for_items(
+				order_items, available_by_item=available, bundle_codes=bundle_codes
+			),
+			"has_available_stock": has_available_stock_for_items(
+				order_items, available_by_item=available, bundle_codes=bundle_codes
+			),
+		}
 	return result
 
 
@@ -202,15 +222,14 @@ def unreserve_sales_order_stock(so_name: str) -> None:
 		doc.cancel()
 
 
-def _throw_if_insufficient_stock(so_name):
+def _throw_if_no_available_stock(so_name):
 	so = frappe.get_doc("Sales Order", so_name)
+	item_codes = {item.item_code for item in so.items if item.item_code}
 	shortages = stock_shortages_for_items(
 		so.items,
-		available_by_item=_company_available_qty({item.item_code for item in so.items if item.item_code}, so.company),
-		bundle_codes=_bundle_item_codes({item.item_code for item in so.items if item.item_code}),
+		available_by_item=_company_available_qty(item_codes, so.company),
+		bundle_codes=_bundle_item_codes(item_codes),
 	)
-	if not shortages:
-		return
 	details = "; ".join(
 		_("{0} : {1} demandé, {2} disponible{3}").format(
 			row["item_name"],
@@ -221,7 +240,9 @@ def _throw_if_insufficient_stock(so_name):
 		for row in shortages
 	)
 	frappe.throw(
-		_("Stock insuffisant pour créer la liste de prélèvement de {0}. {1}").format(so_name, details),
+		_("Aucun article disponible pour créer la liste de prélèvement de {0}.{1}").format(
+			so_name, f" {details}" if details else ""
+		),
 		title=_("Stock insuffisant"),
 	)
 
@@ -245,6 +266,96 @@ def _draft_pick_lists_for_orders(sales_orders):
 		pluck="name",
 	)
 	return [{"name": name, "sales_orders": by_parent[name]} for name in drafts]
+
+
+def _draft_pick_list_names_by_order(sales_orders) -> dict[str, list[str]]:
+	"""Commande → listes de prélèvement encore en brouillon, sans en écraser une."""
+	by_order: dict[str, list[str]] = defaultdict(list)
+	for pick_list in _draft_pick_lists_for_orders(sales_orders):
+		name = pick_list["name"]
+		for so_name in pick_list["sales_orders"]:
+			if name not in by_order[so_name]:
+				by_order[so_name].append(name)
+	return by_order
+
+
+def _active_pick_progress_for_orders(sales_orders) -> dict[str, dict]:
+	"""Commande → pick lists actives (brouillon + soumise) et quantités prélevées."""
+	empty = {"pick_lists": [], "picked_qty": 0.0, "requested_qty": 0.0}
+	if not sales_orders:
+		return {}
+	rows = frappe.get_all(
+		"Pick List Item",
+		filters={"sales_order": ["in", list(sales_orders)]},
+		fields=["parent", "sales_order", "qty", "stock_qty", "picked_qty"],
+	)
+	result = {name: dict(empty) for name in sales_orders}
+	if not rows:
+		return result
+	parents = list({row.parent for row in rows if row.parent})
+	lists = (
+		frappe.get_all(
+			"Pick List",
+			filters={"name": ["in", parents], "docstatus": ["<", 2], "purpose": "Delivery"},
+			fields=["name", "docstatus"],
+		)
+		if parents
+		else []
+	)
+	by_name = {pl.name: pl for pl in lists}
+	pick_lists_by_so = defaultdict(list)
+	seen_pl = defaultdict(set)
+	picked_by_so = defaultdict(float)
+	requested_by_so = defaultdict(float)
+	for row in rows:
+		pl = by_name.get(row.parent)
+		if not pl:
+			continue
+		so_name = row.sales_order
+		if not so_name:
+			continue
+		if row.parent not in seen_pl[so_name]:
+			seen_pl[so_name].add(row.parent)
+			pick_lists_by_so[so_name].append({"name": pl.name, "docstatus": cint(pl.docstatus)})
+		requested_by_so[so_name] += flt(row.get("stock_qty")) or flt(row.get("qty"))
+		picked_by_so[so_name] += flt(row.get("picked_qty"))
+	for name in sales_orders:
+		lists_for_order = pick_lists_by_so.get(name) or []
+		lists_for_order.sort(key=lambda pl: (cint(pl.get("docstatus")), pl.get("name") or ""))
+		result[name] = {
+			"pick_lists": lists_for_order,
+			"picked_qty": picked_by_so.get(name, 0.0),
+			"requested_qty": requested_by_so.get(name, 0.0),
+		}
+	return result
+
+
+def _apply_order_pick_fields(order, progress=None, covering=None, draft_names=None):
+	"""Pose pick_lists, quantités et flags de création sur une ligne commande."""
+	progress = progress or {}
+	lists = list(progress.get("pick_lists") or [])
+	if not lists:
+		for name in draft_names or []:
+			lists.append({"name": name, "docstatus": 0})
+		if covering and covering not in {pl.get("name") for pl in lists}:
+			lists.append({"name": covering, "docstatus": 0})
+	drafts = [pl["name"] for pl in lists if cint(pl.get("docstatus")) == 0]
+	submitted = [pl["name"] for pl in lists if cint(pl.get("docstatus")) == 1]
+	picked = flt(progress.get("picked_qty"))
+	requested = flt(progress.get("requested_qty"))
+	if not lists:
+		requested = flt(order.get("total_qty"))
+		picked = requested * flt(order.get("per_picked")) / 100.0 if flt(order.get("per_picked")) else 0.0
+	elif requested <= 0:
+		requested = flt(order.get("total_qty"))
+	order["pick_lists"] = lists
+	order["picked_qty"] = picked
+	order["requested_qty"] = requested
+	order["draft_pick_lists"] = drafts
+	order["draft_pick_list"] = drafts[0] if drafts else None
+	order["existing_pick_list"] = covering or (submitted[0] if submitted else None)
+	order["can_create_pick_list"] = not lists
+	return order
 
 
 def pick_list_covers_remaining_items(remaining_by_so_item, pick_list_qty_by_so_item) -> bool:
@@ -273,7 +384,7 @@ def _remaining_qty_by_so_item(items) -> dict[str, float]:
 
 
 def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
-	"""Commande → Pick List unique (docstatus < 2) qui couvre encore toutes les lignes à prélever."""
+	"""Commande → Pick List brouillon qui couvre encore toutes les lignes à prélever."""
 	if not sales_orders:
 		return {}
 	so_items = frappe.get_all(
@@ -296,7 +407,7 @@ def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
 	active = set(
 		frappe.get_all(
 			"Pick List",
-			filters={"name": ["in", parents], "docstatus": ["<", 2], "purpose": "Delivery"},
+			filters={"name": ["in", parents], "docstatus": 0, "purpose": "Delivery"},
 			pluck="name",
 		)
 	)
@@ -317,6 +428,41 @@ def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
 				covering[so_name] = pl_name
 				break
 	return covering
+
+
+def _pick_lists_by_so_item(sales_order) -> dict[str, str]:
+	"""Ligne commande → Pick List active (brouillon d’abord, sinon la plus récente)."""
+	if not sales_order:
+		return {}
+	rows = frappe.get_all(
+		"Pick List Item",
+		filters={"sales_order": sales_order},
+		fields=["parent", "sales_order_item"],
+	)
+	if not rows:
+		return {}
+	parents = list({row.parent for row in rows if row.parent})
+	if not parents:
+		return {}
+	lists = frappe.get_all(
+		"Pick List",
+		filters={"name": ["in", parents], "docstatus": ["<", 2], "purpose": "Delivery"},
+		fields=["name", "docstatus", "modified"],
+	)
+	if not lists:
+		return {}
+	lists.sort(key=lambda pl: pl.modified or "", reverse=True)
+	lists.sort(key=lambda pl: 0 if pl.docstatus == 0 else 1)
+	rank = {pl.name: index for index, pl in enumerate(lists)}
+	chosen: dict[str, str] = {}
+	for row in rows:
+		key = row.sales_order_item
+		if not key or row.parent not in rank:
+			continue
+		previous = chosen.get(key)
+		if previous is None or rank[row.parent] < rank[previous]:
+			chosen[key] = row.parent
+	return chosen
 
 
 def _delete_stale_draft_pick_list(pick_list_name: str) -> None:
@@ -408,6 +554,8 @@ def serialize_pick_list(doc):
 		"grouped": grouped,
 		"sales_orders": sales_orders,
 		"delivery_notes": _serialize_linked_delivery_notes(doc.name),
+		"custom_order_changed": cint(doc.get("custom_order_changed")),
+		"custom_order_changed_reason": doc.get("custom_order_changed_reason") or None,
 	}
 
 
@@ -482,14 +630,12 @@ def _is_from_pick_list(doc):
 
 @frappe.whitelist()
 def get_sales_orders_to_pick(search=None, limit=100):
-	"""Commandes soumises encore à prélever."""
+	"""Commandes soumises à préparer, y compris celles déjà couvertes par une pick list."""
 	_require_preparation_role()
 	limit = min(cint_or_default(limit, 100), 200)
 	filters = {
 		"docstatus": 1,
-		"status": ["not in", list(CLOSED_SO_STATUSES)],
-		"per_picked": ["<", 100],
-		"per_delivered": ["<", 100],
+		"status": ["!=", "Cancelled"],
 	}
 	or_filters = None
 	if search:
@@ -516,6 +662,12 @@ def get_sales_orders_to_pick(search=None, limit=100):
 		fields.append("custom_commune")
 	if frappe.get_meta("Sales Order").has_field("custom_wilaya"):
 		fields.append("custom_wilaya")
+	if frappe.get_meta("Sales Order").has_field("custom_preparation_status"):
+		fields.append("custom_preparation_status")
+	if frappe.get_meta("Sales Order").has_field("custom_preparation_accepte_par"):
+		fields.append("custom_preparation_accepte_par")
+	if frappe.get_meta("Sales Order").has_field("custom_preparation_date_acceptation"):
+		fields.append("custom_preparation_date_acceptation")
 	if frappe.get_meta("Sales Order").has_field("skip_delivery_note"):
 		filters["skip_delivery_note"] = 0
 
@@ -528,33 +680,209 @@ def get_sales_orders_to_pick(search=None, limit=100):
 		limit=limit,
 	)
 	so_names = [o.name for o in orders]
-	drafts = {so: pl["name"] for pl in _draft_pick_lists_for_orders(so_names) for so in pl["sales_orders"]}
+	progress_by_order = _active_pick_progress_for_orders(so_names)
 	covering = _covering_pick_lists_for_orders(so_names)
-	shortages = _stock_shortages_for_orders(orders)
+	stock_status = _stock_shortages_for_orders(orders)
 	for order in orders:
-		existing = covering.get(order.name)
-		order["draft_pick_list"] = drafts.get(order.name)
-		order["existing_pick_list"] = existing
-		order["can_create_pick_list"] = not existing
-		order["stock_shortages"] = shortages.get(order.name, [])
+		status = stock_status.get(order.name) or {}
+		_apply_order_pick_fields(
+			order,
+			progress_by_order.get(order.name),
+			covering=covering.get(order.name),
+		)
+		order["stock_shortages"] = status.get("shortages") or []
+		order["has_available_stock"] = status.get("has_available_stock", False)
 	return _attach_commune_names(orders)
+
+
+def serialize_sales_order_pick_detail(so):
+	"""Fiche synthèse : en-tête commande + lignes avec stock disponible."""
+	name = so.get("name")
+	items = so.get("items") or []
+	item_codes = {item.get("item_code") for item in items if item.get("item_code")}
+	available_by_item = _company_available_qty(item_codes, so.get("company"))
+	bundle_codes = _bundle_item_codes(item_codes)
+	pick_by_item = _pick_lists_by_so_item(name)
+	lines = []
+	for item in items:
+		item_code = item.get("item_code")
+		if not item_code or item.get("delivered_by_supplier"):
+			continue
+		lines.append(
+			{
+				"item_code": item_code,
+				"item_name": item.get("item_name") or item_code,
+				"warehouse": item.get("warehouse"),
+				"required": _required_pick_qty(item),
+				"available": flt(available_by_item.get(item_code)),
+				"uom": item.get("stock_uom") or item.get("uom"),
+				"pick_list": pick_by_item.get(item.get("name")),
+			}
+		)
+	covering = _covering_pick_lists_for_orders([name]).get(name)
+	draft_names = _draft_pick_list_names_by_order([name]).get(name) or []
+	progress = _active_pick_progress_for_orders([name]).get(name) or {}
+	header = {
+		"name": name,
+		"customer": so.get("customer"),
+		"customer_name": so.get("customer_name"),
+		"transaction_date": str(so.get("transaction_date") or "") or None,
+		"delivery_date": str(so.get("delivery_date") or "") or None,
+		"grand_total": flt(so.get("grand_total")),
+		"total_qty": flt(so.get("total_qty")),
+		"per_picked": flt(so.get("per_picked")),
+		"per_delivered": flt(so.get("per_delivered")),
+		"company": so.get("company"),
+		"status": so.get("status"),
+		"custom_commune": so.get("custom_commune"),
+		"custom_wilaya": so.get("custom_wilaya"),
+		"custom_preparation_status": so.get("custom_preparation_status") or None,
+		"custom_preparation_accepte_par": so.get("custom_preparation_accepte_par") or None,
+		"custom_preparation_date_acceptation": str(so.get("custom_preparation_date_acceptation") or "") or None,
+		"has_available_stock": has_available_stock_for_items(
+			items, available_by_item=available_by_item, bundle_codes=bundle_codes
+		),
+		"stock_shortages": stock_shortages_for_items(
+			items, available_by_item=available_by_item, bundle_codes=bundle_codes
+		),
+		"items": lines,
+	}
+	_apply_order_pick_fields(header, progress, covering=covering, draft_names=draft_names)
+	return _attach_commune_names([header])[0]
+
+
+@frappe.whitelist()
+def get_sales_order_pick_detail(sales_order):
+	"""Retourne la fiche de préparation d'une commande client."""
+	_require_preparation_role()
+	if not sales_order or not frappe.db.exists("Sales Order", sales_order):
+		frappe.throw(_("Commande introuvable."))
+	return serialize_sales_order_pick_detail(frappe.get_doc("Sales Order", sales_order))
+
+
+def _unique_labels(values):
+	labels = []
+	seen = set()
+	for value in values:
+		if value and value not in seen:
+			seen.add(value)
+			labels.append(value)
+	return labels
+
+
+def _enrich_recent_pick_lists(rows):
+	"""Ajoute commandes, clients, wilayas et quantités sans charger chaque Pick List."""
+	names = [row.get("name") for row in rows if row.get("name")]
+	if not names:
+		return []
+
+	items = frappe.get_all(
+		"Pick List Item",
+		filters={"parent": ["in", names]},
+		fields=["parent", "sales_order", "qty", "stock_qty", "picked_qty", "warehouse"],
+	)
+	dn_items = frappe.get_all(
+		"Delivery Note Item",
+		filters={"against_pick_list": ["in", names]},
+		fields=["parent", "against_pick_list"],
+	)
+
+	orders_by_pl = defaultdict(list)
+	seen_so = defaultdict(set)
+	requested_by_pl = defaultdict(float)
+	picked_by_pl = defaultdict(float)
+	warehouses_by_pl = defaultdict(list)
+	seen_wh = defaultdict(set)
+	for item in items:
+		parent = item.get("parent")
+		if not parent:
+			continue
+		sales_order = item.get("sales_order")
+		if sales_order and sales_order not in seen_so[parent]:
+			seen_so[parent].add(sales_order)
+			orders_by_pl[parent].append(sales_order)
+		requested_by_pl[parent] += flt(item.get("stock_qty")) or flt(item.get("qty"))
+		picked_by_pl[parent] += flt(item.get("picked_qty"))
+		warehouse = item.get("warehouse")
+		if warehouse and warehouse not in seen_wh[parent]:
+			seen_wh[parent].add(warehouse)
+			warehouses_by_pl[parent].append(warehouse)
+
+	all_so = list(dict.fromkeys(so for orders in orders_by_pl.values() for so in orders))
+	so_rows = (
+		frappe.get_all(
+			"Sales Order",
+			filters={"name": ["in", all_so]},
+			fields=["name", "customer_name", "customer", "custom_wilaya"],
+		)
+		if all_so
+		else []
+	)
+	name_by_so = {row.name: (row.customer_name or row.customer or "") for row in so_rows}
+	wilaya_by_so = {row.name: (row.get("custom_wilaya") or "") for row in so_rows}
+
+	customers_by_pl = {}
+	wilayas_by_pl = {}
+	for pick_list, sales_orders in orders_by_pl.items():
+		customers_by_pl[pick_list] = _unique_labels(name_by_so.get(sales_order) for sales_order in sales_orders)
+		wilayas_by_pl[pick_list] = _unique_labels(wilaya_by_so.get(sales_order) for sales_order in sales_orders)
+
+	notes_by_pl = defaultdict(list)
+	seen_dn = defaultdict(set)
+	for row in dn_items:
+		pick_list = row.get("against_pick_list")
+		note = row.get("parent")
+		if pick_list and note and note not in seen_dn[pick_list]:
+			seen_dn[pick_list].add(note)
+			notes_by_pl[pick_list].append(note)
+
+	enriched = []
+	for row in rows:
+		name = row.get("name")
+		sales_orders = list(orders_by_pl.get(name) or [])
+		enriched.append(
+			{
+				"name": name,
+				"docstatus": row.get("docstatus"),
+				"status": row.get("status"),
+				"modified": row.get("modified"),
+				"sales_orders": sales_orders,
+				"sales_order_count": len(sales_orders),
+				"customer_names": customers_by_pl.get(name, []),
+				"wilayas": wilayas_by_pl.get(name, []),
+				"requested_qty": requested_by_pl.get(name, 0),
+				"picked_qty": picked_by_pl.get(name, 0),
+				"warehouses": warehouses_by_pl.get(name, []),
+				"delivery_notes": list(notes_by_pl.get(name) or []),
+				"custom_order_changed": cint(row.get("custom_order_changed")),
+				"custom_order_changed_reason": row.get("custom_order_changed_reason") or None,
+			}
+		)
+	return enriched
 
 
 @frappe.whitelist()
 def get_recent_pick_lists(limit=25):
 	"""Retourne les dernières sessions et leurs BL pour la vue de préparation."""
 	_require_preparation_role()
-	rows = frappe.get_all(
-		"Pick List",
-		filters={"purpose": "Delivery", "docstatus": ["<", 2]},
-		fields=["name", "docstatus", "status", "modified"],
-		order_by="modified desc",
-		limit=min(cint_or_default(limit, 25), 100),
-	)
-	for row in rows:
-		row["sales_order_count"] = len(serialize_pick_list(frappe.get_doc("Pick List", row.name))["sales_orders"])
-		row["delivery_notes"] = _get_delivery_note_names(row.name)
-	return rows
+	fields = ["name", "docstatus", "status", "modified"]
+	try:
+		rows = frappe.get_all(
+			"Pick List",
+			filters={"purpose": "Delivery", "docstatus": ["<", 2]},
+			fields=fields + ["custom_order_changed", "custom_order_changed_reason"],
+			order_by="modified desc",
+			limit=min(cint_or_default(limit, 25), 100),
+		)
+	except Exception:
+		rows = frappe.get_all(
+			"Pick List",
+			filters={"purpose": "Delivery", "docstatus": ["<", 2]},
+			fields=fields,
+			order_by="modified desc",
+			limit=min(cint_or_default(limit, 25), 100),
+		)
+	return _enrich_recent_pick_lists(rows)
 
 
 def cint_or_default(value, default):
@@ -573,12 +901,16 @@ def create_pick_list_from_sales_orders(sales_orders):
 		frappe.throw(_("Sélectionnez au moins une commande."))
 
 	sales_orders = list(dict.fromkeys(sales_orders))
+	from log.order_change_ops import assert_preparation_modification_accepted
+
+	assert_preparation_modification_accepted(sales_orders)
 	for name in sales_orders:
 		_sales_order_pickable(name)
 
 	from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
 
 	docs = []
+	empty_orders = []
 	for so_name in sales_orders:
 		covering = _covering_pick_lists_for_orders([so_name]).get(so_name)
 		if covering:
@@ -593,17 +925,19 @@ def create_pick_list_from_sales_orders(sales_orders):
 						so_name, existing[0]["name"]
 					)
 				)
-			_delete_stale_draft_pick_list(existing[0]["name"])
-		_throw_if_insufficient_stock(so_name)
+			docs.append(frappe.get_doc("Pick List", existing[0]["name"]))
+			continue
 		unreserve_sales_order_stock(so_name)
 		target = create_pick_list(so_name)
 		if not target or not target.get("locations"):
-			_throw_if_insufficient_stock(so_name)
-			frappe.throw(_("Aucune ligne à prélever pour la commande {0}.").format(so_name))
+			empty_orders.append(so_name)
+			continue
 		target.purpose = "Delivery"
 		target.pick_manually = 0
 		target.insert(ignore_permissions=True)
 		docs.append(target)
+	if not docs:
+		_throw_if_no_available_stock(empty_orders[0] if empty_orders else sales_orders[0])
 	return serialize_pick_session(docs)
 
 
@@ -620,7 +954,17 @@ def get_pick_session(pick_lists):
 	names = list(dict.fromkeys(_parse_list(pick_lists)))
 	if not names:
 		frappe.throw(_("La session de préparation est vide."))
-	return serialize_pick_session([frappe.get_doc("Pick List", name) for name in names])
+	docs = [frappe.get_doc("Pick List", name) for name in names]
+	session = serialize_pick_session(docs)
+	from log.order_change_ops import pending_modified_sales_orders, pending_order_change_notice, sales_orders_from_pick_docs
+
+	notice = pending_order_change_notice(docs)
+	if notice:
+		session["order_changed_notice"] = notice
+	pending = pending_modified_sales_orders(sales_orders_from_pick_docs(docs))
+	session["pending_sales_orders"] = pending
+	session["modification_pending"] = bool(pending)
+	return session
 
 
 def _scan_barcode(search_value):
@@ -670,6 +1014,9 @@ def scan_pick_item(search_value, pick_lists):
 
 	data = _resolve_scanned_item(search_value)
 	session = get_pick_session(pick_lists)
+	from log.order_change_ops import assert_preparation_modification_accepted
+
+	assert_preparation_modification_accepted(session.get("sales_orders") or session.get("pending_sales_orders") or [])
 	item_code = data.get("item_code")
 	locations = [
 		location
@@ -698,6 +1045,9 @@ def update_picked_qty(pick_list, locations):
 	_require_preparation_role()
 	locations = _parse_list(locations)
 	doc = frappe.get_doc("Pick List", pick_list)
+	from log.order_change_ops import assert_preparation_modification_accepted, sales_orders_from_pick_docs
+
+	assert_preparation_modification_accepted(sales_orders_from_pick_docs([doc]))
 	if doc.docstatus != 0:
 		frappe.throw(_("La Pick List {0} n'est plus modifiable.").format(pick_list))
 
@@ -733,6 +1083,9 @@ def submit_pick_list_and_create_dns(pick_list):
 	"""Soumet la Pick List puis crée les bons de livraison natifs."""
 	_require_preparation_role()
 	doc = frappe.get_doc("Pick List", pick_list)
+	from log.order_change_ops import assert_preparation_modification_accepted, sales_orders_from_pick_docs
+
+	assert_preparation_modification_accepted(sales_orders_from_pick_docs([doc]))
 	if doc.purpose != "Delivery":
 		frappe.throw(_("Seules les Pick Lists de type Delivery peuvent créer un bon de livraison."))
 	if not doc.locations:
@@ -746,6 +1099,9 @@ def submit_pick_list_and_create_dns(pick_list):
 		doc.flags.ignore_permissions = True
 		doc.save(ignore_permissions=True)
 		doc.submit()
+		from log.order_change_ops import clear_order_changed_status
+
+		clear_order_changed_status(doc)
 	elif doc.docstatus != 1:
 		frappe.throw(_("La Pick List {0} est annulée.").format(pick_list))
 
