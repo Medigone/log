@@ -17,29 +17,31 @@ export function DateRangeFilter({
   from,
   to,
   onChange,
+  label = "Période",
 }: {
   from: string
   to: string
   onChange: (range: { from: string; to: string }) => void
+  label?: string
 }) {
   const selected: DateRange | undefined = from || to ? { from: parseDay(from), to: parseDay(to) } : undefined
-  const label =
+  const labelText =
     from && to
       ? `${formatShortDate(from)} – ${formatShortDate(to)}`
       : from
         ? `Depuis ${formatShortDate(from)}`
         : to
           ? `Jusqu’au ${formatShortDate(to)}`
-          : "Période"
+          : label
 
   return (
     <Popover>
       <PopoverTrigger
         render={<Button variant="outline" className="justify-start bg-background font-normal" />}
-        aria-label="Période"
+        aria-label={label}
       >
         <CalendarIcon data-icon="inline-start" />
-        <span className={!from && !to ? "text-muted-foreground" : undefined}>{label}</span>
+        <span className={!from && !to ? "text-muted-foreground" : undefined}>{labelText}</span>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar

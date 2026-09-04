@@ -10,6 +10,7 @@ from log.api.distribution_rules import (
 	complete_stop_gate_error,
 	completion_errors,
 	driver_owns_route,
+	draft_route_delete_error,
 	has_assignment_conflict,
 	has_any_role,
 	is_repeated_request,
@@ -111,6 +112,17 @@ class TestDistributionRules(unittest.TestCase):
 		self.assertFalse(revision_matches(3, 2))
 		self.assertTrue(change_reason_required("Publiée"))
 		self.assertEqual(planning_status_for_route("En cours"), "En cours")
+
+	def test_draft_route_delete(self):
+		self.assertIsNone(draft_route_delete_error(state="Brouillon", stop_count=0))
+		self.assertEqual(
+			draft_route_delete_error(state="Publiée", stop_count=0),
+			"Seule une tournée brouillon peut être supprimée.",
+		)
+		self.assertEqual(
+			draft_route_delete_error(state="Brouillon", stop_count=1),
+			"Retirez tous les bons avant de supprimer la tournée.",
+		)
 
 	def test_order_change_classification(self):
 		self.assertEqual(classify_order_change({"items"}), "preparation")

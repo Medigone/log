@@ -19,6 +19,7 @@ from log.api.distribution_rules import (
 	change_reason_required,
 	complete_stop_gate_error,
 	completion_errors,
+	draft_route_delete_error,
 	driver_owns_route,
 	has_assignment_conflict,
 	has_any_role,
@@ -689,23 +690,29 @@ def _unassigned_matches_board(
 	start_date,
 	end_date,
 	include_backlog: bool = False,
+	*,
+	requested_start=None,
+	requested_end=None,
 ) -> bool:
 	"""Whether an unscheduled Delivery Note belongs on the planning board.
 
-	Kanban backlog (`include_backlog`) lists every eligible unassigned BL,
-	regardless of requested delivery date. The table view still windows by
-	date unless bounds were cleared (`allDates`). Exception statuses always
-	appear even outside the window.
+	`start_date` / `end_date` are the route (`date_liv`) window and are ignored
+	for unassigned BLs when a dedicated `requested_*` window is provided.
+	Kanban backlog (`include_backlog`) lists every eligible unassigned BL
+	unless a BL date filter is set. Exception statuses always appear even
+	outside the window.
 	"""
-	if include_backlog:
+	if include_backlog and requested_start is None and requested_end is None:
 		return True
 	if (planning_status or "Non planifié") in _EXCEPTION_PLANNING_STATUSES:
 		return True
-	if not start_date or not end_date:
+	window_start = requested_start if requested_start is not None else start_date
+	window_end = requested_end if requested_end is not None else end_date
+	if not window_start or not window_end:
 		return True
 	if not requested_date:
 		return False
-	return start_date <= requested_date <= end_date
+	return window_start <= requested_date <= window_end
 
 
 def planning_display_status(row: dict[str, Any], day=None) -> str:
@@ -748,7 +755,8 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 		for stop in route["stops"]
 	}
 
-	include_backlog = bool(filter_data.get("includeBacklog"))
+	bl_start, bl_end = _board_date_range(filter_data.get("blDateFrom"), filter_data.get("blDateTo"))
+	include_backlog = bool(filter_data.get("includeBacklog")) and not (bl_start or bl_end)
 	unassigned = []
 	eligible_names = frappe.get_all(
 		"Delivery Note",
@@ -766,7 +774,13 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 			requested = getdate(dn.get("custom_date_de_livraison")) if dn.get("custom_date_de_livraison") else None
 			planning_status = dn.get("custom_statut_planification") or "Non planifié"
 			if not _unassigned_matches_board(
-				requested, planning_status, start_date, end_date, include_backlog
+				requested,
+				planning_status,
+				start_date,
+				end_date,
+				include_backlog,
+				requested_start=bl_start,
+				requested_end=bl_end,
 			):
 				continue
 			unassigned.append(_stop_from_dn(dn, len(unassigned) + 1))
@@ -1078,6 +1092,26 @@ def save_route(route):
 		dn = frappe.get_doc("Delivery Note", delivery_note)
 		_set_delivery_note_assignment(dn, doc, "Planifié")
 	return {"route": _serialize_route(doc), "warning": warning or capacity_warning(_capacity(doc)[0])}
+
+
+@frappe.whitelist()
+def delete_draft_route(route_id, expected_revision=None):
+	"""Permanently delete an empty draft route."""
+	_require(PLANNING_ROLES)
+	_require_schema()
+	route_id = str(route_id or "").strip()
+	if not route_id or not frappe.db.exists("Livraison", route_id):
+		frappe.throw(_("Tournée introuvable."))
+	_lock_route(route_id)
+	doc = frappe.get_doc("Livraison", route_id)
+	if not revision_matches(cint(doc.revision), cint(expected_revision) if expected_revision not in (None, "") else None):
+		frappe.throw(_("La tournée a été modifiée. Actualisez le planning."))
+	error = draft_route_delete_error(state=_route_state(doc), stop_count=len(_route_stop_names(doc)))
+	if error:
+		frappe.throw(_(error))
+	name = doc.name
+	frappe.delete_doc("Livraison", name, ignore_permissions=True, force=True)
+	return {"success": True, "routeId": name}
 
 
 @frappe.whitelist()

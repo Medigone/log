@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   BACKLOG_COLUMN_ID,
   buildKanbanValue,
+  canDeleteDraftRoute,
   columnLoad,
   isItemDraggable,
   listActiveDrivers,
   newRouteColumnId,
+  notesToMoveOnDrag,
   parseNewRouteColumnId,
   parseRouteColumnId,
   preferNewRouteCollisions,
@@ -156,6 +158,18 @@ describe("columnLoad", () => {
   });
 });
 
+describe("canDeleteDraftRoute", () => {
+  it("autorise seulement un brouillon sans arrêt", () => {
+    expect(canDeleteDraftRoute(makeRoute({ lifecycle: "Brouillon", stops: [] }))).toBe(true);
+    expect(canDeleteDraftRoute(makeRoute({ lifecycle: "Publiée", stops: [] }))).toBe(false);
+    expect(
+      canDeleteDraftRoute(
+        makeRoute({ lifecycle: "Brouillon", stops: [{ deliveryNote: "DN-1" }] as DistributionRoute["stops"] }),
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("isItemDraggable", () => {
   it("backlog items are draggable", () => {
     const item: KanbanBLItem = {
@@ -184,5 +198,24 @@ describe("isItemDraggable", () => {
       assignment: makeAssignment({ route: "LIV-001" }),
     };
     expect(isItemDraggable(item, [route])).toBe(false);
+  });
+});
+
+describe("notesToMoveOnDrag", () => {
+  it("returns only the dragged BL when nothing else is selected", () => {
+    expect(notesToMoveOnDrag("DN-1", new Set(), ["DN-1", "DN-2"])).toEqual(["DN-1"]);
+    expect(notesToMoveOnDrag("DN-1", new Set(["DN-1"]), ["DN-1", "DN-2"])).toEqual(["DN-1"]);
+  });
+
+  it("returns the whole selection when dragging one selected BL", () => {
+    expect(notesToMoveOnDrag("DN-2", new Set(["DN-1", "DN-2", "DN-3"]), ["DN-1", "DN-2", "DN-3"])).toEqual([
+      "DN-1",
+      "DN-2",
+      "DN-3",
+    ]);
+  });
+
+  it("ignores the selection when dragging an unselected BL", () => {
+    expect(notesToMoveOnDrag("DN-9", new Set(["DN-1", "DN-2"]), ["DN-1", "DN-2", "DN-9"])).toEqual(["DN-9"]);
   });
 });

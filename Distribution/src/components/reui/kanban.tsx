@@ -197,13 +197,17 @@ interface KanbanColumnProps {
   children: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  onOverChange?: (isOver: boolean) => void;
   "aria-label"?: string;
 }
 
-export function KanbanColumn({ id, children, className, disabled, ...rest }: KanbanColumnProps) {
+export function KanbanColumn({ id, children, className, disabled, onOverChange, ...rest }: KanbanColumnProps) {
   const { value } = useKanbanContext();
   const items = value.items.filter((item) => item.columnId === id);
   const { setNodeRef, isOver } = useDroppable({ id, disabled });
+  React.useEffect(() => {
+    onOverChange?.(isOver);
+  }, [isOver, onOverChange]);
   return (
     <div
       ref={setNodeRef}

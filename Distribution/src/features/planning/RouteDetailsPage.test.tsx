@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   calculateRouteItinerary: vi.fn().mockResolvedValue({}),
   proposeRouteOptimization: vi.fn(),
   applyRouteOptimization: vi.fn(),
+  deleteDraftRoute: vi.fn().mockResolvedValue({ success: true, routeId: "LIV-TEST-1" }),
   mutate: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -82,16 +83,38 @@ vi.mock("@/shared/api/distribution", () => ({
     calculateRouteItinerary: mocks.calculateRouteItinerary,
     proposeRouteOptimization: mocks.proposeRouteOptimization,
     applyRouteOptimization: mocks.applyRouteOptimization,
+    deleteDraftRoute: mocks.deleteDraftRoute,
     saving: false,
     routing: false,
   }),
 }));
 vi.mock("@/features/planning/RouteMap", () => ({ RouteMap: () => <div>Carte GPS OSM</div> }));
 
+function renderDetails() {
+  return render(
+    <MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}>
+      <Routes>
+        <Route path="/planning" element={<div>Planning</div>} />
+        <Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("RouteDetailsPage", () => {
+  beforeEach(() => {
+    mocks.publishRoute.mockClear();
+    mocks.generateQrCode.mockClear();
+    mocks.calculateRouteItinerary.mockClear();
+    mocks.proposeRouteOptimization.mockClear();
+    mocks.applyRouteOptimization.mockClear();
+    mocks.deleteDraftRoute.mockClear();
+    mocks.mutate.mockClear();
+  });
+
   it("présente les ressources, la carte, les articles et le QR avant publication", async () => {
     const user = userEvent.setup();
-    render(<MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}><Routes><Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} /></Routes></MemoryRouter>);
+    renderDetails();
 
     expect(screen.getByRole("heading", { name: "LIV-TEST-1" })).toBeInTheDocument();
     expect(screen.getByText("Carte GPS OSM")).toBeInTheDocument();
@@ -104,6 +127,7 @@ describe("RouteDetailsPage", () => {
     expect(screen.getByText("Aucun paiement saisi pour cet arrêt.")).toBeInTheDocument();
     expect(screen.getByAltText("QR du BL DN-TEST-1")).toBeInTheDocument();
     expect(screen.getByText("2 étiquette(s)")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^supprimer$/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /publier la tournée/i }));
     expect(screen.getByRole("dialog", { name: /publier la tournée/i })).toBeInTheDocument();
@@ -123,7 +147,7 @@ describe("RouteDetailsPage", () => {
       optimized: { distanceMeters: 11000, durationSeconds: 1500, stopDurationSeconds: 900, totalDurationSeconds: 2400 },
     });
     mocks.applyRouteOptimization.mockResolvedValue({ ...route, revision: 3 });
-    render(<MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}><Routes><Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} /></Routes></MemoryRouter>);
+    renderDetails();
 
     await user.click(screen.getByRole("button", { name: /optimiser l’ordre/i }));
     expect(await screen.findByRole("dialog", { name: /comparer l’ordre/i })).toBeInTheDocument();
@@ -137,7 +161,7 @@ describe("RouteDetailsPage", () => {
   it("affiche l’erreur serveur dans la confirmation de publication", async () => {
     const user = userEvent.setup();
     mocks.publishRoute.mockRejectedValueOnce(new Error("Publication refusée"));
-    render(<MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}><Routes><Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} /></Routes></MemoryRouter>);
+    renderDetails();
 
     await user.click(screen.getByRole("button", { name: /publier la tournée/i }));
     await user.click(screen.getByRole("button", { name: /confirmer et publier/i }));
@@ -153,7 +177,7 @@ describe("RouteDetailsPage", () => {
     route.stops[0].latitude = undefined;
     route.stops[0].longitude = undefined;
 
-    render(<MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}><Routes><Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} /></Routes></MemoryRouter>);
+    renderDetails();
 
     expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /recalculer l’itinéraire/i })).toBeDisabled();
@@ -184,7 +208,7 @@ describe("RouteDetailsPage", () => {
     route.stops[0].items![0].deliveredQuantity = 2;
     route.stops[0].items![0].remainingQuantity = 0;
 
-    render(<MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}><Routes><Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} /></Routes></MemoryRouter>);
+    renderDetails();
 
     expect(screen.getByText("1/1")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Arrêts traités" })).toHaveAttribute("aria-valuenow", "1");
@@ -207,5 +231,23 @@ describe("RouteDetailsPage", () => {
     route.cash.declaredTotal = 0;
     route.stops[0].items![0].deliveredQuantity = 0;
     route.stops[0].items![0].remainingQuantity = 2;
+  });
+
+  it("permet de supprimer une tournée brouillon vide après confirmation", async () => {
+    const user = userEvent.setup();
+    const originalStops = route.stops;
+    route.stops = [];
+    try {
+      renderDetails();
+      await user.click(screen.getByRole("button", { name: /^supprimer$/i }));
+      const dialog = screen.getByRole("dialog", { name: /supprimer la tournée/i });
+      expect(dialog).toHaveTextContent("LIV-TEST-1");
+      expect(mocks.deleteDraftRoute).not.toHaveBeenCalled();
+      await user.click(within(dialog).getByRole("button", { name: /^supprimer$/i }));
+      expect(mocks.deleteDraftRoute).toHaveBeenCalledWith("LIV-TEST-1", 2);
+      expect(await screen.findByText("Planning")).toBeInTheDocument();
+    } finally {
+      route.stops = originalStops;
+    }
   });
 });

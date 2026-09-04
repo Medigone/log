@@ -205,6 +205,77 @@ class TestUnassignedMatchesBoard(unittest.TestCase):
 	def test_all_dates_includes_everything(self):
 		self.assertTrue(_unassigned_matches_board(None, "Non planifié", None, None))
 
+	def test_bl_date_window_is_independent_of_route_date(self):
+		self.assertTrue(
+			_unassigned_matches_board(
+				date(2026, 9, 6),
+				"Non planifié",
+				date(2026, 9, 7),
+				date(2026, 9, 7),
+				requested_start=date(2026, 9, 6),
+				requested_end=date(2026, 9, 6),
+			)
+		)
+		self.assertFalse(
+			_unassigned_matches_board(
+				date(2026, 9, 5),
+				"Non planifié",
+				date(2026, 9, 7),
+				date(2026, 9, 7),
+				requested_start=date(2026, 9, 6),
+				requested_end=date(2026, 9, 6),
+			)
+		)
+
+	def test_include_backlog_does_not_override_bl_date_window(self):
+		self.assertFalse(
+			_unassigned_matches_board(
+				date(2026, 9, 5),
+				"Non planifié",
+				date(2026, 9, 7),
+				date(2026, 9, 7),
+				include_backlog=True,
+				requested_start=date(2026, 9, 6),
+				requested_end=date(2026, 9, 6),
+			)
+		)
+		self.assertTrue(
+			_unassigned_matches_board(
+				date(2026, 9, 6),
+				"Non planifié",
+				date(2026, 9, 7),
+				date(2026, 9, 7),
+				include_backlog=True,
+				requested_start=date(2026, 9, 6),
+				requested_end=date(2026, 9, 6),
+			)
+		)
+
+	def test_exception_statuses_appear_outside_bl_date_window(self):
+		self.assertTrue(
+			_unassigned_matches_board(
+				date(2026, 9, 5),
+				"À revalider",
+				date(2026, 9, 7),
+				date(2026, 9, 7),
+				requested_start=date(2026, 9, 6),
+				requested_end=date(2026, 9, 6),
+			)
+		)
+
+
+class TestBoardLoadsSeparateBlDateWindow(unittest.TestCase):
+	def test_planning_board_reads_bl_date_filters(self):
+		import inspect
+		from log.api import distribution
+
+		source = inspect.getsource(distribution.get_planning_board)
+		self.assertIn("blDateFrom", source)
+		self.assertIn("blDateTo", source)
+		self.assertIn("requested_start", source)
+		self.assertIn("requested_end", source)
+		self.assertLess(source.index("date_liv"), source.index("blDateFrom"))
+
 
 class TestBoardDateRangeBacklog(unittest.TestCase):
 	"""Backlog date range: the date range logic is used by the board loader."""
@@ -270,6 +341,20 @@ class TestScheduleDeliveryNotesFlow(unittest.TestCase):
 		source = inspect.getsource(distribution.reassign_delivery_note)
 		self.assertIn("forceNew", source)
 		self.assertLess(source.index("forceNew"), source.index("should_update_source_in_place"))
+
+
+class TestDeleteDraftRouteFlow(unittest.TestCase):
+	def test_delete_uses_force_and_ignore_permissions(self):
+		import inspect
+		from log.api import distribution
+
+		source = inspect.getsource(distribution.delete_draft_route)
+		self.assertIn("draft_route_delete_error", source)
+		self.assertIn("_lock_route", source)
+		self.assertIn("revision_matches", source)
+		self.assertIn("frappe.delete_doc", source)
+		self.assertIn("ignore_permissions=True", source)
+		self.assertIn("force=True", source)
 
 
 class TestPlanningDisplayStatusOverdue(unittest.TestCase):

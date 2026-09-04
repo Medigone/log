@@ -258,6 +258,9 @@ export function useDistributionMutations() {
   const unassign = useFrappePostCall<FrappeMessage<UnassignResult>>(
     "log.api.distribution.unassign_delivery_note",
   );
+  const deleteDraft = useFrappePostCall<FrappeMessage<{ success: boolean; routeId: string }>>(
+    "log.api.distribution.delete_draft_route",
+  );
   const adjustCash = useFrappePostCall<FrappeMessage<DriverCashBox>>(
     "log.api.distribution.post_driver_cash_adjustment",
   );
@@ -304,10 +307,12 @@ export function useDistributionMutations() {
     retryDeliveryInvoice: async (deliveryNote: string) => (await retryInvoice.call({ delivery_note: deliveryNote })).message,
     scheduleDeliveryNotes: async (payload: BulkAssignmentInput) => (await bulkSchedule.call({ payload })).message,
     unassignDeliveryNote: async (payload: UnassignInput) => (await unassign.call({ payload })).message,
+    deleteDraftRoute: async (routeId: string, expectedRevision?: number) =>
+      (await deleteDraft.call({ route_id: routeId, expected_revision: expectedRevision })).message,
     postDriverCashAdjustment: async (payload: DriverCashAdjustmentInput) => (await adjustCash.call({ payload })).message,
     saving: save.loading || publish.loading || start.loading || load.loading || finish.loading || complete.loading
       || schedule.loading || reassign.loading || acknowledge.loading || impact.loading || reprepare.loading || resolveException.loading
-      || generateQr.loading || bulkSchedule.loading || unassign.loading,
+      || generateQr.loading || bulkSchedule.loading || unassign.loading || deleteDraft.loading,
     fulfillment: declareReturn.loading || confirmReturn.loading,
     cashier: validateCash.loading || resolveCash.loading,
     driverCash: adjustCash.loading,

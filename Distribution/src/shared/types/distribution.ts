@@ -239,6 +239,9 @@ export interface PlanningFilters {
   allDates?: boolean;
   /** Include every unassigned BL in the backlog, regardless of requested date. */
   includeBacklog?: boolean;
+  /** Window for unassigned BLs (`custom_date_de_livraison` / requestedDate). */
+  blDateFrom?: string;
+  blDateTo?: string;
 }
 
 export interface PlanningAlert {

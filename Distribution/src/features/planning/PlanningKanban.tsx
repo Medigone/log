@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   AlertTriangle,
   Calendar,
   ChevronLeft,
   ChevronRight,
+  ChevronsUpDown,
   Lock,
   MapPin,
   Package,
@@ -11,11 +13,13 @@ import {
   Search,
   Square,
   SquareCheck,
+  Trash2,
   Truck,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -41,41 +45,48 @@ import type {
 import {
   BACKLOG_COLUMN_ID,
   buildKanbanValue,
+  canDeleteDraftRoute,
   columnLoad,
   isRouteLocked,
   listActiveDrivers,
   newRouteColumnId,
+  notesToMoveOnDrag,
   planningCollisionDetection,
   routeColumnId,
   routesForDriver,
   vehicleLabelFor,
   type KanbanBLItem,
 } from "./kanbanHelpers";
-import { isoDateWithOffset, timePart, matchesSearch } from "./planningHelpers";
+import { canReprogramAssignment, isoDateWithOffset, timePart, matchesSearch } from "./planningHelpers";
 import { FilterSelect } from "@/components/FilterSelect";
 
 interface PlanningKanbanProps {
   date: string;
   onDateChange: (date: string) => void;
+  blDate: string;
+  onBlDateChange: (date: string) => void;
   assignments: DeliveryNoteAssignment[];
   routes: DistributionRoute[];
   drivers: PlanningResource[];
   vehicles: PlanningResource[];
   onMoveItem: (
-    deliveryNote: string,
+    deliveryNotes: string[],
     toColumnId: string | null,
     position: number,
     fromColumnId: string | null,
-  ) => Promise<void>;
+  ) => Promise<"assigned" | "dialog" | "noop">;
   onBulkAssign: (deliveryNotes: string[], driverId?: string) => void;
   onUnassign: (deliveryNote: string, routeRevision: number) => Promise<void>;
   onReprogrammer: (assignment: DeliveryNoteAssignment) => void;
+  onDeleteRoute?: (route: DistributionRoute) => void;
   isLoading?: boolean;
 }
 
 export function PlanningKanban({
   date,
   onDateChange,
+  blDate,
+  onBlDateChange,
   assignments,
   routes,
   drivers,
@@ -84,6 +95,7 @@ export function PlanningKanban({
   onBulkAssign,
   onUnassign,
   onReprogrammer,
+  onDeleteRoute,
 }: PlanningKanbanProps) {
   const today = isoDateWithOffset();
   const [search, setSearch] = useState("");
@@ -127,14 +139,39 @@ export function PlanningKanban({
     setLocalValue(next);
   }, []);
 
+  const backlogItems = filteredItems.filter((i) => i.columnId === BACKLOG_COLUMN_ID);
+  const activeDrivers = useMemo(() => listActiveDrivers(drivers), [drivers]);
+  const allBacklogSelected = backlogItems.length > 0 && backlogItems.every((item) => selected.has(String(item.id)));
+
   const handleCommit = useCallback(
     async (commit: KanbanCommit<KanbanBLItem>) => {
       if (commit.fromColumnId === commit.toColumnId && commit.toColumnId === BACKLOG_COLUMN_ID) return;
       const toColumnId = commit.toColumnId === BACKLOG_COLUMN_ID ? null : String(commit.toColumnId);
       const fromColumnId = commit.fromColumnId === BACKLOG_COLUMN_ID ? null : String(commit.fromColumnId);
-      await onMoveItem(commit.item.assignment.deliveryNote, toColumnId, commit.newIndex + 1, fromColumnId);
+      const notes = notesToMoveOnDrag(
+        commit.item.assignment.deliveryNote,
+        selected,
+        backlogItems.map((item) => String(item.id)),
+      );
+      if (notes.length > 1 && commit.toColumnId) {
+        const targetColumn = String(commit.toColumnId);
+        setLocalValue((prev) => ({
+          ...prev,
+          items: prev.items.map((item) =>
+            notes.includes(String(item.id)) ? { ...item, columnId: targetColumn } : item,
+          ),
+        }));
+      }
+      const result = await onMoveItem(notes, toColumnId, commit.newIndex + 1, fromColumnId);
+      if (result === "assigned") {
+        setSelected((prev) => {
+          const next = new Set(prev);
+          for (const id of notes) next.delete(id);
+          return next;
+        });
+      }
     },
-    [onMoveItem],
+    [backlogItems, onMoveItem, selected],
   );
 
   const toggleSelection = (dn: string) => {
@@ -146,8 +183,13 @@ export function PlanningKanban({
     });
   };
 
-  const backlogItems = filteredItems.filter((i) => i.columnId === BACKLOG_COLUMN_ID);
-  const activeDrivers = useMemo(() => listActiveDrivers(drivers), [drivers]);
+  const toggleSelectAllBacklog = () => {
+    if (allBacklogSelected) {
+      setSelected(new Set());
+      return;
+    }
+    setSelected(new Set(backlogItems.map((item) => String(item.id))));
+  };
 
   const navigateDate = (offset: number) => {
     const d = new Date(date);
@@ -159,23 +201,41 @@ export function PlanningKanban({
   return (
     <div className="flex flex-col gap-4">
       <Toolbar>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={() => navigateDate(-1)} aria-label="Jour précédent">
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Input
-            type="date"
-            value={date}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="w-40"
-            aria-label="Date du planning"
-          />
-          <Button variant="outline" size="sm" onClick={() => onDateChange(today)}>
-            Aujourd'hui
-          </Button>
-          <Button variant="outline" size="icon" onClick={() => navigateDate(1)} aria-label="Jour suivant">
-            <ChevronRight className="size-4" />
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Date BL</span>
+            <Input
+              type="date"
+              value={blDate}
+              onChange={(e) => onBlDateChange(e.target.value)}
+              className="w-40"
+              aria-label="Date BL"
+            />
+            {blDate ? (
+              <Button variant="ghost" size="sm" onClick={() => onBlDateChange("")}>
+                Toutes
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground whitespace-nowrap">Date livraison</span>
+            <Button variant="outline" size="icon" onClick={() => navigateDate(-1)} aria-label="Jour précédent">
+              <ChevronLeft className="size-4" />
+            </Button>
+            <Input
+              type="date"
+              value={date}
+              onChange={(e) => onDateChange(e.target.value)}
+              className="w-40"
+              aria-label="Date livraison"
+            />
+            <Button variant="outline" size="sm" onClick={() => onDateChange(today)}>
+              Aujourd'hui
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => navigateDate(1)} aria-label="Jour suivant">
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
         </div>
         <ToolbarSpacer />
         <div className="flex items-center gap-2">
@@ -220,16 +280,28 @@ export function PlanningKanban({
         restoreOnCancel
         className="overflow-x-auto p-0.5"
       >
-        <KanbanBoard className="flex min-h-[28rem] gap-4 pb-4">
-          <KanbanColumn id={BACKLOG_COLUMN_ID} className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border bg-muted/30 p-2">
-            <div className="rounded-lg border bg-muted/50 p-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold">
-                <Package className="size-4" />
+        <KanbanBoard className="flex min-h-[28rem] gap-3 pb-4">
+          <KanbanColumn id={BACKLOG_COLUMN_ID} className="flex w-64 shrink-0 flex-col gap-1.5 rounded-lg border bg-muted/30 p-1.5">
+            <div className="flex flex-col gap-1 rounded-lg border bg-muted/50 px-2 py-1.5">
+              <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+                <Package className="size-4 shrink-0" />
                 À planifier
                 <Badge variant="secondary">{backlogItems.length}</Badge>
               </h3>
+              {backlogItems.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="h-6 w-full text-xs"
+                  onClick={toggleSelectAllBacklog}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  {allBacklogSelected ? "Tout désélectionner" : "Tout sélectionner"}
+                </Button>
+              ) : null}
             </div>
-            <div className="flex min-h-40 flex-col gap-2 p-0.5">
+            <div className="flex min-h-32 flex-col gap-1.5 p-0.5">
               {backlogItems.map((item) => (
                 <KanbanItem key={item.id} id={item.id} asHandle className="p-0.5">
                   <BLCard
@@ -256,21 +328,32 @@ export function PlanningKanban({
                 vehicles={vehicles}
                 onReprogrammer={onReprogrammer}
                 onUnassign={onUnassign}
+                onDeleteRoute={onDeleteRoute}
               />
             );
           })}
         </KanbanBoard>
-        <DragCardOverlay routes={routes} />
+        <DragCardOverlay routes={routes} selected={selected} />
       </Kanban>
     </div>
   );
 }
 
-function DragCardOverlay({ routes }: { routes: DistributionRoute[] }) {
+function DragCardOverlay({ routes, selected }: { routes: DistributionRoute[]; selected: Set<string> }) {
   const { activeItem } = useKanbanContext<KanbanBLItem>();
+  const stacked = Boolean(activeItem && selected.size > 1 && selected.has(String(activeItem.id)));
   return (
     <KanbanOverlay>
-      {activeItem ? <BLCard item={activeItem} routes={routes} /> : null}
+      {activeItem ? (
+        <div className="relative">
+          <BLCard item={activeItem} routes={routes} />
+          {stacked ? (
+            <Badge className="absolute -right-1 -top-1" variant="default">
+              {selected.size}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
     </KanbanOverlay>
   );
 }
@@ -282,6 +365,7 @@ function DriverColumn({
   vehicles,
   onReprogrammer,
   onUnassign,
+  onDeleteRoute,
 }: {
   driver: PlanningResource;
   items: KanbanBLItem[];
@@ -289,16 +373,17 @@ function DriverColumn({
   vehicles: PlanningResource[];
   onReprogrammer: (a: DeliveryNoteAssignment) => void;
   onUnassign: (dn: string, rev: number) => Promise<void>;
+  onDeleteRoute?: (route: DistributionRoute) => void;
 }) {
   const { blCount, articleCount } = columnLoad(items);
   const vehicleLabel = vehicleLabelFor(driver.vehicle, vehicles);
 
   return (
     <div
-      className="flex w-80 shrink-0 flex-col gap-2 rounded-lg border bg-card p-2"
+      className="flex w-64 shrink-0 flex-col gap-1.5 rounded-lg border bg-card p-1.5"
       aria-label={`${driver.label}, ${blCount} BL, ${formatQuantity(articleCount)} articles`}
     >
-      <div className="rounded-lg border-b-2 border-brand-300 bg-brand-50/50 px-3 py-2">
+      <div className="rounded-lg border-b-2 border-brand-300 bg-brand-50/50 px-2 py-1.5">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-700">{driver.label}</h3>
         {vehicleLabel && (
           <p className="mt-1 flex items-center gap-0.5 text-xs text-muted-foreground">
@@ -318,72 +403,144 @@ function DriverColumn({
 
       <NewRouteDropZone driver={driver} routes={routes} />
 
-      {routes.map((route) => {
-        const routeItems = items.filter((item) => item.columnId === routeColumnId(route.name));
-        const load = columnLoad(routeItems);
-        const locked = isRouteLocked(route);
-        return (
-          <KanbanColumn
-            key={route.name}
-            id={routeColumnId(route.name)}
-            disabled={locked}
-            className={cn(
-              "flex flex-col gap-2 rounded-lg border-2 border-border bg-muted/20 p-2",
-              locked && "bg-muted/30 opacity-80",
-              "data-[over]:border-brand-400 data-[over]:bg-brand-50",
-            )}
-            aria-label={`${route.name}, ${load.blCount} BL, ${formatQuantity(load.articleCount)} articles`}
-          >
-            <div className="flex items-start justify-between gap-2 px-0.5">
-              <div className="min-w-0">
-                <p className="flex items-center gap-1 truncate text-xs font-semibold">
-                  {locked && <Lock className="size-3.5 shrink-0 text-muted-foreground" />}
-                  <span className="truncate">{route.name}</span>
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                  <StatusBadge tone={routeLifecycleTone(route.lifecycle)} size="sm">
-                    {route.lifecycle}
-                  </StatusBadge>
-                  <span>
-                    {timePart(route.plannedStart) || "08:00"} – {timePart(route.plannedEnd) || "12:00"}
-                  </span>
-                  {route.vehicleLabel && (
-                    <span className="flex items-center gap-0.5">
-                      <Truck className="size-3" /> {route.vehicleLabel}
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-xs">
-                  <span className="font-semibold tabular-nums">{load.blCount}</span> BL
-                  <span className="text-muted-foreground"> · </span>
-                  <span className="font-semibold tabular-nums">{formatQuantity(load.articleCount)}</span> art.
-                </p>
-              </div>
-            </div>
-            <div className="flex min-h-16 flex-col gap-2 p-0.5">
-              {routeItems.map((item) => (
-                <KanbanItem key={item.id} id={item.id} asHandle={!locked} disabled={locked} className="p-0.5">
-                  <BLCard
-                    item={item}
-                    routes={routes}
-                    locked={locked}
-                    onReprogrammer={locked ? () => onReprogrammer(item.assignment) : undefined}
-                    onUnassign={
-                      !locked ? () => onUnassign(item.assignment.deliveryNote, route.revision) : undefined
-                    }
-                  />
-                </KanbanItem>
-              ))}
-              {!locked && routeItems.length === 0 && (
-                <div className="flex min-h-16 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-                  Déposer ici
-                </div>
+      {routes.map((route) => (
+        <DriverRouteCard
+          key={route.name}
+          route={route}
+          routeItems={items.filter((item) => item.columnId === routeColumnId(route.name))}
+          routes={routes}
+          onReprogrammer={onReprogrammer}
+          onUnassign={onUnassign}
+          onDeleteRoute={onDeleteRoute}
+        />
+      ))}
+    </div>
+  );
+}
+
+function DriverRouteCard({
+  route,
+  routeItems,
+  routes,
+  onReprogrammer,
+  onUnassign,
+  onDeleteRoute,
+}: {
+  route: DistributionRoute;
+  routeItems: KanbanBLItem[];
+  routes: DistributionRoute[];
+  onReprogrammer: (a: DeliveryNoteAssignment) => void;
+  onUnassign: (dn: string, rev: number) => Promise<void>;
+  onDeleteRoute?: (route: DistributionRoute) => void;
+}) {
+  const load = columnLoad(routeItems);
+  const locked = isRouteLocked(route);
+  const empty = routeItems.length === 0;
+  const [userOpen, setUserOpen] = useState(empty);
+  const [isOver, setIsOver] = useState(false);
+  const open = empty || isOver || userOpen;
+
+  return (
+    <KanbanColumn
+      id={routeColumnId(route.name)}
+      disabled={locked}
+      onOverChange={setIsOver}
+      className={cn(
+        "flex flex-col gap-1.5 rounded-lg border-2 border-border bg-muted/20 p-1.5",
+        locked && "bg-muted/30 opacity-80",
+        "data-[over]:border-brand-400 data-[over]:bg-brand-50",
+      )}
+      aria-label={`${route.name}, ${load.blCount} BL, ${formatQuantity(load.articleCount)} articles`}
+    >
+      <Collapsible open={open} onOpenChange={setUserOpen}>
+        <div className="flex items-start justify-between gap-2 px-0.5">
+          <div className="min-w-0">
+            <p className="flex items-center gap-1 truncate text-xs font-semibold">
+              {locked && <Lock className="size-3.5 shrink-0 text-muted-foreground" />}
+              <Link
+                to={`/planning/routes/${encodeURIComponent(route.name)}`}
+                aria-label={`Ouvrir ${route.name}`}
+                className="truncate text-brand-700 hover:underline"
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                {route.name}
+              </Link>
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <StatusBadge tone={routeLifecycleTone(route.lifecycle)} size="sm">
+                {route.lifecycle}
+              </StatusBadge>
+              <span>
+                {timePart(route.plannedStart) || "08:00"} – {timePart(route.plannedEnd) || "12:00"}
+              </span>
+              {route.vehicleLabel && (
+                <span className="flex items-center gap-0.5">
+                  <Truck className="size-3" /> {route.vehicleLabel}
+                </span>
               )}
             </div>
-          </KanbanColumn>
-        );
-      })}
-    </div>
+            <p className="mt-1 text-xs">
+              <span className="font-semibold tabular-nums">{load.blCount}</span> BL
+              <span className="text-muted-foreground"> · </span>
+              <span className="font-semibold tabular-nums">{formatQuantity(load.articleCount)}</span> art.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {canDeleteDraftRoute(route) && empty && onDeleteRoute ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Supprimer ${route.name}`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => onDeleteRoute(route)}
+              >
+                <Trash2 />
+              </Button>
+            ) : null}
+            {!empty ? (
+              <CollapsibleTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Afficher les BL de ${route.name}`}
+                  />
+                }
+                onPointerDown={(event) => event.stopPropagation()}
+              >
+                <ChevronsUpDown />
+              </CollapsibleTrigger>
+            ) : null}
+          </div>
+        </div>
+        <CollapsibleContent>
+          <div className="flex min-h-10 flex-col gap-1.5 p-0.5">
+            {routeItems.map((item) => (
+              <KanbanItem key={item.id} id={item.id} asHandle={!locked} disabled={locked} className="p-0.5">
+                <BLCard
+                  item={item}
+                  routes={routes}
+                  locked={locked}
+                  onReprogrammer={
+                    locked && canReprogramAssignment(item.assignment.planningStatus)
+                      ? () => onReprogrammer(item.assignment)
+                      : undefined
+                  }
+                  onUnassign={!locked ? () => onUnassign(item.assignment.deliveryNote, route.revision) : undefined}
+                />
+              </KanbanItem>
+            ))}
+            {!locked && empty ? (
+              <div className="flex min-h-12 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                Déposer ici
+              </div>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </KanbanColumn>
   );
 }
 
@@ -403,8 +560,8 @@ function NewRouteDropZone({
     <KanbanColumn
       id={columnId}
       className={cn(
-        "flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-muted-foreground/40 bg-muted p-3 text-center text-xs text-muted-foreground transition-colors",
-        dragging && "min-h-36 border-muted-foreground/70 bg-muted",
+        "flex min-h-20 w-full flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-muted-foreground/40 bg-muted p-2 text-center text-xs text-muted-foreground transition-colors",
+        dragging && "min-h-24 border-muted-foreground/70 bg-muted",
         pending.length > 0 && "justify-start",
         "data-[over]:border-foreground/50 data-[over]:bg-muted data-[over]:text-foreground data-[over]:shadow-inner",
       )}
@@ -449,7 +606,7 @@ function BLCard({
     <Card
       className={`overflow-visible border border-border text-xs shadow-none ring-0 transition-shadow hover:shadow-sm ${selected ? "border-brand-500 ring-2 ring-brand-500" : ""} ${locked ? "opacity-80" : ""}`}
     >
-      <CardContent className="flex items-start gap-2 p-2.5">
+      <CardContent className="flex items-start gap-1.5 p-1.5">
         {selectable && (
           <button
             type="button"
@@ -472,7 +629,7 @@ function BLCard({
               <MapPin className="size-3" /> {a.commune}{a.wilaya ? `, ${a.wilaya}` : ""}
             </p>
           )}
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-0.5 flex items-center gap-2">
             {a.requestedDate && (
               <span className="flex items-center gap-0.5 text-muted-foreground">
                 <Calendar className="size-3" /> {a.requestedDate}
@@ -481,32 +638,36 @@ function BLCard({
             <span>{formatQuantity(a.totalQuantity)} art.</span>
           </div>
           {(a.planningAlert || a.requiresCustomerGeolocation) && (
-            <div className="mt-1 flex items-center gap-1 text-amber-600">
+            <div className="mt-0.5 flex items-center gap-1 text-amber-600">
               <AlertTriangle className="size-3" />
               <span>{a.planningAlert || "GPS client manquant"}</span>
             </div>
           )}
-          {locked && onReprogrammer && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-1 h-6 px-2 text-xs"
-              onClick={onReprogrammer}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              Reprogrammer
-            </Button>
-          )}
-          {onUnassign && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-1 h-6 px-2 text-xs text-muted-foreground"
-              onClick={onUnassign}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              Retirer
-            </Button>
+          {(onReprogrammer || onUnassign) && (
+            <div className="mt-1 flex items-center justify-end gap-1">
+              {locked && onReprogrammer ? (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="mr-auto h-5 px-1.5 text-xs"
+                  onClick={onReprogrammer}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  Reprogrammer
+                </Button>
+              ) : null}
+              {onUnassign ? (
+                <Button
+                  variant="default"
+                  size="xs"
+                  className="h-5 bg-foreground px-1.5 text-xs text-background hover:bg-foreground/80 hover:text-background"
+                  onClick={onUnassign}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
+                  Retirer
+                </Button>
+              ) : null}
+            </div>
           )}
         </div>
       </CardContent>

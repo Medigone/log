@@ -157,6 +157,14 @@ def revision_matches(current: int, expected: int | None) -> bool:
 	return expected is None or int(current or 0) == int(expected)
 
 
+def draft_route_delete_error(*, state: str | None, stop_count: int) -> str | None:
+	if (state or "Brouillon") != "Brouillon":
+		return "Seule une tournée brouillon peut être supprimée."
+	if stop_count:
+		return "Retirez tous les bons avant de supprimer la tournée."
+	return None
+
+
 def change_reason_required(route_state: str | None) -> bool:
 	return route_state == "Publiée"
 

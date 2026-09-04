@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Route,
   Send,
+  Trash2,
   Truck,
   UserRound,
   Warehouse,
@@ -41,6 +42,8 @@ import { KpiTile } from "@/components/ui/kpi-tile";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { DeleteDraftRouteDialog } from "@/features/planning/DeleteDraftRouteDialog";
+import { canDeleteDraftRoute } from "@/features/planning/kanbanHelpers";
 import { RouteMap } from "@/features/planning/RouteMap";
 import { printRouteLabels } from "@/features/planning/qrPrinting";
 import { getStopVisualStyle, type StopVisualState } from "@/features/planning/stopStatus";
@@ -297,6 +300,8 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
   const [proposal, setProposal] = useState<RouteOptimizationProposal>();
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [publishFailure, setPublishFailure] = useState("");
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteFailure, setDeleteFailure] = useState("");
   const missingGps = useMemo(() => route?.stops.filter((stop) => stop.requiresCustomerGeolocation) || [], [route]);
   const missingQr = useMemo(() => route?.stops.filter((stop) => !stop.qrCode) || [], [route]);
 
@@ -325,6 +330,19 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
       await mutate();
     } catch (publishError) {
       setPublishFailure(apiErrorMessage(publishError));
+    }
+  };
+
+  const deleteDraft = async () => {
+    setFailure("");
+    setNotice("");
+    setDeleteFailure("");
+    try {
+      await actions.deleteDraftRoute(route.name, route.revision);
+      setConfirmingDelete(false);
+      navigate("/planning");
+    } catch (deleteError) {
+      setDeleteFailure(apiErrorMessage(deleteError));
     }
   };
 
@@ -463,6 +481,19 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
                 Publier la tournée
               </Button>
             )}
+            {canDeleteDraftRoute(route) && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setDeleteFailure("");
+                  setConfirmingDelete(true);
+                }}
+                disabled={actions.saving}
+              >
+                <Trash2 />
+                Supprimer
+              </Button>
+            )}
           </>
         }
       />
@@ -476,6 +507,19 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
           error={publishFailure}
           onClose={() => { setConfirmingPublish(false); setPublishFailure(""); }}
           onConfirm={() => void publish()}
+        />
+      )}
+
+      {confirmingDelete && (
+        <DeleteDraftRouteDialog
+          routeName={route.name}
+          deleting={actions.saving}
+          error={deleteFailure}
+          onClose={() => {
+            setConfirmingDelete(false);
+            setDeleteFailure("");
+          }}
+          onConfirm={() => void deleteDraft()}
         />
       )}
 

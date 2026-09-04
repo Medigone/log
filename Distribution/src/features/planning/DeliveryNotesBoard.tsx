@@ -13,11 +13,11 @@ import { planningStatusTone } from "@/shared/design/statusTone"
 import { formatQuantity } from "@/shared/format"
 import type { DeliveryNoteAssignment, PlanningResource, PlanningStatus } from "@/shared/types/distribution"
 import {
-  LOCKED_STATUSES,
+  canReprogramAssignment,
   PLANNING_STATUSES,
   dateKey,
   isoDateWithOffset,
-  matchesDateRange,
+  matchesIndependentDateFilters,
   matchesSearch,
   timePart,
   type DateScope,
@@ -42,8 +42,10 @@ export function DeliveryNotesBoard({
 }: DeliveryNotesBoardProps) {
   const [search, setSearch] = useState("")
   const [dateScope, setDateScope] = useState<DateScope>("all")
-  const [dateFrom, setDateFrom] = useState("")
-  const [dateTo, setDateTo] = useState("")
+  const [blDateFrom, setBlDateFrom] = useState("")
+  const [blDateTo, setBlDateTo] = useState("")
+  const [plannedFrom, setPlannedFrom] = useState("")
+  const [plannedTo, setPlannedTo] = useState("")
   const [status, setStatus] = useState("")
   const [wilaya, setWilaya] = useState("")
   const [driver, setDriver] = useState("")
@@ -80,26 +82,36 @@ export function DeliveryNotesBoard({
       if (dateScope === "today" && requested !== today) return false
       if (dateScope === "tomorrow" && requested !== tomorrow) return false
       if (dateScope === "overdue" && (!requested || requested >= today)) return false
-      if (dateFrom || dateTo) {
-        const inRequested = matchesDateRange(row.requestedDate, dateFrom, dateTo)
-        const inPlanned = matchesDateRange(row.plannedDate, dateFrom, dateTo)
-        if (!inRequested && !inPlanned) return false
+      if (!matchesIndependentDateFilters(row.requestedDate, row.plannedDate, blDateFrom, blDateTo, plannedFrom, plannedTo)) {
+        return false
       }
       return true
     })
-  }, [alertsOnly, dateFrom, dateScope, dateTo, driver, rows, search, status, vehicle, wilaya])
+  }, [alertsOnly, blDateFrom, blDateTo, dateScope, driver, plannedFrom, plannedTo, rows, search, status, vehicle, wilaya])
 
   const filtersActive = Boolean(
-    search || dateScope !== "all" || dateFrom || dateTo || status || wilaya || driver || vehicle || alertsOnly,
+    search ||
+      dateScope !== "all" ||
+      blDateFrom ||
+      blDateTo ||
+      plannedFrom ||
+      plannedTo ||
+      status ||
+      wilaya ||
+      driver ||
+      vehicle ||
+      alertsOnly,
   )
-  const resetKey = `${search}|${dateScope}|${dateFrom}|${dateTo}|${status}|${wilaya}|${driver}|${vehicle}|${alertsOnly}`
+  const resetKey = `${search}|${dateScope}|${blDateFrom}|${blDateTo}|${plannedFrom}|${plannedTo}|${status}|${wilaya}|${driver}|${vehicle}|${alertsOnly}`
   const page = usePagedList(filtered, resetKey)
 
   const resetFilters = () => {
     setSearch("")
     setDateScope("all")
-    setDateFrom("")
-    setDateTo("")
+    setBlDateFrom("")
+    setBlDateTo("")
+    setPlannedFrom("")
+    setPlannedTo("")
     setStatus("")
     setWilaya("")
     setDriver("")
@@ -198,7 +210,7 @@ export function DeliveryNotesBoard({
             size="sm"
             variant={row.route ? "outline" : "default"}
             onClick={() => onEdit(row)}
-            disabled={LOCKED_STATUSES.includes(row.planningStatus)}
+            disabled={!canReprogramAssignment(row.planningStatus)}
           >
             {row.route ? <Pencil /> : <CalendarPlus />}
             {row.route ? "Reprogrammer" : "Planifier"}
@@ -235,8 +247,8 @@ export function DeliveryNotesBoard({
           value={dateScope}
           onChange={(value) => {
             setDateScope(value as DateScope)
-            setDateFrom("")
-            setDateTo("")
+            setBlDateFrom("")
+            setBlDateTo("")
           }}
           options={[
             { value: "all", label: "Toutes" },
@@ -270,12 +282,22 @@ export function DeliveryNotesBoard({
           options={[{ value: "all", label: "Tous" }, ...vehicles.map((item) => ({ value: item.name, label: item.label }))]}
         />
         <DateRangeFilter
-          from={dateFrom}
-          to={dateTo}
+          label="Date BL"
+          from={blDateFrom}
+          to={blDateTo}
           onChange={(range) => {
-            setDateFrom(range.from)
-            setDateTo(range.to)
+            setBlDateFrom(range.from)
+            setBlDateTo(range.to)
             setDateScope("all")
+          }}
+        />
+        <DateRangeFilter
+          label="Date livraison"
+          from={plannedFrom}
+          to={plannedTo}
+          onChange={(range) => {
+            setPlannedFrom(range.from)
+            setPlannedTo(range.to)
           }}
         />
         <label className="flex h-8 cursor-pointer items-center gap-2 rounded-lg border bg-background px-2.5 text-sm font-medium">

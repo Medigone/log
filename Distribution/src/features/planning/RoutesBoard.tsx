@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Eye, RotateCcw, Route, Search } from "lucide-react"
+import { Eye, RotateCcw, Route, Search, Trash2 } from "lucide-react"
 import { DateRangeFilter } from "@/components/DateRangeFilter"
 import { FilterSelect } from "@/components/FilterSelect"
 import { Button } from "@/components/ui/button"
@@ -13,6 +13,7 @@ import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar"
 import { routeLifecycleTone } from "@/shared/design/statusTone"
 import { formatQuantity } from "@/shared/format"
 import type { DistributionRoute, PlanningResource, RouteLifecycle } from "@/shared/types/distribution"
+import { canDeleteDraftRoute } from "@/features/planning/kanbanHelpers"
 import { ROUTE_LIFECYCLES, matchesDateRange, matchesSearch, timePart } from "@/features/planning/planningHelpers"
 
 interface RoutesBoardProps {
@@ -20,9 +21,10 @@ interface RoutesBoardProps {
   drivers: PlanningResource[]
   vehicles: PlanningResource[]
   isLoading: boolean
+  onDeleteRoute?: (route: DistributionRoute) => void
 }
 
-export function RoutesBoard({ routes, drivers, vehicles, isLoading }: RoutesBoardProps) {
+export function RoutesBoard({ routes, drivers, vehicles, isLoading, onDeleteRoute }: RoutesBoardProps) {
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [lifecycle, setLifecycle] = useState("")
@@ -159,10 +161,22 @@ export function RoutesBoard({ routes, drivers, vehicles, isLoading }: RoutesBoar
     {
       id: "actions",
       header: "Actions",
-      width: "200px",
+      width: "260px",
       align: "right",
       cell: (row) => (
-        <span onClick={(event) => event.stopPropagation()}>
+        <span className="inline-flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+          {canDeleteDraftRoute(row) && onDeleteRoute ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              aria-label={`Supprimer ${row.name}`}
+              onClick={() => onDeleteRoute(row)}
+            >
+              <Trash2 />
+              Supprimer
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"

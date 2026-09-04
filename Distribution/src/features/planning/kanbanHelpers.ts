@@ -107,6 +107,10 @@ export function isRouteLocked(route: DistributionRoute) {
   return route.lifecycle !== "Brouillon";
 }
 
+export function canDeleteDraftRoute(route: Pick<DistributionRoute, "lifecycle" | "stops">) {
+  return route.lifecycle === "Brouillon" && (route.stops?.length ?? 0) === 0;
+}
+
 /** Totals for a set of BL cards: count and summed articles. */
 export function columnLoad(items: KanbanBLItem[]) {
   return {
@@ -121,4 +125,19 @@ export function vehicleLabelFor(
 ): string | undefined {
   if (!vehicleId) return undefined;
   return vehicles.find((vehicle) => vehicle.name === vehicleId)?.label;
+}
+
+/** When dragging one selected BL, the whole selection moves; otherwise only the dragged card. */
+export function notesToMoveOnDrag(
+  draggedDeliveryNote: string,
+  selected: Iterable<string>,
+  orderedIds: string[] = [],
+): string[] {
+  const selectedSet = selected instanceof Set ? selected : new Set(selected);
+  if (selectedSet.size <= 1 || !selectedSet.has(draggedDeliveryNote)) {
+    return [draggedDeliveryNote];
+  }
+  const ordered = orderedIds.filter((id) => selectedSet.has(id));
+  const missing = [...selectedSet].filter((id) => !ordered.includes(id));
+  return ordered.length ? [...ordered, ...missing] : [...selectedSet];
 }

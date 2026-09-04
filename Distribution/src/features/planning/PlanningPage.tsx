@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { DeliveryNotesBoard } from "@/features/planning/DeliveryNotesBoard";
+import { DeleteDraftRouteDialog } from "@/features/planning/DeleteDraftRouteDialog";
 import { PlanningKanban } from "@/features/planning/PlanningKanban";
 import { isoDateWithOffset, nextFreeSlot, timePart } from "@/features/planning/planningHelpers";
 import { parseNewRouteColumnId, parseRouteColumnId } from "@/features/planning/kanbanHelpers";
@@ -310,6 +311,7 @@ export function PlanningPage() {
   const tab = searchParams.get("tab") === "tournees" ? "tournees" : "bl";
   const view = (searchParams.get("view") || "kanban") as "kanban" | "table";
   const kanbanDate = searchParams.get("date") || isoDateWithOffset();
+  const blDate = searchParams.get("blDate") || "";
   const [editing, setEditing] = useState<DeliveryNoteAssignment>();
   const [notice, setNotice] = useState("");
   const [failure, setFailure] = useState("");
@@ -319,12 +321,19 @@ export function PlanningPage() {
     mode?: "existing" | "new";
   } | null>(null);
   const [bulkError, setBulkError] = useState("");
+  const [deletingRoute, setDeletingRoute] = useState<DistributionRoute>();
+  const [deleteFailure, setDeleteFailure] = useState("");
 
   const isKanban = tab === "bl" && view === "kanban";
   const { data, error, isLoading, mutate } = usePlanningBoard(
     isKanban ? kanbanDate : "",
     isKanban ? kanbanDate : "",
-    isKanban ? { includeBacklog: true } : { allDates: true },
+    isKanban
+      ? {
+          includeBacklog: !blDate,
+          ...(blDate ? { blDateFrom: blDate, blDateTo: blDate } : {}),
+        }
+      : { allDates: true },
   );
   const actions = useDistributionMutations();
   const board = data?.message;
@@ -347,6 +356,8 @@ export function PlanningPage() {
     if (v !== "kanban") base.view = v;
     const d = overrides.date ?? kanbanDate;
     if (d !== isoDateWithOffset()) base.date = d;
+    const nextBl = overrides.blDate !== undefined ? overrides.blDate : blDate;
+    if (nextBl) base.blDate = nextBl;
     setSearchParams(base);
   };
 
@@ -373,12 +384,15 @@ export function PlanningPage() {
   };
 
   const handleKanbanMove = async (
-    deliveryNote: string,
+    deliveryNotes: string[],
     toColumnId: string | null,
     position: number,
     _fromColumnId: string | null,
   ) => {
     setFailure("");
+    const notes = [...new Set(deliveryNotes.filter(Boolean))];
+    if (!notes.length) return "noop";
+    const deliveryNote = notes[0];
     const assignment = rows.find((row) => row.deliveryNote === deliveryNote);
     const sourceRoute = assignment?.route ? routes.find((route) => route.name === assignment.route) : undefined;
     const targetRouteName = parseRouteColumnId(toColumnId);
@@ -386,14 +400,14 @@ export function PlanningPage() {
 
     try {
       if (!toColumnId) {
-        if (sourceRoute) {
+        if (notes.length === 1 && sourceRoute) {
           await actions.unassignDeliveryNote({
             deliveryNote,
             expectedRouteRevision: sourceRoute.revision,
           });
         }
         await mutate();
-        return;
+        return notes.length === 1 && sourceRoute ? "assigned" : "noop";
       }
 
       if (createDriverId) {
@@ -404,9 +418,9 @@ export function PlanningPage() {
             : "";
         if (!vehicle) {
           setBulkError("");
-          setBulkTarget({ deliveryNotes: [deliveryNote], driverId: createDriverId, mode: "new" });
+          setBulkTarget({ deliveryNotes: notes, driverId: createDriverId, mode: "new" });
           await mutate();
-          return;
+          return "dialog";
         }
         const slot = {
           plannedDate: kanbanDate,
@@ -415,7 +429,7 @@ export function PlanningPage() {
           vehicle,
           forceNew: true as const,
         };
-        if (sourceRoute) {
+        if (notes.length === 1 && sourceRoute) {
           await actions.reassignDeliveryNote({
             deliveryNote,
             ...slot,
@@ -423,12 +437,12 @@ export function PlanningPage() {
           });
         } else {
           await actions.scheduleDeliveryNotes({
-            deliveryNotes: [deliveryNote],
+            deliveryNotes: notes,
             ...slot,
           });
         }
         await mutate();
-        return;
+        return "assigned";
       }
 
       const targetRoute = targetRouteName
@@ -436,11 +450,11 @@ export function PlanningPage() {
         : undefined;
       if (!targetRoute || targetRoute.lifecycle !== "Brouillon") {
         await mutate();
-        return;
+        return "noop";
       }
 
       const toDriver = targetRoute.driver ?? "";
-      if (sourceRoute) {
+      if (notes.length === 1 && sourceRoute) {
         await actions.reassignDeliveryNote({
           deliveryNote,
           targetRouteId: targetRoute.name,
@@ -455,15 +469,17 @@ export function PlanningPage() {
         });
       } else {
         await actions.scheduleDeliveryNotes({
-          deliveryNotes: [deliveryNote],
+          deliveryNotes: notes,
           targetRouteId: targetRoute.name,
           expectedTargetRevision: targetRoute.revision,
         });
       }
       await mutate();
+      return "assigned";
     } catch (moveError) {
       setFailure(apiErrorMessage(moveError));
       await mutate();
+      throw moveError;
     }
   };
 
@@ -485,6 +501,9 @@ export function PlanningPage() {
       setNotice(`${result.count} BL affecté${result.count > 1 ? "s" : ""} à ${result.route.name}.`);
       if (result.warning) setFailure(result.warning);
       setBulkTarget(null);
+      if (payload.forceNew && payload.plannedDate && payload.plannedDate !== kanbanDate) {
+        updateParams({ date: payload.plannedDate });
+      }
       await mutate();
     } catch (bulkErrorValue) {
       const message = apiErrorMessage(bulkErrorValue);
@@ -501,6 +520,20 @@ export function PlanningPage() {
       await mutate();
     } catch (unassignError) {
       setFailure(apiErrorMessage(unassignError));
+    }
+  };
+
+  const handleDeleteDraftRoute = async () => {
+    if (!deletingRoute) return;
+    setFailure("");
+    setDeleteFailure("");
+    try {
+      await actions.deleteDraftRoute(deletingRoute.name, deletingRoute.revision);
+      setNotice(`${deletingRoute.name} a été supprimée.`);
+      setDeletingRoute(undefined);
+      await mutate();
+    } catch (deleteError) {
+      setDeleteFailure(apiErrorMessage(deleteError));
     }
   };
 
@@ -572,6 +605,8 @@ export function PlanningPage() {
             <PlanningKanban
               date={kanbanDate}
               onDateChange={(d: string) => updateParams({ date: d })}
+              blDate={blDate}
+              onBlDateChange={(d: string) => updateParams({ blDate: d })}
               assignments={rows}
               routes={routes}
               drivers={drivers}
@@ -583,6 +618,10 @@ export function PlanningPage() {
               }}
               onUnassign={handleUnassign}
               onReprogrammer={setEditing}
+              onDeleteRoute={(route) => {
+                setDeleteFailure("");
+                setDeletingRoute(route);
+              }}
               isLoading={isLoading}
             />
           ) : (
@@ -597,9 +636,31 @@ export function PlanningPage() {
           )}
         </TabsContent>
         <TabsContent value="tournees" className="pt-5">
-          <RoutesBoard routes={routes} drivers={drivers} vehicles={vehicles} isLoading={isLoading} />
+          <RoutesBoard
+            routes={routes}
+            drivers={drivers}
+            vehicles={vehicles}
+            isLoading={isLoading}
+            onDeleteRoute={(route) => {
+              setDeleteFailure("");
+              setDeletingRoute(route);
+            }}
+          />
         </TabsContent>
       </Tabs>
+
+      {deletingRoute && (
+        <DeleteDraftRouteDialog
+          routeName={deletingRoute.name}
+          deleting={actions.saving}
+          error={deleteFailure}
+          onClose={() => {
+            setDeletingRoute(undefined);
+            setDeleteFailure("");
+          }}
+          onConfirm={() => void handleDeleteDraftRoute()}
+        />
+      )}
 
       {bulkTarget && board && (
         <BulkAssignmentDialog
@@ -691,6 +752,7 @@ function BulkAssignmentDialog({
     initialMode ?? (routes.length > 0 ? "existing" : "new"),
   );
   const [targetRouteId, setTargetRouteId] = useState(routes[0]?.name ?? "");
+  const [plannedDate, setPlannedDate] = useState(date);
   const [driver, setDriver] = useState(initialDriver ?? "");
   const [vehicle, setVehicle] = useState(() => {
     const defaultVehicle = drivers.find((item) => item.name === initialDriver)?.vehicle;
@@ -708,6 +770,14 @@ function BulkAssignmentDialog({
   const [end, setEnd] = useState(timePart(initialSlot.plannedEnd) || "12:00");
   const [dialogError, setDialogError] = useState("");
   const shownError = dialogError || submitError || "";
+  const today = isoDateWithOffset();
+  const dateMin = plannedDate && plannedDate < today ? plannedDate : today;
+
+  const applySlot = (nextDate: string, nextDriver: string, nextVehicle: string) => {
+    const slot = nextFreeSlot(nextDate, routes, nextDriver, nextVehicle);
+    setStart(timePart(slot.plannedStart) || "08:00");
+    setEnd(timePart(slot.plannedEnd) || "12:00");
+  };
 
   const submit = async () => {
     setDialogError("");
@@ -723,15 +793,15 @@ function BulkAssignmentDialog({
         expectedTargetRevision: target?.revision,
       });
     } else {
-      if (!start || !end || !driver || !vehicle) {
-        setDialogError("Tous les champs sont obligatoires.");
+      if (!plannedDate || !start || !end || !driver || !vehicle) {
+        setDialogError("La date, le créneau, le livreur et le véhicule sont obligatoires.");
         return;
       }
       await onSubmit({
         deliveryNotes,
-        plannedDate: date,
-        plannedStart: `${date}T${start}:00`,
-        plannedEnd: `${date}T${end}:00`,
+        plannedDate,
+        plannedStart: `${plannedDate}T${start}:00`,
+        plannedEnd: `${plannedDate}T${end}:00`,
         driver,
         vehicle,
         forceNew: true,
@@ -786,6 +856,20 @@ function BulkAssignmentDialog({
             </label>
           ) : (
             <>
+              <label className="flex flex-col gap-1.5">
+                <span className="t-micro text-muted-foreground">Date planifiée</span>
+                <Input
+                  type="date"
+                  aria-label="Date planifiée"
+                  min={dateMin}
+                  value={plannedDate}
+                  onChange={(event) => {
+                    const nextDate = event.target.value;
+                    setPlannedDate(nextDate);
+                    applySlot(nextDate, driver, vehicle);
+                  }}
+                />
+              </label>
               <div className="grid grid-cols-2 gap-4">
                 <label className="flex flex-col gap-1.5">
                   <span className="t-micro text-muted-foreground">Départ</span>
@@ -811,9 +895,7 @@ function BulkAssignmentDialog({
                     if (defaultVehicle && vehicles.some((v) => v.name === defaultVehicle && v.active)) {
                       setVehicle(defaultVehicle);
                     }
-                    const slot = nextFreeSlot(date, routes, next, nextVehicle);
-                    setStart(timePart(slot.plannedStart) || "08:00");
-                    setEnd(timePart(slot.plannedEnd) || "12:00");
+                    applySlot(plannedDate, next, nextVehicle);
                   }}
                   options={[
                     { value: "", label: "Sélectionner" },
@@ -828,9 +910,7 @@ function BulkAssignmentDialog({
                   value={vehicle}
                   onChange={(next) => {
                     setVehicle(next);
-                    const slot = nextFreeSlot(date, routes, driver, next);
-                    setStart(timePart(slot.plannedStart) || "08:00");
-                    setEnd(timePart(slot.plannedEnd) || "12:00");
+                    applySlot(plannedDate, driver, next);
                   }}
                   options={[
                     { value: "", label: "Sélectionner" },

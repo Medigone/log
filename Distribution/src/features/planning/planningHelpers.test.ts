@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextFreeSlot } from "./planningHelpers";
+import { canReprogramAssignment, matchesIndependentDateFilters, nextFreeSlot } from "./planningHelpers";
 import type { DistributionRoute } from "@/shared/types/distribution";
 
 function route(overrides: Partial<DistributionRoute> = {}): DistributionRoute {
@@ -14,6 +14,36 @@ function route(overrides: Partial<DistributionRoute> = {}): DistributionRoute {
     ...overrides,
   } as DistributionRoute;
 }
+
+describe("matchesIndependentDateFilters", () => {
+  it("filtre la date BL sans tenir compte de la date de tournée", () => {
+    expect(
+      matchesIndependentDateFilters("2026-09-06", "2026-09-07", "2026-09-06", "2026-09-06", "", ""),
+    ).toBe(true);
+    expect(
+      matchesIndependentDateFilters("2026-09-05", "2026-09-06", "2026-09-06", "2026-09-06", "", ""),
+    ).toBe(false);
+  });
+
+  it("filtre la date de livraison sans tenir compte de la date BL", () => {
+    expect(
+      matchesIndependentDateFilters("2026-09-06", "2026-09-07", "", "", "2026-09-07", "2026-09-07"),
+    ).toBe(true);
+    expect(
+      matchesIndependentDateFilters("2026-09-07", "2026-09-06", "", "", "2026-09-07", "2026-09-07"),
+    ).toBe(false);
+  });
+});
+
+describe("canReprogramAssignment", () => {
+  it("refuse un BL déjà en cours, terminé ou en exception", () => {
+    expect(canReprogramAssignment("Publié")).toBe(true);
+    expect(canReprogramAssignment("En retard")).toBe(true);
+    expect(canReprogramAssignment("En cours")).toBe(false);
+    expect(canReprogramAssignment("Terminé")).toBe(false);
+    expect(canReprogramAssignment("Exception")).toBe(false);
+  });
+});
 
 describe("nextFreeSlot", () => {
   it("keeps 08:00–12:00 when the driver is free", () => {

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { PlanningPage } from "@/features/planning/PlanningPage";
@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   scheduleDeliveryNotes: vi.fn().mockResolvedValue({ route: { name: "LIV-NEW" }, count: 2 }),
   reassignDeliveryNote: vi.fn().mockResolvedValue({}),
   unassignDeliveryNote: vi.fn().mockResolvedValue({}),
+  deleteDraftRoute: vi.fn().mockResolvedValue({ success: true, routeId: "LIV-EMPTY" }),
   mutate: vi.fn(),
   boardArgs: { dateFrom: "", dateTo: "", filters: {} as Record<string, unknown> },
   currentBoard: undefined as PlanningBoard | undefined,
@@ -40,6 +41,26 @@ const publishedRoute = {
   routing: { status: "not_calculated", provider: "openrouteservice", profile: "driving-car", optimizationEnabled: false, stopDurationMinutes: 15, stopDurationSeconds: 900 },
   stock: { status: "À charger", loadedQuantity: 0, deliveredQuantity: 0, remainingQuantity: 0, returnedQuantity: 0, lines: [] },
   cash: { routeId: "LIV-26-08-00002", routeLifecycle: "Publiée", status: "Sans encaissement", declaredCash: 0, declaredCheques: 0, declaredTotal: 0, countedTotal: 0, validatedTotal: 0, payments: [] },
+  stops: [],
+} as DistributionRoute;
+
+const emptyDraftRoute = {
+  ...publishedRoute,
+  name: "LIV-EMPTY",
+  lifecycle: "Brouillon",
+  revision: 1,
+  publishedRevision: 0,
+  acknowledged: false,
+  driver: "DRV-2",
+  driverName: "Livreur 2",
+  vehicle: "VEH-2",
+  vehicleLabel: "Camion B",
+  totalQuantity: 0,
+  cash: {
+    ...publishedRoute.cash,
+    routeId: "LIV-EMPTY",
+    routeLifecycle: "Brouillon",
+  },
   stops: [],
 } as DistributionRoute;
 
@@ -84,7 +105,7 @@ const board: PlanningBoard = {
       routeRevision: 2,
     }),
   ],
-  routes: [publishedRoute],
+  routes: [publishedRoute, emptyDraftRoute],
   drivers: [
     { name: "DRV-1", label: "Livreur Test", active: true },
     { name: "DRV-2", label: "Livreur 2", active: true, vehicle: "VEH-2" },
@@ -109,6 +130,7 @@ vi.mock("@/shared/api/distribution", () => ({
     scheduleDeliveryNotes: mocks.scheduleDeliveryNotes,
     reassignDeliveryNote: mocks.reassignDeliveryNote,
     unassignDeliveryNote: mocks.unassignDeliveryNote,
+    deleteDraftRoute: mocks.deleteDraftRoute,
     publishRoute: vi.fn(),
     getRepreparationImpact: vi.fn(),
     reprepareChangedOrder: vi.fn(),
@@ -135,6 +157,10 @@ function renderPage(path = "/") {
   );
 }
 
+async function revealRouteStops(user: ReturnType<typeof userEvent.setup>, routeName: string) {
+  await user.click(screen.getByRole("button", { name: `Afficher les BL de ${routeName}` }));
+}
+
 describe("PlanningPage", () => {
   beforeEach(() => {
     mocks.currentBoard = board;
@@ -142,6 +168,7 @@ describe("PlanningPage", () => {
     mocks.scheduleDeliveryNotes.mockClear();
     mocks.reassignDeliveryNote.mockClear();
     mocks.unassignDeliveryNote.mockClear();
+    mocks.deleteDraftRoute.mockClear();
     mocks.mutate.mockClear();
   });
 
@@ -158,7 +185,8 @@ describe("PlanningPage", () => {
     expect(screen.getByLabelText("Wilaya")).toBeInTheDocument();
     expect(screen.getByLabelText("Livreur")).toBeInTheDocument();
     expect(screen.getByLabelText("Véhicule")).toBeInTheDocument();
-    expect(screen.getByLabelText("Période")).toBeInTheDocument();
+    expect(screen.getByLabelText("Date BL")).toBeInTheDocument();
+    expect(screen.getByLabelText("Date livraison")).toBeInTheDocument();
     await user.click(screen.getByLabelText("Statut"));
     expect(screen.getByRole("option", { name: "En retard" })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /alertes seules/i })).not.toBeChecked();
@@ -238,12 +266,45 @@ describe("PlanningPage", () => {
     expect(screen.getByText("Détail tournée")).toBeInTheDocument();
   });
 
+  it("le nom de tournée du kanban ouvre la fiche", async () => {
+    const user = userEvent.setup();
+    renderPage("/?date=2026-08-26");
+    expect(screen.queryByText("MAT-DN-2026-00003")).not.toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Ouvrir LIV-26-08-00002" });
+    expect(link).toHaveAttribute("href", "/planning/routes/LIV-26-08-00002");
+    await user.click(link);
+    expect(screen.getByText("Détail tournée")).toBeInTheDocument();
+  });
+
+  it("propose de supprimer seulement une tournée brouillon vide après confirmation", async () => {
+    const user = userEvent.setup();
+    renderPage("/?date=2026-08-26");
+    expect(screen.queryByRole("button", { name: "Supprimer LIV-26-08-00002" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Supprimer LIV-EMPTY" }));
+    const dialog = screen.getByRole("dialog", { name: /supprimer la tournée/i });
+    expect(dialog).toHaveTextContent("LIV-EMPTY");
+    expect(mocks.deleteDraftRoute).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: /^supprimer$/i }));
+    expect(mocks.deleteDraftRoute).toHaveBeenCalledWith("LIV-EMPTY", 1);
+  });
+
+  it("propose la suppression d’un brouillon vide depuis le tableau des tournées", async () => {
+    const user = userEvent.setup();
+    renderPage("/?view=table");
+    await user.click(screen.getByRole("tab", { name: /tournées/i }));
+    expect(screen.queryByRole("button", { name: "Supprimer LIV-26-08-00002" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Supprimer LIV-EMPTY" }));
+    await user.click(screen.getByRole("button", { name: /^supprimer$/i }));
+    expect(mocks.deleteDraftRoute).toHaveBeenCalledWith("LIV-EMPTY", 1);
+  });
+
   it("affiche le kanban par défaut avec la date du jour", () => {
     renderPage();
     const today = new Date();
     const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     expect(screen.getByRole("button", { name: /kanban/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Date du planning")).toHaveValue(iso);
+    expect(screen.getByLabelText("Date BL")).toHaveValue("");
+    expect(screen.getByLabelText("Date livraison")).toHaveValue(iso);
     expect(screen.getByText("À planifier")).toBeInTheDocument();
     expect(screen.getByText("Livreur Test")).toBeInTheDocument();
     expect(screen.getByText("Livreur 2")).toBeInTheDocument();
@@ -265,6 +326,56 @@ describe("PlanningPage", () => {
     renderPage("/?date=2026-09-03");
     expect(screen.getByText("DN-FUTURE")).toBeInTheDocument();
     expect(screen.getByText("2026-12-15")).toBeInTheDocument();
+    expect(mocks.boardArgs).toEqual({
+      dateFrom: "2026-09-03",
+      dateTo: "2026-09-03",
+      filters: { includeBacklog: true },
+    });
+  });
+
+  it("sépare la date BL et la date de livraison du kanban", () => {
+    mocks.currentBoard = {
+      ...board,
+      unassigned: [assignment({ deliveryNote: "DN-6", requestedDate: "2026-09-06" })],
+      assignments: [
+        assignment({ deliveryNote: "DN-6", requestedDate: "2026-09-06" }),
+        assignment({
+          deliveryNote: "DN-7",
+          requestedDate: "2026-09-06",
+          plannedDate: "2026-09-07",
+          planningStatus: "Planifié",
+          route: "LIV-07",
+          driver: "DRV-1",
+          vehicle: "VEH-1",
+          routeRevision: 1,
+        }),
+      ],
+      routes: [{ ...publishedRoute, name: "LIV-07", date: "2026-09-07" }],
+    };
+    renderPage("/?date=2026-09-07&blDate=2026-09-06");
+    expect(screen.getByLabelText("Date BL")).toHaveValue("2026-09-06");
+    expect(screen.getByLabelText("Date livraison")).toHaveValue("2026-09-07");
+    expect(mocks.boardArgs).toEqual({
+      dateFrom: "2026-09-07",
+      dateTo: "2026-09-07",
+      filters: { includeBacklog: false, blDateFrom: "2026-09-06", blDateTo: "2026-09-06" },
+    });
+    expect(screen.getByText("DN-6")).toBeInTheDocument();
+    expect(screen.getByText("LIV-07")).toBeInTheDocument();
+  });
+
+  it("le bouton Toutes enlève le filtre date BL", async () => {
+    const user = userEvent.setup();
+    renderPage("/?date=2026-09-07&blDate=2026-09-06");
+    await user.click(screen.getByRole("button", { name: /^toutes$/i }));
+    expect(screen.getByLabelText("Date BL")).toHaveValue("");
+    expect(screen.getByLabelText("Date livraison")).toHaveValue("2026-09-07");
+    expect(mocks.boardArgs).toEqual({
+      dateFrom: "2026-09-07",
+      dateTo: "2026-09-07",
+      filters: { includeBacklog: true },
+    });
+    expect(screen.getByTestId("location")).not.toHaveTextContent("blDate");
   });
 
   it("bascule vers le tableau puis conserve les filtres BL", async () => {
@@ -280,8 +391,40 @@ describe("PlanningPage", () => {
     const user = userEvent.setup();
     renderPage("/?date=2026-08-26");
     expect(screen.getByText("Livreur Test")).toBeInTheDocument();
+    await revealRouteStops(user, "LIV-26-08-00002");
     await user.click(screen.getByRole("button", { name: /reprogrammer/i }));
     expect(screen.getByRole("dialog")).toHaveTextContent(/reprogrammer la livraison/i);
+  });
+
+  it("n’affiche pas Reprogrammer pour un BL déjà terminé", async () => {
+    const user = userEvent.setup();
+    mocks.currentBoard = {
+      ...board,
+      assignments: [
+        assignment({
+          deliveryNote: "MAT-DN-2026-00004",
+          customer: "C-2",
+          customerName: "CLIENT 2",
+          totalQuantity: 0,
+          planningStatus: "Terminé",
+          status: "Livré",
+          route: "LIV-26-08-00002",
+          driver: "DRV-1",
+          vehicle: "VEH-1",
+          plannedDate: "2026-08-26",
+          requestedDate: "2026-08-28",
+          plannedStart: "2026-08-26T12:00:00",
+          plannedEnd: "2026-08-26T14:00:00",
+          routeRevision: 2,
+        }),
+      ],
+      routes: [{ ...publishedRoute, lifecycle: "Terminée" }],
+    };
+    renderPage("/?date=2026-08-26");
+    await revealRouteStops(user, "LIV-26-08-00002");
+    expect(screen.getByText("MAT-DN-2026-00004")).toBeInTheDocument();
+    expect(screen.getByText("Terminé")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reprogrammer/i })).not.toBeInTheDocument();
   });
 
   it("affiche le nombre de BL et d'articles dans chaque colonne livreur", () => {
@@ -290,12 +433,34 @@ describe("PlanningPage", () => {
     expect(screen.getByLabelText("Livreur 2, 0 BL, 0 articles")).toBeInTheDocument();
   });
 
-  it("affiche la tournée avec ses BL à l'intérieur et une zone nouvelle tournée", () => {
+  it("affiche la tournée avec ses BL à l'intérieur et une zone nouvelle tournée", async () => {
+    const user = userEvent.setup();
     renderPage("/?date=2026-08-26");
     expect(screen.getByText("LIV-26-08-00002")).toBeInTheDocument();
+    expect(screen.queryByText("MAT-DN-2026-00003")).not.toBeInTheDocument();
+    await revealRouteStops(user, "LIV-26-08-00002");
     expect(screen.getByText("MAT-DN-2026-00003")).toBeInTheDocument();
     expect(screen.getByLabelText("LIV-26-08-00002, 1 BL, 12 articles")).toBeInTheDocument();
     expect(screen.getAllByText("Nouvelle tournée").length).toBeGreaterThan(0);
+  });
+
+  it("sélectionne tous les BL du backlog d’un clic", async () => {
+    const user = userEvent.setup();
+    mocks.currentBoard = {
+      ...board,
+      assignments: [
+        assignment({ deliveryNote: "DN-1" }),
+        assignment({ deliveryNote: "DN-2" }),
+        assignment({ deliveryNote: "DN-3" }),
+      ],
+      routes: [],
+    };
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /tout sélectionner/i }));
+    expect(screen.getByText(/3 BL sélectionnés/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^désélectionner$/i })).toHaveLength(3);
+    await user.click(screen.getByRole("button", { name: /tout désélectionner/i }));
+    expect(screen.queryByText(/BL sélectionné/i)).not.toBeInTheDocument();
   });
 
   it("sélectionne plusieurs BL du backlog et ouvre l'affectation groupée", async () => {
@@ -310,10 +475,75 @@ describe("PlanningPage", () => {
     };
     renderPage();
     await user.click(screen.getAllByRole("button", { name: /^sélectionner$/i })[0]);
-    expect(screen.getByText(/1 BL sélectionné/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^sélectionner$/i }));
+    expect(screen.getByText(/2 BL sélectionnés/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /affecter à une tournée/i }));
-    expect(screen.getByText(/affecter 1 BL/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^affecter$/i })).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText(/affecter 2 BL/i)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /tournée existante/i })).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: /nouvelle tournée/i })).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Date planifiée")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: /^affecter$/i })).toBeInTheDocument();
+  });
+
+  it("affecte les BL sélectionnés à une tournée brouillon existante", async () => {
+    const user = userEvent.setup();
+    mocks.currentBoard = {
+      ...board,
+      assignments: [
+        assignment({ deliveryNote: "DN-1" }),
+        assignment({ deliveryNote: "DN-2" }),
+      ],
+      routes: [emptyDraftRoute],
+    };
+    renderPage("/?date=2026-08-26");
+    await user.click(screen.getAllByRole("button", { name: /^sélectionner$/i })[0]);
+    await user.click(screen.getByRole("button", { name: /^sélectionner$/i }));
+    await user.click(screen.getByRole("button", { name: /affecter à une tournée/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("button", { name: /tournée existante/i })).toBeEnabled();
+    expect(within(dialog).queryByLabelText("Date planifiée")).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: /^affecter$/i }));
+    expect(mocks.scheduleDeliveryNotes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryNotes: expect.arrayContaining(["DN-1", "DN-2"]),
+        targetRouteId: "LIV-EMPTY",
+        expectedTargetRevision: 1,
+      }),
+    );
+  });
+
+  it("crée une nouvelle tournée à la date choisie pour les BL sélectionnés", async () => {
+    const user = userEvent.setup();
+    mocks.currentBoard = {
+      ...board,
+      assignments: [
+        assignment({ deliveryNote: "DN-1" }),
+        assignment({ deliveryNote: "DN-2" }),
+      ],
+      routes: [emptyDraftRoute],
+    };
+    renderPage("/?date=2026-08-26");
+    await user.click(screen.getAllByRole("button", { name: /^sélectionner$/i })[0]);
+    await user.click(screen.getByRole("button", { name: /^sélectionner$/i }));
+    await user.click(screen.getByRole("button", { name: /affecter à une tournée/i }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /nouvelle tournée/i }));
+    fireEvent.change(within(dialog).getByLabelText("Date planifiée"), { target: { value: "2026-09-10" } });
+    await chooseOption(user, within(dialog).getByLabelText("Livreur"), "Livreur Test");
+    await chooseOption(user, within(dialog).getByLabelText("Véhicule"), "Camion Test");
+    await user.click(within(dialog).getByRole("button", { name: /^affecter$/i }));
+    expect(mocks.scheduleDeliveryNotes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deliveryNotes: expect.arrayContaining(["DN-1", "DN-2"]),
+        plannedDate: "2026-09-10",
+        plannedStart: "2026-09-10T08:00:00",
+        plannedEnd: "2026-09-10T12:00:00",
+        driver: "DRV-1",
+        vehicle: "VEH-1",
+        forceNew: true,
+      }),
+    );
   });
 
   it("pagine les BL au-delà de 20 lignes", async () => {

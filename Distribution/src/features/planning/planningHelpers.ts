@@ -14,6 +14,10 @@ export const PLANNING_STATUSES: PlanningStatus[] = [
 
 export const LOCKED_STATUSES = ["En cours", "Terminé", "Exception"]
 
+export function canReprogramAssignment(status?: string) {
+  return !LOCKED_STATUSES.includes(status || "")
+}
+
 export const ROUTE_LIFECYCLES: RouteLifecycle[] = [
   "Brouillon",
   "Publiée",
@@ -46,6 +50,20 @@ export function matchesDateRange(value: string | undefined, from: string, to: st
   if (!date) return false
   if (from && date < from) return false
   if (to && date > to) return false
+  return true
+}
+
+/** Date BL (`requestedDate`) and date livraison (`plannedDate`) are independent. */
+export function matchesIndependentDateFilters(
+  requestedDate: string | undefined,
+  plannedDate: string | undefined,
+  blFrom: string,
+  blTo: string,
+  deliveryFrom: string,
+  deliveryTo: string,
+) {
+  if ((blFrom || blTo) && !matchesDateRange(requestedDate, blFrom, blTo)) return false
+  if ((deliveryFrom || deliveryTo) && !matchesDateRange(plannedDate, deliveryFrom, deliveryTo)) return false
   return true
 }
 
