@@ -27,6 +27,9 @@ const mocks = vi.hoisted(() => {
     pick_lists: [{ name: "PL-1", docstatus: 0, sales_orders: ["SO-1"], locations: [location], grouped: [] as never[], delivery_notes: [] as Array<{ name: string; customer_name: string }> }],
     grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, picked_qty: 0, locations: [location] }],
     delivery_notes: [] as Array<{ name: string; customer_name: string }>,
+    order_changed_notice: null as string | null | undefined,
+    modification_pending: false as boolean | undefined,
+    pending_sales_orders: undefined as string[] | undefined,
   };
   return {
     createPickList: vi.fn().mockResolvedValue({ name: "SESSION-PL-1", pick_lists: [{ name: "PL-1" }] }),
@@ -56,7 +59,9 @@ const mocks = vi.hoisted(() => {
       requested_qty?: number
       per_picked?: number
       has_available_stock?: boolean
+      custom_preparation_status?: string | null
       stock_shortages?: Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number }>
+      items?: Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number; uom?: string }>
     }> },
     location,
     draftSession,
@@ -75,10 +80,12 @@ const mocks = vi.hoisted(() => {
       picked_qty?: number
       warehouses?: string[]
       delivery_notes: string[]
+      custom_order_changed?: number
+      items?: Array<{ item_code: string; item_name: string; warehouse?: string; sales_order?: string; requested_qty: number; picked_qty: number; uom?: string }>
     }>,
     baseQueue: [
-      { name: "SO-1", customer_name: "Client Test 1", delivery_date: tomorrowIso, total_qty: 2, custom_wilaya: "Alger", custom_commune: "COM-0001", custom_commune_nom: "Alger Centre", status: "To Deliver" },
-      { name: "SO-2", customer_name: "Client Test 2", delivery_date: tomorrowIso, total_qty: 3, custom_wilaya: "Alger", custom_commune: "COM-0002", custom_commune_nom: "Bab Ezzouar", status: "To Deliver and Bill" },
+      { name: "SO-1", customer_name: "Client Test 1", delivery_date: tomorrowIso, total_qty: 2, custom_wilaya: "Alger", custom_commune: "COM-0001", custom_commune_nom: "Alger Centre", status: "To Deliver", items: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", required: 2, available: 10, uom: "Unité" }] },
+      { name: "SO-2", customer_name: "Client Test 2", delivery_date: tomorrowIso, total_qty: 3, custom_wilaya: "Alger", custom_commune: "COM-0002", custom_commune_nom: "Bab Ezzouar", status: "To Deliver and Bill", items: [{ item_code: "ART-2", item_name: "Article deux", warehouse: "DEPOT", required: 3, available: 3, uom: "Unité" }] },
       { name: "SO-3", customer_name: "Client Test 3", delivery_date: "2099-01-01", total_qty: 1, custom_wilaya: "Oran", custom_commune: "COM-0003", custom_commune_nom: "Oran", status: "To Deliver" },
     ],
     salesOrderDetail: {
@@ -205,7 +212,7 @@ describe("PreparationPage", () => {
 
     await user.click(screen.getByRole("tab", { name: /retours/i }));
     expect(screen.getByText("LIV-RET-1")).toBeInTheDocument();
-    expect(screen.getByText("5 à retourner")).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /LIV-RET-1/ })).getByText("5")).toBeInTheDocument();
     expect(screen.queryByText("Commandes (3)")).not.toBeInTheDocument();
   });
 
@@ -315,6 +322,14 @@ describe("PreparationPage", () => {
     expect(mocks.createPickList).toHaveBeenCalledWith(["SO-1", "SO-2"]);
   });
 
+  it("filtre les commandes en retard depuis l’URL", () => {
+    mocks.queueData.message[0] = { ...mocks.queueData.message[0], name: "SO-LATE", delivery_date: "2020-01-01" };
+    renderPrep("/preparation?dateScope=overdue");
+    expect(screen.getAllByText("SO-LATE").length).toBeGreaterThan(0);
+    expect(screen.queryByText("SO-2")).not.toBeInTheDocument();
+    expect(screen.queryByText("SO-3")).not.toBeInTheDocument();
+  });
+
   it("ouvre la fiche commande au clic sur la ligne sans sélectionner", async () => {
     const user = userEvent.setup();
     renderPrep();
@@ -323,6 +338,53 @@ describe("PreparationPage", () => {
     expect(screen.getByRole("heading", { name: "SO-1" })).toBeInTheDocument();
     expect(screen.queryByText(/1 sélectionnée/)).not.toBeInTheDocument();
     expect(screen.getByText("Article test")).toBeInTheDocument();
+  });
+
+  it("déplie les articles et quantités d’une commande dans le sous-tableau", async () => {
+    const user = userEvent.setup();
+    renderPrep();
+    expect(screen.queryByText("Demandé restant")).not.toBeInTheDocument();
+    const row = screen.getByRole("row", { name: /SO-1/ });
+    await user.click(within(row).getByRole("button", { name: "Afficher les articles" }));
+    expect(screen.getByRole("region", { name: "Articles de la commande" })).toBeInTheDocument();
+    expect(screen.getByText("Article test")).toBeInTheDocument();
+    expect(screen.getByText("ART-1")).toBeInTheDocument();
+    expect(screen.getByText("2 Unité")).toBeInTheDocument();
+    expect(screen.getByText("DEPOT")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /SO-2/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /SO-3/ })).toBeInTheDocument();
+  });
+
+  it("masque la colonne Wilaya et la rétablit depuis Colonnes", async () => {
+    const user = userEvent.setup();
+    renderPrep();
+    expect(screen.getByText("Alger Centre")).toBeInTheDocument();
+    expect(screen.queryByText("Actions")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Liste" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Désépingler Liste" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Wilaya" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Colonnes" }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Wilaya" }));
+    expect(screen.getByRole("button", { name: "Wilaya" })).toBeInTheDocument();
+    expect(screen.getAllByText("Alger").length).toBeGreaterThan(0);
+  });
+
+  it("pagine les commandes et affiche la page suivante", async () => {
+    mocks.queueData.message = Array.from({ length: 12 }, (_, index) => ({
+      ...mocks.baseQueue[0],
+      name: `SO-${index + 1}`,
+      customer_name: `Client Test ${index + 1}`,
+    }));
+    const user = userEvent.setup();
+    renderPrep();
+    expect(screen.getByText("Commandes (12)")).toBeInTheDocument();
+    expect(screen.getByText("1 – 10 sur 12")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /SO-1\b/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /SO-12\b/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Page suivante" }));
+    expect(screen.getByText("11 – 12 sur 12")).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /SO-12\b/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /SO-1\b/ })).not.toBeInTheDocument();
   });
 
   it("crée plusieurs listes depuis les cases à cocher de la barre", async () => {
@@ -433,6 +495,9 @@ describe("PreparationPage", () => {
       pick_lists: [{ name: "PL-1", docstatus: 1, sales_orders: ["SO-1"], locations: [location], grouped: [], delivery_notes: [{ name: "DN-1", customer_name: "Client Test 1" }] }],
       grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, picked_qty: 2, locations: [location] }],
       delivery_notes: [{ name: "DN-1", customer_name: "Client Test 1" }],
+      order_changed_notice: null,
+      modification_pending: false,
+      pending_sales_orders: undefined,
     };
     renderWorkspace();
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
@@ -587,7 +652,6 @@ describe("PreparationPage", () => {
 
     const openButtons = screen.getAllByRole("button", { name: "Ouvrir les 2 listes de prélèvement" });
     expect(openButtons.length).toBeGreaterThan(0);
-    expect(openButtons[0]).toHaveTextContent("Ouvrir les listes");
     await user.click(openButtons[0]);
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
   });
@@ -605,6 +669,7 @@ describe("PreparationPage", () => {
       picked_qty: 0,
       warehouses: ["DEPOT"],
       delivery_notes: [],
+      items: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", sales_order: "SO-1", requested_qty: 2, picked_qty: 0, uom: "Unité" }],
     }];
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation?tab=listes"]}><PreparationPage /></MemoryRouter>);
@@ -615,6 +680,31 @@ describe("PreparationPage", () => {
     await user.click(screen.getByText("PL-1"));
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /contrôle final/i })).toBeInTheDocument();
+  });
+
+  it("déplie les articles d’une liste de prélèvement", async () => {
+    mocks.recentPickLists = [{
+      name: "PL-1",
+      docstatus: 0,
+      status: "Draft",
+      modified: "2026-09-01 10:00:00",
+      sales_order_count: 1,
+      sales_orders: ["SO-1"],
+      customer_names: ["Client Test 1"],
+      requested_qty: 2,
+      picked_qty: 0,
+      warehouses: ["DEPOT"],
+      delivery_notes: [],
+      items: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", sales_order: "SO-1", requested_qty: 2, picked_qty: 0, uom: "Unité" }],
+    }];
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={["/preparation?tab=listes"]}><PreparationPage /></MemoryRouter>);
+    const row = screen.getByRole("row", { name: /PL-1/ });
+    await user.click(within(row).getByRole("button", { name: "Afficher les articles" }));
+    expect(screen.getByRole("region", { name: "Articles de la liste de prélèvement" })).toBeInTheDocument();
+    expect(screen.getByText("Article test")).toBeInTheDocument();
+    expect(screen.getByText("ART-1")).toBeInTheDocument();
+    expect(screen.getByText("2 Unité")).toBeInTheDocument();
   });
 
   it("filtre les listes par client et par wilaya", async () => {
@@ -672,7 +762,7 @@ describe("PreparationPage", () => {
       custom_preparation_status: "Modifiée",
     };
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
-    expect(screen.getAllByText("Modifiée").length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText("Commande modifiée").length).toBeGreaterThan(0);
   });
 
   it("affiche Commande modifiée dans l’onglet Listes", () => {
@@ -691,7 +781,7 @@ describe("PreparationPage", () => {
       custom_order_changed: 1,
     }];
     render(<MemoryRouter initialEntries={["/preparation?tab=listes"]}><PreparationPage /></MemoryRouter>);
-    expect(screen.getByText("Commande modifiée")).toBeInTheDocument();
+    expect(screen.getByLabelText("Commande modifiée")).toBeInTheDocument();
   });
 
   it("affiche une alerte si la session signale une commande modifiée", async () => {

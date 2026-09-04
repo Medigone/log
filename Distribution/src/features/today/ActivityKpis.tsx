@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { KpiTile } from "@/components/ui/kpi-tile";
+import { cn } from "@/lib/utils";
 import type { StatusTone } from "@/shared/design/statusTone";
 
 export interface ActivityKpiItem {
@@ -21,7 +22,10 @@ export function ActivityKpis({
   onNavigate: (target: string) => void;
 }) {
   return (
-    <section aria-label="Indicateurs d’activité" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+    <section
+      aria-label="Indicateurs d’activité"
+      className={cn("grid gap-3 sm:grid-cols-2", items.length <= 3 ? "lg:grid-cols-3" : "lg:grid-cols-4")}
+    >
       {items.map((item) => (
         <KpiTile
           key={item.title}

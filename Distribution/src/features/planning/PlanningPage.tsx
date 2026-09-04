@@ -312,6 +312,7 @@ export function PlanningPage() {
   const view = (searchParams.get("view") || "kanban") as "kanban" | "table";
   const kanbanDate = searchParams.get("date") || isoDateWithOffset();
   const blDate = searchParams.get("blDate") || "";
+  const status = searchParams.get("status") || "";
   const [editing, setEditing] = useState<DeliveryNoteAssignment>();
   const [notice, setNotice] = useState("");
   const [failure, setFailure] = useState("");
@@ -358,6 +359,8 @@ export function PlanningPage() {
     if (d !== isoDateWithOffset()) base.date = d;
     const nextBl = overrides.blDate !== undefined ? overrides.blDate : blDate;
     if (nextBl) base.blDate = nextBl;
+    const nextStatus = overrides.status !== undefined ? overrides.status : status;
+    if (nextStatus) base.status = nextStatus;
     setSearchParams(base);
   };
 
@@ -623,6 +626,8 @@ export function PlanningPage() {
                 setDeletingRoute(route);
               }}
               isLoading={isLoading}
+              statusFilter={status}
+              onStatusFilterChange={(value: string) => updateParams({ status: value })}
             />
           ) : (
             <DeliveryNotesBoard
@@ -632,6 +637,7 @@ export function PlanningPage() {
               isLoading={isLoading}
               onEdit={setEditing}
               onReprepare={(row) => void reprepare(row)}
+              statusFilter={status}
             />
           )}
         </TabsContent>

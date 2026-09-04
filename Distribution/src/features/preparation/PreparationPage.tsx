@@ -8,6 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
+import {
+  OrderItemsList,
+  OrderItemsSubGrid,
+  PreparationSubTableGrid,
+  namedHeader,
+} from "@/features/preparation/PreparationSubTableGrid";
+import type { ColumnDef } from "@tanstack/react-table";
+import type { DataGridFeatures } from "@/components/reui/data-grid/data-grid";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -23,6 +31,7 @@ import {
   CheckCircle,
   ClipboardList,
   Package,
+  Plus,
   Printer,
   QrCode,
   RotateCcw,
@@ -70,6 +79,11 @@ const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
 
 type DateScope = "all" | "today" | "tomorrow" | "overdue";
 type ListFilter = "all" | "none" | "draft" | "submitted";
+
+function dateScopeFromParam(value: string | null): DateScope {
+  if (value === "today" || value === "tomorrow" || value === "overdue") return value;
+  return "all";
+}
 
 function localIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -159,20 +173,20 @@ function orderPickProgress(order: SalesOrderRow) {
 function PickProgressBar({ order }: { order: SalesOrderRow }) {
   const { picked, requested, percent } = orderPickProgress(order);
   return (
-    <div className="min-w-[7.5rem]">
+    <div className="flex min-w-[11rem] items-center gap-2 whitespace-nowrap">
       <div
         role="progressbar"
         aria-label={`Prélèvement ${formatQuantity(picked)} sur ${formatQuantity(requested)}`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
-        className="h-1.5 overflow-hidden rounded-full bg-muted"
+        className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-muted"
       >
         <div className="h-full rounded-full bg-brand-600 transition-[width]" style={{ width: `${percent}%` }} />
       </div>
-      <p className="mt-1 num t-meta text-muted-foreground">
+      <span className="num t-meta text-muted-foreground">
         {formatQuantity(picked)} / {formatQuantity(requested)} · {percent} %
-      </p>
+      </span>
     </div>
   );
 }
@@ -181,26 +195,28 @@ function OpenDraftListsButton({
   names,
   onOpen,
   disabled,
+  icon,
 }: {
   names: string[];
   onOpen: (names: string[]) => void;
   disabled?: boolean;
+  icon?: boolean;
 }) {
   const many = names.length > 1;
+  const label = many
+    ? `Ouvrir les ${names.length} listes de prélèvement`
+    : `Ouvrir la liste ${names[0]}`;
   return (
     <Button
       type="button"
-      size="sm"
-      variant="outline"
+      size={icon ? "icon-sm" : "sm"}
+      variant={icon ? "ghost" : "outline"}
       disabled={disabled}
-      aria-label={
-        many
-          ? `Ouvrir les ${names.length} listes de prélèvement`
-          : `Ouvrir la liste ${names[0]}`
-      }
+      aria-label={label}
+      title={icon ? label : undefined}
       onClick={() => onOpen(names)}
     >
-      {many ? "Ouvrir les listes" : "Ouvrir la liste"}
+      {icon ? <ClipboardList /> : many ? "Ouvrir les listes" : "Ouvrir la liste"}
     </Button>
   );
 }
@@ -232,18 +248,21 @@ function SalesOrderPicker({
   onShowPickLists: () => void;
 }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [errorMessage, setErrorMessage] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [pendingOrders, setPendingOrders] = useState<SalesOrderRow[]>([]);
-  const [dateScope, setDateScope] = useState<DateScope>("all");
+  const [dateScope, setDateScope] = useState<DateScope>(() => dateScopeFromParam(searchParams.get("dateScope")));
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [wilaya, setWilaya] = useState("");
   const [commune, setCommune] = useState("");
   const [customer, setCustomer] = useState("");
   const [listFilter, setListFilter] = useState<ListFilter>("all");
+  const [shortageOnly, setShortageOnly] = useState(() => searchParams.get("shortage") === "1");
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   const { data, mutate, error, isLoading } = usePreparationQueue();
   const { createPickList, creating } = usePreparationMutations();
@@ -302,14 +321,15 @@ function SalesOrderPicker({
       if (dateScope === "overdue" && (!orderDate || orderDate >= today)) return false;
       if (dateFrom && (!orderDate || orderDate < dateFrom)) return false;
       if (dateTo && (!orderDate || orderDate > dateTo)) return false;
+      if (shortageOnly && !stockShortages(row).length) return false;
       return true;
     });
-  }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, visible, search, wilaya]);
+  }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, shortageOnly, visible, search, wilaya]);
 
   const creatableFiltered = useMemo(() => filtered.filter(orderCanCreate), [filtered]);
   const allSelected = creatableFiltered.length > 0 && creatableFiltered.every((row) => selected.has(row.name));
   const someSelected = !allSelected && creatableFiltered.some((row) => selected.has(row.name));
-  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune || customer || listFilter !== "all");
+  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune || customer || listFilter !== "all" || shortageOnly);
 
   const toggleAllFiltered = () => {
     handleSelectAll(!allSelected);
@@ -353,6 +373,7 @@ function SalesOrderPicker({
     setCommune("");
     setCustomer("");
     setListFilter("all");
+    setShortageOnly(false);
   };
 
   const handleCreate = async () => {
@@ -402,122 +423,168 @@ function SalesOrderPicker({
     </Empty>
   );
 
-  const orderColumns: Array<DataTableColumn<SalesOrderRow>> = [
+  const toggleMobileItems = (name: string) => {
+    setExpandedOrders((current) => {
+      const next = new Set(current);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const orderColumns: Array<ColumnDef<DataGridFeatures, SalesOrderRow>> = [
     {
       id: "select",
-      header: (
-        <Checkbox
-          aria-label="Tout sélectionner"
-          checked={allSelected}
-          indeterminate={someSelected}
-          disabled={!creatableFiltered.length}
-          onCheckedChange={(checked) => handleSelectAll(checked === true)}
-        />
+      header: () => (
+        <div className="flex h-full items-center justify-center">
+          <Checkbox
+            aria-label="Tout sélectionner"
+            checked={allSelected}
+            indeterminate={someSelected}
+            disabled={!creatableFiltered.length}
+            onCheckedChange={(checked) => handleSelectAll(checked === true)}
+          />
+        </div>
       ),
-      width: "40px",
-      cell: (row) =>
-        orderCanCreate(row) ? (
-          <span onClick={(event) => event.stopPropagation()}>
+      cell: ({ row }) =>
+        orderCanCreate(row.original) ? (
+          <div className="flex h-full items-center justify-center">
             <Checkbox
-              aria-label={`Sélectionner ${row.name}`}
-              checked={selected.has(row.name)}
-              onCheckedChange={(checked) => handleSelectRow(row, checked === true)}
+              aria-label={`Sélectionner ${row.original.name}`}
+              checked={selected.has(row.original.name)}
+              onCheckedChange={(checked) => handleSelectRow(row.original, checked === true)}
             />
-          </span>
+          </div>
         ) : null,
+      size: 40,
+      enableSorting: false,
+      enableHiding: false,
+      meta: { headerClassName: "px-0 text-center", cellClassName: "px-0 text-center" },
     },
     {
       id: "name",
-      header: "Commande",
-      sortValue: (row) => row.name,
-      cell: (row) => (
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="font-medium">{row.name}</span>
-          <span className="text-muted-foreground">{row.total_qty || 0} art.</span>
-        </div>
+      accessorKey: "name",
+      ...namedHeader("Commande"),
+      cell: ({ row }) => (
+        <button
+          type="button"
+          className="truncate text-left font-medium hover:underline"
+          onClick={() => openDetail(row.original)}
+        >
+          {row.original.name}
+        </button>
       ),
+      size: 170,
+      enableHiding: false,
+    },
+    {
+      id: "qty",
+      accessorKey: "total_qty",
+      ...namedHeader("Articles"),
+      cell: ({ row }) => <span className="num tabular-nums">{row.original.total_qty || 0}</span>,
+      size: 80,
     },
     {
       id: "customer",
-      header: "Client",
-      hideBelow: "md",
-      sortValue: (row) => row.customer_name || row.customer || "",
-      cell: (row) => <span className="truncate">{row.customer_name || row.customer || "—"}</span>,
+      accessorFn: (row) => row.customer_name || row.customer || "",
+      ...namedHeader("Client"),
+      cell: ({ row }) => <span className="truncate">{row.original.customer_name || row.original.customer || "—"}</span>,
+      size: 130,
     },
     {
       id: "place",
-      header: "Lieu",
-      hideBelow: "md",
-      sortValue: (row) => row.custom_commune_nom || row.custom_commune || "",
-      cell: (row) => (
-        <span className="truncate">
-          {[row.custom_commune_nom || row.custom_commune, row.custom_wilaya].filter(Boolean).join(" · ") || "—"}
-        </span>
+      accessorFn: (row) => row.custom_commune_nom || row.custom_commune || "",
+      ...namedHeader("Lieu"),
+      cell: ({ row }) => (
+        <span className="truncate">{row.original.custom_commune_nom || row.original.custom_commune || "—"}</span>
       ),
+      size: 130,
+    },
+    {
+      id: "wilaya",
+      accessorFn: (row) => row.custom_wilaya || "",
+      ...namedHeader("Wilaya"),
+      cell: ({ row }) => <span className="truncate">{row.original.custom_wilaya || "—"}</span>,
+      size: 110,
     },
     {
       id: "status",
-      header: "Statut",
-      sortValue: (row) => `${row.status || ""}-${orderPickListState(row)}`,
-      cell: (row) => {
-        const desk = salesOrderDeskStatus(row.status);
-        const pick = orderPickListStatus(orderPickListState(row));
-        return (
-          <div className="flex flex-col gap-1">
-            <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
-            <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
-            {orderIsModified(row) ? <StatusBadge tone="warning" size="sm">Modifiée</StatusBadge> : null}
-            <span className="text-muted-foreground">{formatShortDate(row.delivery_date || row.transaction_date)}</span>
-          </div>
-        );
+      accessorFn: (row) => row.status || "",
+      ...namedHeader("Statut"),
+      cell: ({ row }) => {
+        const desk = salesOrderDeskStatus(row.original.status);
+        return <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>;
       },
+      size: 120,
+    },
+    {
+      id: "due",
+      accessorFn: (row) => row.delivery_date || row.transaction_date || "",
+      ...namedHeader("Échéance"),
+      cell: ({ row }) => (
+        <span className="num whitespace-nowrap text-muted-foreground">
+          {formatShortDate(row.original.delivery_date || row.original.transaction_date)}
+        </span>
+      ),
+      size: 100,
     },
     {
       id: "progress",
-      header: "Prélevé",
-      width: "150px",
-      sortValue: (row) => orderPickProgress(row).percent,
-      cell: (row) => <PickProgressBar order={row} />,
+      accessorFn: (row) => orderPickProgress(row).percent,
+      ...namedHeader("Prélevé"),
+      cell: ({ row }) => <PickProgressBar order={row.original} />,
+      size: 180,
     },
     {
       id: "stock",
-      header: "Stock",
-      width: "140px",
-      sortValue: (row) => stockShortages(row).length,
-      cell: (row) => (
-        stockShortages(row).length > 0 ? (
+      accessorFn: (row) => stockShortages(row).length,
+      ...namedHeader("Stock"),
+      cell: ({ row }) => (
+        stockShortages(row.original).length > 0 ? (
           <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
         ) : (
-          <span className="text-muted-foreground">OK</span>
+          <span className="whitespace-nowrap text-muted-foreground">OK</span>
         )
       ),
+      size: 130,
     },
     {
-      id: "actions",
-      header: "Actions",
-      align: "right",
-      width: "148px",
-      cell: (row) => {
-        const lists = orderPickListNames(row);
+      id: "pickList",
+      accessorFn: (row) => orderPickListState(row),
+      ...namedHeader("Liste"),
+      cell: ({ row }) => {
+        const lists = orderPickListNames(row.original);
+        const pick = orderPickListStatus(orderPickListState(row.original));
+        const createLabel = `Créer la liste de ${row.original.name}`;
         return (
-          <span onClick={(event) => event.stopPropagation()}>
+          <div className="flex h-full items-center justify-end gap-1.5 whitespace-nowrap">
+            <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
+            {orderIsModified(row.original) ? (
+              <span title="Commande modifiée">
+                <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-label="Commande modifiée" />
+              </span>
+            ) : null}
             {lists.length ? (
-              <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
+              <OpenDraftListsButton icon names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row.original)} />
             ) : (
               <Button
                 type="button"
-                size="sm"
-                variant="outline"
-                disabled={creating || orderIsModified(row)}
-                aria-label={`Créer la liste de ${row.name}`}
-                onClick={() => openCreate([row])}
+                size="icon-sm"
+                variant="ghost"
+                disabled={creating || orderIsModified(row.original)}
+                aria-label={createLabel}
+                title={createLabel}
+                onClick={() => openCreate([row.original])}
               >
-                Créer
+                <Plus />
               </Button>
             )}
-          </span>
+          </div>
         );
       },
+      size: 168,
+      minSize: 168,
+      enableHiding: false,
     },
   ];
 
@@ -579,6 +646,15 @@ function SalesOrderPicker({
           ]}
         />
         <FilterSelect
+          label="Stock"
+          value={shortageOnly ? "shortage" : "all"}
+          onChange={(value) => setShortageOnly(value === "shortage")}
+          options={[
+            { value: "all", label: "Tous" },
+            { value: "shortage", label: "Rupture" },
+          ]}
+        />
+        <FilterSelect
           label="Liste"
           value={listFilter}
           onChange={(value) => setListFilter(value as ListFilter)}
@@ -637,13 +713,14 @@ function SalesOrderPicker({
       ) : (
         <>
           <div className="hidden md:block">
-            <DataTable
+            <PreparationSubTableGrid
               label="Commandes"
               columns={orderColumns}
               rows={filtered}
-              rowKey={(row) => row.name}
-              isRowActive={(row) => selected.has(row.name)}
-              onRowClick={openDetail}
+              getRowId={(row) => row.name}
+              expandContent={(row) => <OrderItemsSubGrid items={row.items || []} />}
+              canExpand={(row) => (row.items?.length ?? 0) > 0}
+              isLoading={isLoading && !orders.length}
             />
           </div>
           <div className="flex flex-col gap-2 md:hidden">
@@ -651,8 +728,13 @@ function SalesOrderPicker({
               const lists = orderPickListNames(row);
               const desk = salesOrderDeskStatus(row.status);
               const pick = orderPickListStatus(orderPickListState(row));
+              const items = row.items || [];
+              const itemsOpen = expandedOrders.has(row.name);
               return (
-              <div key={row.name} className="flex flex-col gap-3 rounded-lg border p-3">
+              <div
+                key={row.name}
+                className="flex flex-col gap-3 rounded-lg border p-3"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
                     {orderCanCreate(row) ? (
@@ -692,6 +774,20 @@ function SalesOrderPicker({
                   {stockShortages(row).length > 0 && <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>}
                 </div>
                 <PickProgressBar order={row} />
+                {items.length ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={itemsOpen}
+                      onClick={() => toggleMobileItems(row.name)}
+                    >
+                      {itemsOpen ? "Masquer les articles" : `Afficher les articles (${items.length})`}
+                    </Button>
+                    {itemsOpen ? <OrderItemsList items={items} /> : null}
+                  </>
+                ) : null}
               </div>
               );
             })}

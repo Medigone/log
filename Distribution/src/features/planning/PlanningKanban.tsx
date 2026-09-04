@@ -57,7 +57,7 @@ import {
   vehicleLabelFor,
   type KanbanBLItem,
 } from "./kanbanHelpers";
-import { canReprogramAssignment, isoDateWithOffset, timePart, matchesSearch } from "./planningHelpers";
+import { canReprogramAssignment, isoDateWithOffset, timePart, matchesSearch, PLANNING_STATUSES } from "./planningHelpers";
 import { FilterSelect } from "@/components/FilterSelect";
 
 interface PlanningKanbanProps {
@@ -80,6 +80,8 @@ interface PlanningKanbanProps {
   onReprogrammer: (assignment: DeliveryNoteAssignment) => void;
   onDeleteRoute?: (route: DistributionRoute) => void;
   isLoading?: boolean;
+  statusFilter?: string;
+  onStatusFilterChange?: (status: string) => void;
 }
 
 export function PlanningKanban({
@@ -96,10 +98,11 @@ export function PlanningKanban({
   onUnassign,
   onReprogrammer,
   onDeleteRoute,
+  statusFilter = "",
+  onStatusFilterChange,
 }: PlanningKanbanProps) {
   const today = isoDateWithOffset();
   const [search, setSearch] = useState("");
-  const [statusFilter] = useState("");
   const [wilayaFilter, setWilayaFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -249,6 +252,12 @@ export function PlanningKanban({
               aria-label="Rechercher un BL"
             />
           </div>
+          <FilterSelect
+            label="Statut"
+            value={statusFilter}
+            onChange={(value) => onStatusFilterChange?.(value)}
+            options={[{ value: "", label: "Tous statuts" }, ...PLANNING_STATUSES.map((item) => ({ value: item, label: item }))]}
+          />
           <FilterSelect
             label="Wilaya"
             value={wilayaFilter}
@@ -604,7 +613,11 @@ function BLCard({
 
   return (
     <Card
-      className={`overflow-visible border border-border text-xs shadow-none ring-0 transition-shadow hover:shadow-sm ${selected ? "border-brand-500 ring-2 ring-brand-500" : ""} ${locked ? "opacity-80" : ""}`}
+      className={cn(
+        "overflow-hidden border border-border text-xs shadow-none ring-0 transition-shadow hover:shadow-sm",
+        selected && "border-brand-500 ring-2 ring-brand-500",
+        locked && "opacity-80",
+      )}
     >
       <CardContent className="flex items-start gap-1.5 p-1.5">
         {selectable && (
@@ -618,24 +631,26 @@ function BLCard({
             {selected ? <SquareCheck className="size-4 text-brand-600" /> : <Square className="size-4" />}
           </button>
         )}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-1">
-            <span className="truncate font-semibold">{a.deliveryNote}</span>
-            <StatusBadge tone={tone} size="sm">{a.planningStatus}</StatusBadge>
-          </div>
+        <div className="min-w-0 flex-1 space-y-0.5">
+          <p className="break-all font-semibold leading-tight" title={a.deliveryNote}>
+            {a.deliveryNote}
+          </p>
           <p className="truncate text-muted-foreground">{a.customerName}</p>
           {a.commune && (
-            <p className="mt-0.5 flex items-center gap-0.5 text-muted-foreground">
-              <MapPin className="size-3" /> {a.commune}{a.wilaya ? `, ${a.wilaya}` : ""}
+            <p className="flex items-center gap-0.5 text-muted-foreground">
+              <MapPin className="size-3 shrink-0" /> {a.commune}{a.wilaya ? `, ${a.wilaya}` : ""}
             </p>
           )}
-          <div className="mt-0.5 flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
             {a.requestedDate && (
               <span className="flex items-center gap-0.5 text-muted-foreground">
-                <Calendar className="size-3" /> {a.requestedDate}
+                <Calendar className="size-3 shrink-0" /> {a.requestedDate}
               </span>
             )}
             <span>{formatQuantity(a.totalQuantity)} art.</span>
+            <StatusBadge tone={tone} size="sm" className="max-w-full">
+              {a.planningStatus}
+            </StatusBadge>
           </div>
           {(a.planningAlert || a.requiresCustomerGeolocation) && (
             <div className="mt-0.5 flex items-center gap-1 text-amber-600">

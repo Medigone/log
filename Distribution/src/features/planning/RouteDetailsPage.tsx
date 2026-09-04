@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -50,6 +50,8 @@ import { getStopVisualStyle, type StopVisualState } from "@/features/planning/st
 import { apiErrorMessage, useDistributionMutations, useRouteDetails } from "@/shared/api/distribution";
 import { routeLifecycleTone, TONES, type StatusTone } from "@/shared/design/statusTone";
 import { formatDistance, formatMoney, formatShortDate, formatTime } from "@/shared/format";
+import { FOCUS_HIGHLIGHT_CLASS, useFocusHighlight } from "@/shared/useFocusHighlight";
+import { cn } from "@/lib/utils";
 import type { RouteOptimizationProposal, RouteStop } from "@/shared/types/distribution";
 
 function formatDuration(value?: number) {
@@ -290,10 +292,13 @@ function OptimizationDialog({
 
 export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveAccounting?: boolean }) {
   const { routeId } = useParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data, error, isLoading, isValidating, mutate } = useRouteDetails(routeId);
   const actions = useDistributionMutations();
   const route = data?.message;
+  const focusNote = searchParams.get("dn") || "";
+  const highlight = useFocusHighlight(focusNote ? [focusNote] : [], Boolean(route && !isLoading));
   const [failure, setFailure] = useState("");
   const [notice, setNotice] = useState("");
   const [generatingQr, setGeneratingQr] = useState<string>();
@@ -787,9 +792,14 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
           return (
             <article
               key={stop.deliveryNote}
+              data-focus-id={stop.deliveryNote}
               aria-label={`Arrêt ${stop.sequence} · ${visual.label}`}
               data-stop-state={visual.state}
-              className={`overflow-hidden rounded-lg border shadow-card transition-colors ${visual.cardClass}`}
+              className={cn(
+                "overflow-hidden rounded-lg border shadow-card transition-colors",
+                visual.cardClass,
+                highlight.has(stop.deliveryNote) && FOCUS_HIGHLIGHT_CLASS,
+              )}
             >
               <div className="grid gap-4 p-4 lg:grid-cols-[auto_minmax(0,1fr)_180px]">
                 <span

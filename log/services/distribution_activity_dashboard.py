@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote, urlencode
 
 import frappe
 from frappe.utils import flt, getdate, today
@@ -31,6 +32,13 @@ SECTIONS_BY_ROLE = {
 
 def date_str(value=None) -> str:
 	return str(getdate(value or today()))
+
+
+def _with_query(path: str, **params: Any) -> str:
+	items = [(key, str(value)) for key, value in params.items() if value not in (None, "")]
+	if not items:
+		return path
+	return f"{path}?{urlencode(items, quote_via=quote)}"
 
 
 def sections_for_role(role: str) -> set[str]:
@@ -273,7 +281,6 @@ def build_alerts(
 	fulfillment,
 	fleet,
 	planning,
-	dispatch,
 	stock,
 	payments,
 ) -> list[dict[str, Any]]:
@@ -282,13 +289,18 @@ def build_alerts(
 		for exception in exceptions:
 			priority = _attr(exception, "priorite")
 			route_id = _attr(exception, "tournee")
+			delivery_note = _attr(exception, "bon_de_livraison")
 			alerts.append(
 				{
 					"id": _attr(exception, "name"),
 					"tone": "danger" if priority in {"Haute", "Critique"} else "warning",
 					"title": _attr(exception, "type_exception") or "Exception",
-					"detail": _attr(exception, "description") or _attr(exception, "bon_de_livraison") or "",
-					"target": f"/planning/routes/{route_id}" if route_id else "/deliveries",
+					"detail": _attr(exception, "description") or delivery_note or "",
+					"target": (
+						_with_query(f"/planning/routes/{route_id}", dn=delivery_note)
+						if route_id
+						else _with_query("/deliveries", kpi="failed", dn=delivery_note)
+					),
 				}
 			)
 	if preparation and preparation.get("shortageOrders"):
@@ -298,7 +310,7 @@ def build_alerts(
 				"tone": "danger",
 				"title": "Ruptures de stock",
 				"detail": f"{preparation['shortageOrders']} commande(s) sans stock suffisant.",
-				"target": "/preparation",
+				"target": _with_query("/preparation", shortage="1"),
 			}
 		)
 	if preparation and preparation.get("overdue"):
@@ -308,7 +320,7 @@ def build_alerts(
 				"tone": "danger",
 				"title": "Préparation en retard",
 				"detail": f"{preparation['overdue']} commande(s) dont la date de livraison est dépassée.",
-				"target": "/preparation",
+				"target": _with_query("/preparation", dateScope="overdue"),
 			}
 		)
 	if fulfillment and fulfillment.get("returnsPending"):
@@ -318,7 +330,7 @@ def build_alerts(
 				"tone": "warning",
 				"title": "Retours à traiter",
 				"detail": f"{fulfillment['returnsPending']} tournée(s) en retour dépôt.",
-				"target": "/stock",
+				"target": _with_query("/stock", focus="route"),
 			}
 		)
 	if stock and stock.get("missingWarehouse"):
@@ -328,20 +340,7 @@ def build_alerts(
 				"tone": "warning",
 				"title": "Entrepôts véhicule manquants",
 				"detail": f"{stock['missingWarehouse']} véhicule(s) sans entrepôt.",
-				"target": "/stock",
-			}
-		)
-	if dispatch and dispatch.get("ready"):
-		alerts.append(
-			{
-				"id": "dispatch-ready",
-				"tone": "warning" if dispatch.get("overdue") else "info",
-				"title": "BL prêts à expédier",
-				"detail": (
-					f"{dispatch['ready']} bon(s) préparé(s) en attente de départ"
-					+ (f", dont {dispatch['overdue']} en retard." if dispatch.get("overdue") else ".")
-				),
-				"target": "/planning",
+				"target": _with_query("/stock", focus="missing"),
 			}
 		)
 	if planning and planning.get("overdue"):
@@ -351,7 +350,7 @@ def build_alerts(
 				"tone": "warning",
 				"title": "BL non planifiés en retard",
 				"detail": f"{planning['overdue']} bon(s) prêts sans tournée, date dépassée.",
-				"target": "/planning",
+				"target": _with_query("/planning", status="En retard"),
 			}
 		)
 	if fleet and fleet.get("failedStops"):
@@ -361,7 +360,7 @@ def build_alerts(
 				"tone": "danger",
 				"title": "Échecs terrain",
 				"detail": f"{fleet['failedStops']} arrêt(s) non livrés ou partiels.",
-				"target": "/deliveries",
+				"target": _with_query("/deliveries", kpi="failed"),
 			}
 		)
 	if payments and payments.get("discrepancies"):
@@ -371,7 +370,7 @@ def build_alerts(
 				"tone": "danger",
 				"title": "Écarts de caisse",
 				"detail": f"{payments['discrepancies']} tournée(s) en écart.",
-				"target": "/cashier",
+				"target": _with_query("/cashier", status="Écart"),
 			}
 		)
 	if payments and payments.get("toControl"):
@@ -381,7 +380,7 @@ def build_alerts(
 				"tone": "warning",
 				"title": "Caisse à contrôler",
 				"detail": f"{payments['toControl']} tournée(s) en attente de contrôle.",
-				"target": "/cashier",
+				"target": _with_query("/cashier", status="À contrôler"),
 			}
 		)
 	return alerts[:8]
@@ -935,7 +934,6 @@ def build_activity_dashboard(*, role: str, date=None) -> dict[str, Any]:
 			fulfillment=fulfillment,
 			fleet=fleet,
 			planning=planning,
-			dispatch=dispatch,
 			stock=stock,
 			payments=payments,
 		)

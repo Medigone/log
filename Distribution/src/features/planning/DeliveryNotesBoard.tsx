@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { CalendarDays, CalendarPlus, LocateFixed, Pencil, RefreshCw, RotateCcw, Search } from "lucide-react"
 import { DateRangeFilter } from "@/components/DateRangeFilter"
 import { FilterSelect } from "@/components/FilterSelect"
@@ -30,6 +30,7 @@ interface DeliveryNotesBoardProps {
   isLoading: boolean
   onEdit: (row: DeliveryNoteAssignment) => void
   onReprepare: (row: DeliveryNoteAssignment) => void
+  statusFilter?: string
 }
 
 export function DeliveryNotesBoard({
@@ -39,6 +40,7 @@ export function DeliveryNotesBoard({
   isLoading,
   onEdit,
   onReprepare,
+  statusFilter = "",
 }: DeliveryNotesBoardProps) {
   const [search, setSearch] = useState("")
   const [dateScope, setDateScope] = useState<DateScope>("all")
@@ -46,7 +48,11 @@ export function DeliveryNotesBoard({
   const [blDateTo, setBlDateTo] = useState("")
   const [plannedFrom, setPlannedFrom] = useState("")
   const [plannedTo, setPlannedTo] = useState("")
-  const [status, setStatus] = useState("")
+  const [status, setStatus] = useState(statusFilter)
+
+  useEffect(() => {
+    setStatus(statusFilter)
+  }, [statusFilter])
   const [wilaya, setWilaya] = useState("")
   const [driver, setDriver] = useState("")
   const [vehicle, setVehicle] = useState("")

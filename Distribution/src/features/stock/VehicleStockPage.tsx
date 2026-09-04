@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { AlertTriangle, LoaderCircle, Package, RefreshCw, Search, Truck, Warehouse } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,13 @@ import { cn } from "@/lib/utils";
 import type { VehicleStock, VehicleStockLine } from "@/shared/types/distribution";
 
 type StockFocus = "all" | "route" | "loaded" | "empty" | "missing" | "inactive";
+
+function stockFocusFromParam(value: string | null): StockFocus {
+  if (value === "route" || value === "loaded" || value === "empty" || value === "missing" || value === "inactive") {
+    return value;
+  }
+  return "all";
+}
 
 function isActiveVehicle(vehicle: VehicleStock) {
   return vehicle.active !== false;
@@ -82,9 +89,10 @@ function VehicleStockSkeleton() {
 }
 
 export function VehicleStockPage({ canLinkRoutes = false }: { canLinkRoutes?: boolean }) {
+  const [searchParams] = useSearchParams();
   const [selected, setSelected] = useState("");
   const [search, setSearch] = useState("");
-  const [focus, setFocus] = useState<StockFocus>("all");
+  const [focus, setFocus] = useState<StockFocus>(() => stockFocusFromParam(searchParams.get("focus")));
   const [itemSearch, setItemSearch] = useState("");
   const { data, error, isLoading, mutate } = useVehicleStocks();
   const vehicles = useMemo(() => data?.message || [], [data?.message]);

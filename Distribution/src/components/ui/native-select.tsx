@@ -45,4 +45,8 @@ const NativeSelect = React.forwardRef<HTMLSelectElement, NativeSelectProps>(
 )
 NativeSelect.displayName = "NativeSelect"
 
-export { NativeSelect }
+function NativeSelectOption({ className, ...props }: React.ComponentProps<"option">) {
+  return <option data-slot="native-select-option" className={className} {...props} />
+}
+
+export { NativeSelect, NativeSelectOption }

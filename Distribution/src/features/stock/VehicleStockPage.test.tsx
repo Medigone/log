@@ -54,9 +54,9 @@ vi.mock("@/shared/api/distribution", () => ({
   useVehicleStocks: () => ({ data: { message: vehicles }, error: undefined, isLoading: false, mutate }),
 }));
 
-function renderPage(canLinkRoutes = false) {
+function renderPage(canLinkRoutes = false, entry = "/stock") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
       <VehicleStockPage canLinkRoutes={canLinkRoutes} />
     </MemoryRouter>,
   );
@@ -97,5 +97,11 @@ describe("VehicleStockPage", () => {
     expect(screen.queryByRole("button", { name: /camion b/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "LIV-9" })).not.toBeInTheDocument();
     expect(screen.getAllByText("LIV-9").length).toBeGreaterThan(0);
+  });
+
+  it("filtre les entrepôts manquants depuis l’URL", () => {
+    renderPage(false, "/stock?focus=missing");
+    expect(screen.getByRole("heading", { name: /camion b/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /camion a/i })).not.toBeInTheDocument();
   });
 });

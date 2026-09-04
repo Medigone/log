@@ -1,16 +1,18 @@
 import { useMemo, useState } from "react";
-import { ClipboardList, RotateCcw, Search } from "lucide-react";
+import type { ColumnDef } from "@tanstack/react-table";
+import { AlertTriangle, ClipboardList, RotateCcw, Search } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import type { DataGridFeatures } from "@/components/reui/data-grid/data-grid";
 import { useRecentPickLists, type RecentPickList } from "@/shared/api/preparation";
 import { pickListStatusTone } from "@/shared/design/statusTone";
 import { formatDateTime, formatQuantity } from "@/shared/format";
+import { PickListItemsSubGrid, PreparationSubTableGrid, namedHeader } from "@/features/preparation/PreparationSubTableGrid";
 
 type ListStatus = "all" | "draft" | "submitted";
 
@@ -80,57 +82,70 @@ export function PickListQueue({
     setWilaya("");
   };
 
-  const columns: Array<DataTableColumn<RecentPickList>> = [
+  const columns: Array<ColumnDef<DataGridFeatures, RecentPickList>> = [
     {
       id: "name",
-      header: "Liste",
-      sortValue: (row) => row.name,
-      cell: (row) => (
-        <div className="min-w-0">
-          <p className="font-medium">{row.name}</p>
-          <p className="truncate t-meta text-muted-foreground">
-            {joinLabels(row.warehouses, "Entrepôt non défini")}
-          </p>
-        </div>
+      accessorKey: "name",
+      ...namedHeader("Liste"),
+      cell: ({ row }) => (
+        <button
+          type="button"
+          className="truncate text-left font-medium hover:underline"
+          onClick={() => onOpenPickList(row.original.name)}
+        >
+          {row.original.name}
+        </button>
       ),
+      size: 170,
+      enableHiding: false,
+    },
+    {
+      id: "warehouse",
+      accessorFn: (row) => joinLabels(row.warehouses, ""),
+      ...namedHeader("Entrepôt"),
+      cell: ({ row }) => (
+        <span className="truncate">{joinLabels(row.original.warehouses, "Entrepôt non défini")}</span>
+      ),
+      size: 140,
     },
     {
       id: "status",
-      header: "État",
-      width: "120px",
-      sortValue: (row) => row.docstatus,
-      cell: (row) => (
-        <div className="flex flex-col gap-1">
-          <StatusBadge tone={pickListStatusTone(row.docstatus)} size="sm">
-            {statusLabel(row.docstatus)}
+      accessorKey: "docstatus",
+      ...namedHeader("État"),
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
+          <StatusBadge tone={pickListStatusTone(row.original.docstatus)} size="sm">
+            {statusLabel(row.original.docstatus)}
           </StatusBadge>
-          {row.custom_order_changed ? (
-            <StatusBadge tone="warning" size="sm">Commande modifiée</StatusBadge>
+          {row.original.custom_order_changed ? (
+            <span title="Commande modifiée">
+              <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-label="Commande modifiée" />
+            </span>
           ) : null}
         </div>
       ),
+      size: 120,
     },
     {
       id: "customers",
-      header: "Client",
-      hideBelow: "md",
-      sortValue: (row) => joinLabels(row.customer_names),
-      cell: (row) => (
-        <div className="min-w-0">
-          <p className="truncate">{joinLabels(row.customer_names)}</p>
-          {row.wilayas?.length ? (
-            <p className="truncate t-meta text-muted-foreground">{joinLabels(row.wilayas)}</p>
-          ) : null}
-        </div>
-      ),
+      accessorFn: (row) => joinLabels(row.customer_names),
+      ...namedHeader("Client"),
+      cell: ({ row }) => <span className="truncate">{joinLabels(row.original.customer_names)}</span>,
+      size: 140,
+    },
+    {
+      id: "wilaya",
+      accessorFn: (row) => joinLabels(row.wilayas),
+      ...namedHeader("Wilaya"),
+      cell: ({ row }) => <span className="truncate">{joinLabels(row.original.wilayas)}</span>,
+      size: 110,
     },
     {
       id: "orders",
-      header: "Commandes",
-      hideBelow: "lg",
-      sortValue: (row) => row.sales_order_count || row.sales_orders?.length || 0,
-      cell: (row) => {
-        const orders = row.sales_orders || [];
+      accessorFn: (row) => row.sales_order_count || row.sales_orders?.length || 0,
+      ...namedHeader("Commandes"),
+      cell: ({ row }) => {
+        const orders = row.original.sales_orders || [];
         if (!orders.length) return <span className="text-muted-foreground">—</span>;
         return (
           <span className="truncate">
@@ -139,26 +154,27 @@ export function PickListQueue({
           </span>
         );
       },
+      size: 150,
     },
     {
       id: "progress",
-      header: "Prélevé",
-      numeric: true,
-      width: "120px",
-      sortValue: (row) => row.picked_qty ?? 0,
-      cell: (row) => (
-        <span className="num">
-          {formatQuantity(row.picked_qty ?? 0)} / {formatQuantity(row.requested_qty ?? 0)}
+      accessorFn: (row) => row.picked_qty ?? 0,
+      ...namedHeader("Prélevé"),
+      cell: ({ row }) => (
+        <span className="num whitespace-nowrap tabular-nums">
+          {formatQuantity(row.original.picked_qty ?? 0)} / {formatQuantity(row.original.requested_qty ?? 0)}
         </span>
       ),
+      size: 120,
     },
     {
       id: "modified",
-      header: "Modifié",
-      hideBelow: "md",
-      width: "160px",
-      sortValue: (row) => row.modified || "",
-      cell: (row) => <span className="num t-meta text-muted-foreground">{formatDateTime(row.modified)}</span>,
+      accessorKey: "modified",
+      ...namedHeader("Modifié"),
+      cell: ({ row }) => (
+        <span className="num whitespace-nowrap t-meta text-muted-foreground">{formatDateTime(row.original.modified)}</span>
+      ),
+      size: 160,
     },
   ];
 
@@ -219,12 +235,13 @@ export function PickListQueue({
         ) : null}
       </Toolbar>
 
-      <DataTable
+      <PreparationSubTableGrid
         label="Listes de prélèvement"
         columns={columns}
         rows={filtered}
-        rowKey={(row) => row.name}
-        onRowClick={(row) => onOpenPickList(row.name)}
+        getRowId={(row) => row.name}
+        expandContent={(row) => <PickListItemsSubGrid items={row.items || []} />}
+        canExpand={(row) => (row.items?.length ?? 0) > 0}
         isLoading={isLoading && !lists.length}
         empty={
           <Empty className="border-0">

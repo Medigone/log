@@ -37,6 +37,7 @@ export interface SalesOrderRow {
   can_create_pick_list?: boolean;
   has_available_stock?: boolean;
   stock_shortages?: StockShortage[];
+  items?: SalesOrderPickLine[];
 }
 
 export interface SalesOrderPickLine {
@@ -154,6 +155,16 @@ export interface PickSessionData {
   pending_sales_orders?: string[];
 }
 
+export interface RecentPickListItem {
+  item_code: string;
+  item_name?: string;
+  warehouse?: string;
+  sales_order?: string;
+  requested_qty: number;
+  picked_qty: number;
+  uom?: string;
+}
+
 export interface RecentPickList {
   name: string;
   docstatus: number;
@@ -167,6 +178,7 @@ export interface RecentPickList {
   picked_qty?: number;
   warehouses?: string[];
   delivery_notes: string[];
+  items?: RecentPickListItem[];
   custom_order_changed?: number;
   custom_order_changed_reason?: string | null;
 }

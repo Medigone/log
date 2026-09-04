@@ -85,6 +85,27 @@ def _required_pick_qty(item) -> float:
 	return flt(item.get("qty")) - max(picked, flt(item.get("delivered_qty")))
 
 
+def _serialize_order_pick_lines(items, available_by_item, pick_by_item=None):
+	"""Lignes commande pour la file de préparation et la fiche détail."""
+	lines = []
+	for item in items:
+		item_code = item.get("item_code")
+		if not item_code or item.get("delivered_by_supplier"):
+			continue
+		line = {
+			"item_code": item_code,
+			"item_name": item.get("item_name") or item_code,
+			"warehouse": item.get("warehouse"),
+			"required": _required_pick_qty(item),
+			"available": flt(available_by_item.get(item_code)),
+			"uom": item.get("stock_uom") or item.get("uom"),
+		}
+		if pick_by_item is not None:
+			line["pick_list"] = pick_by_item.get(item.get("name"))
+		lines.append(line)
+	return lines
+
+
 def _bundle_item_codes(item_codes):
 	if not item_codes:
 		return set()
@@ -178,6 +199,8 @@ def _stock_shortages_for_orders(orders) -> dict[str, dict]:
 			"warehouse",
 			"conversion_factor",
 			"delivered_by_supplier",
+			"uom",
+			"stock_uom",
 		],
 	)
 	by_order = defaultdict(list)
@@ -200,6 +223,7 @@ def _stock_shortages_for_orders(orders) -> dict[str, dict]:
 			"has_available_stock": has_available_stock_for_items(
 				order_items, available_by_item=available, bundle_codes=bundle_codes
 			),
+			"items": _serialize_order_pick_lines(order_items, available),
 		}
 	return result
 
@@ -692,6 +716,7 @@ def get_sales_orders_to_pick(search=None, limit=100):
 		)
 		order["stock_shortages"] = status.get("shortages") or []
 		order["has_available_stock"] = status.get("has_available_stock", False)
+		order["items"] = status.get("items") or []
 	return _attach_commune_names(orders)
 
 
@@ -703,22 +728,7 @@ def serialize_sales_order_pick_detail(so):
 	available_by_item = _company_available_qty(item_codes, so.get("company"))
 	bundle_codes = _bundle_item_codes(item_codes)
 	pick_by_item = _pick_lists_by_so_item(name)
-	lines = []
-	for item in items:
-		item_code = item.get("item_code")
-		if not item_code or item.get("delivered_by_supplier"):
-			continue
-		lines.append(
-			{
-				"item_code": item_code,
-				"item_name": item.get("item_name") or item_code,
-				"warehouse": item.get("warehouse"),
-				"required": _required_pick_qty(item),
-				"available": flt(available_by_item.get(item_code)),
-				"uom": item.get("stock_uom") or item.get("uom"),
-				"pick_list": pick_by_item.get(item.get("name")),
-			}
-		)
+	lines = _serialize_order_pick_lines(items, available_by_item, pick_by_item)
 	covering = _covering_pick_lists_for_orders([name]).get(name)
 	draft_names = _draft_pick_list_names_by_order([name]).get(name) or []
 	progress = _active_pick_progress_for_orders([name]).get(name) or {}
@@ -779,7 +789,18 @@ def _enrich_recent_pick_lists(rows):
 	items = frappe.get_all(
 		"Pick List Item",
 		filters={"parent": ["in", names]},
-		fields=["parent", "sales_order", "qty", "stock_qty", "picked_qty", "warehouse"],
+		fields=[
+			"parent",
+			"sales_order",
+			"qty",
+			"stock_qty",
+			"picked_qty",
+			"warehouse",
+			"item_code",
+			"item_name",
+			"uom",
+			"stock_uom",
+		],
 	)
 	dn_items = frappe.get_all(
 		"Delivery Note Item",
@@ -793,6 +814,7 @@ def _enrich_recent_pick_lists(rows):
 	picked_by_pl = defaultdict(float)
 	warehouses_by_pl = defaultdict(list)
 	seen_wh = defaultdict(set)
+	items_by_pl = defaultdict(dict)
 	for item in items:
 		parent = item.get("parent")
 		if not parent:
@@ -807,6 +829,24 @@ def _enrich_recent_pick_lists(rows):
 		if warehouse and warehouse not in seen_wh[parent]:
 			seen_wh[parent].add(warehouse)
 			warehouses_by_pl[parent].append(warehouse)
+		item_code = item.get("item_code")
+		if not item_code:
+			continue
+		key = (item_code, warehouse or "", sales_order or "")
+		bucket = items_by_pl[parent].get(key)
+		if not bucket:
+			bucket = {
+				"item_code": item_code,
+				"item_name": item.get("item_name") or item_code,
+				"warehouse": warehouse,
+				"sales_order": sales_order,
+				"requested_qty": 0.0,
+				"picked_qty": 0.0,
+				"uom": item.get("stock_uom") or item.get("uom"),
+			}
+			items_by_pl[parent][key] = bucket
+		bucket["requested_qty"] += flt(item.get("stock_qty")) or flt(item.get("qty"))
+		bucket["picked_qty"] += flt(item.get("picked_qty"))
 
 	all_so = list(dict.fromkeys(so for orders in orders_by_pl.values() for so in orders))
 	so_rows = (
@@ -854,6 +894,7 @@ def _enrich_recent_pick_lists(rows):
 				"picked_qty": picked_by_pl.get(name, 0),
 				"warehouses": warehouses_by_pl.get(name, []),
 				"delivery_notes": list(notes_by_pl.get(name) or []),
+				"items": list(items_by_pl.get(name, {}).values()),
 				"custom_order_changed": cint(row.get("custom_order_changed")),
 				"custom_order_changed_reason": row.get("custom_order_changed_reason") or None,
 			}

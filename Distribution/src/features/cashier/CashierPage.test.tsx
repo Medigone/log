@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { CashierPage } from "@/features/cashier/CashierPage";
 
 const mocks = vi.hoisted(() => ({
@@ -51,7 +52,11 @@ vi.mock("@/shared/api/distribution", () => ({
 describe("CashierPage", () => {
   it("contrôle la déclaration, la facture et l'avance avant de créer le paiement", async () => {
     const user = userEvent.setup();
-    render(<CashierPage />);
+    render(
+      <MemoryRouter>
+        <CashierPage />
+      </MemoryRouter>,
+    );
 
     expect(await screen.findByRole("heading", { name: /caisse des tournées/i })).toBeInTheDocument();
     expect(screen.getByText(/indépendant du retour stock/i)).toBeInTheDocument();

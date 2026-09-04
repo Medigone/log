@@ -11,6 +11,7 @@ from log.pick_list_ops import (
 	_draft_pick_list_names_by_order,
 	_enrich_recent_pick_lists,
 	_pick_lists_by_so_item,
+	_serialize_order_pick_lines,
 	create_pick_list_from_sales_orders,
 	get_pick_session,
 	get_recent_pick_lists,
@@ -50,6 +51,38 @@ class TestPickListSerialization(unittest.TestCase):
 
 		self.assertEqual(result[0]["custom_commune"], "COM-00979")
 		self.assertEqual(result[0]["custom_commune_nom"], "Alger Centre")
+
+	def test_serialize_order_pick_lines_skips_supplier_and_applies_qty(self):
+		items = [
+			frappe._dict(
+				item_code="ART-1",
+				item_name="Article 1",
+				qty=12,
+				picked_qty=0,
+				delivered_qty=0,
+				warehouse="DEPOT",
+				conversion_factor=1,
+				delivered_by_supplier=0,
+				stock_uom="Unité",
+			),
+			frappe._dict(
+				item_code="ART-2",
+				item_name="Fournisseur",
+				qty=1,
+				picked_qty=0,
+				delivered_qty=0,
+				warehouse="DEPOT",
+				conversion_factor=1,
+				delivered_by_supplier=1,
+			),
+		]
+		lines = _serialize_order_pick_lines(items, {"ART-1": 4, "ART-2": 9})
+		self.assertEqual(len(lines), 1)
+		self.assertEqual(lines[0]["item_code"], "ART-1")
+		self.assertEqual(lines[0]["required"], 12)
+		self.assertEqual(lines[0]["available"], 4)
+		self.assertEqual(lines[0]["uom"], "Unité")
+		self.assertNotIn("pick_list", lines[0])
 
 	def _pick_list_doc(self, **overrides):
 		location = frappe._dict(
@@ -513,8 +546,30 @@ class TestRecentPickLists(unittest.TestCase):
 	@patch("log.pick_list_ops.frappe.get_all")
 	def test_enriches_clients_orders_and_quantities_without_get_doc(self, get_all):
 		items = [
-			frappe._dict(parent="PL-1", sales_order="SO-1", qty=2, stock_qty=2, picked_qty=1, warehouse="DEPOT"),
-			frappe._dict(parent="PL-1", sales_order="SO-2", qty=3, stock_qty=3, picked_qty=0, warehouse="DEPOT"),
+			frappe._dict(
+				parent="PL-1",
+				sales_order="SO-1",
+				qty=2,
+				stock_qty=2,
+				picked_qty=1,
+				warehouse="DEPOT",
+				item_code="ART-1",
+				item_name="Article test",
+				uom="Unité",
+				stock_uom="Unité",
+			),
+			frappe._dict(
+				parent="PL-1",
+				sales_order="SO-2",
+				qty=3,
+				stock_qty=3,
+				picked_qty=0,
+				warehouse="DEPOT",
+				item_code="ART-2",
+				item_name="Article 2",
+				uom="Unité",
+				stock_uom="Unité",
+			),
 		]
 		dns = [frappe._dict(parent="DN-1", against_pick_list="PL-1")]
 		orders = [
@@ -535,6 +590,29 @@ class TestRecentPickLists(unittest.TestCase):
 		self.assertEqual(result[0]["picked_qty"], 1)
 		self.assertEqual(result[0]["warehouses"], ["DEPOT"])
 		self.assertEqual(result[0]["delivery_notes"], ["DN-1"])
+		self.assertEqual(
+			result[0]["items"],
+			[
+				{
+					"item_code": "ART-1",
+					"item_name": "Article test",
+					"warehouse": "DEPOT",
+					"sales_order": "SO-1",
+					"requested_qty": 2,
+					"picked_qty": 1,
+					"uom": "Unité",
+				},
+				{
+					"item_code": "ART-2",
+					"item_name": "Article 2",
+					"warehouse": "DEPOT",
+					"sales_order": "SO-2",
+					"requested_qty": 3,
+					"picked_qty": 0,
+					"uom": "Unité",
+				},
+			],
+		)
 		self.assertEqual(
 			get_all.call_args_list[2].kwargs["fields"],
 			["name", "customer_name", "customer", "custom_wilaya"],

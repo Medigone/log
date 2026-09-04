@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ReturnControlPanel, hasGoodsToReturn } from "@/features/preparation/ReturnControlPanel";
 
 const mocks = vi.hoisted(() => ({
-  routes: [] as Array<{ name: string; stock: { remainingQuantity: number; status: string; lines: unknown[] }; driverName?: string; vehicleLabel?: string }>,
+  routes: [] as Array<{
+    name: string
+    stock: { remainingQuantity: number; status: string; lines: unknown[] }
+    driverName?: string
+    vehicleLabel?: string
+    revision?: number
+  }>,
 }));
 
 vi.mock("@/shared/api/distribution", () => ({
@@ -43,6 +50,37 @@ describe("ReturnControlPanel", () => {
     expect(screen.getByText("Retours à contrôler")).toBeInTheDocument();
     expect(screen.getByText(/indépendant du contrôle de caisse/i)).toBeInTheDocument();
     expect(screen.getByText("LIV-GOODS")).toBeInTheDocument();
-    expect(screen.getByText("4 à retourner")).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /LIV-GOODS/ })).getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("Camion A")).toBeInTheDocument();
+  });
+
+  it("déplie les articles à compter pour un retour", async () => {
+    mocks.routes = [{
+      name: "LIV-GOODS",
+      driverName: "Karim",
+      vehicleLabel: "Camion A",
+      revision: 1,
+      stock: {
+        remainingQuantity: 4,
+        status: "Retour déclaré",
+        lines: [{
+          name: "LINE-1",
+          itemCode: "ART-1",
+          itemName: "Article retour",
+          deliveryNote: "DN-1",
+          remainingQuantity: 4,
+          uom: "Unité",
+        }],
+      },
+    }];
+    const user = userEvent.setup();
+    render(<ReturnControlPanel />);
+    await user.click(screen.getByRole("button", { name: "Afficher les articles" }));
+    expect(screen.getByRole("region", { name: "Articles à retourner LIV-GOODS" })).toBeInTheDocument();
+    expect(screen.getByText("Article retour")).toBeInTheDocument();
+    expect(screen.getByText("ART-1")).toBeInTheDocument();
+    expect(screen.getByText("DN-1")).toBeInTheDocument();
+    expect(screen.getByLabelText("Quantité comptée ART-1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /confirmer le retour complet/i })).toBeInTheDocument();
   });
 });

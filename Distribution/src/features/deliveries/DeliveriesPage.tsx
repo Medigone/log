@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, ArrowRight, CheckCircle2, MapPin, RotateCcw, Route, Search, Truck } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,11 @@ import type { DistributionRoute, RouteLifecycle, RouteStop } from "@/shared/type
 const LIFECYCLES: RouteLifecycle[] = ["Publiée", "En cours", "Retour dépôt", "Terminée"];
 
 type KpiFocus = "all" | "live" | "delivered" | "failed";
+
+function kpiFromParam(value: string | null): KpiFocus {
+  if (value === "live" || value === "delivered" || value === "failed") return value;
+  return "all";
+}
 
 function localDate() {
   const value = new Date();
@@ -59,13 +64,14 @@ function hasFailedStop(route: DistributionRoute) {
 
 export function DeliveriesPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const today = localDate();
   const [date, setDate] = useState(today);
   const [lifecycle, setLifecycle] = useState<RouteLifecycle | "">("");
   const [driver, setDriver] = useState("");
   const [search, setSearch] = useState("");
-  const [kpi, setKpi] = useState<KpiFocus>("all");
-  const [selected, setSelected] = useState<string>();
+  const [kpi, setKpi] = useState<KpiFocus>(() => kpiFromParam(searchParams.get("kpi")));
+  const [selected, setSelected] = useState<string>(() => searchParams.get("route") || "");
   const allDates = !date;
   const live = Boolean(date) && date === today;
   const { data, error, isLoading } = usePlanningBoard(date || today, date || today, allDates ? { allDates: true } : {}, {
@@ -89,12 +95,20 @@ export function DeliveriesPage() {
       return matchesSearch(route, query);
     });
   }, [driver, kpi, lifecycle, query, routes]);
+  const focusDn = searchParams.get("dn") || "";
 
   useEffect(() => {
-    if (!filtered.some((route) => route.name === selected)) {
-      setSelected(filtered[0]?.name);
+    if (focusDn) {
+      const match = filtered.find((route) => route.stops.some((stop) => stop.deliveryNote === focusDn));
+      if (match) {
+        setSelected(match.name);
+        return;
+      }
     }
-  }, [filtered, selected]);
+    if (!filtered.some((route) => route.name === selected)) {
+      setSelected(filtered[0]?.name || "");
+    }
+  }, [filtered, focusDn, selected]);
 
   const selectedRoute = filtered.find((route) => route.name === selected);
   const selectedProgress = selectedRoute ? stopProgress(selectedRoute) : undefined;

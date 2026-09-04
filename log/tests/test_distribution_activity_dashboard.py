@@ -128,6 +128,49 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertEqual(stats["declaredToday"], 2000)
 		self.assertEqual(stats["driverCashTotal"], 2500)
 
+	def test_build_alerts_targets_include_query_params(self):
+		alerts = dashboard.build_alerts(
+			role="responsable",
+			exceptions=[
+				SimpleNamespace(
+					name="EX-1",
+					priorite="Haute",
+					type_exception="Échec",
+					description="",
+					tournee="LIV-1",
+					bon_de_livraison="DN-9",
+				)
+			],
+			preparation={"shortageOrders": 1, "overdue": 2},
+			fulfillment={"returnsPending": 1},
+			fleet={"failedStops": 3},
+			planning={"overdue": 1},
+			stock={"missingWarehouse": 1},
+			payments={"discrepancies": 0, "toControl": 1},
+		)
+		by_id = {alert["id"]: alert["target"] for alert in alerts}
+		self.assertEqual(by_id["EX-1"], "/planning/routes/LIV-1?dn=DN-9")
+		self.assertEqual(by_id["prep-shortages"], "/preparation?shortage=1")
+		self.assertEqual(by_id["prep-overdue"], "/preparation?dateScope=overdue")
+		self.assertEqual(by_id["fulfillment-returns"], "/stock?focus=route")
+		self.assertEqual(by_id["stock-missing"], "/stock?focus=missing")
+		self.assertEqual(by_id["planning-overdue"], "/planning?status=En%20retard")
+		self.assertEqual(by_id["fleet-failed"], "/deliveries?kpi=failed")
+		self.assertEqual(by_id["cash-control"], "/cashier?status=%C3%80%20contr%C3%B4ler")
+
+		orphan = dashboard.build_alerts(
+			role="responsable",
+			exceptions=[SimpleNamespace(name="EX-2", priorite="Haute", type_exception="Échec", description="", tournee=None, bon_de_livraison="DN-8")],
+			preparation=None,
+			fulfillment=None,
+			fleet=None,
+			planning=None,
+			stock=None,
+			payments={"discrepancies": 1, "toControl": 0},
+		)
+		self.assertEqual(orphan[0]["target"], "/deliveries?kpi=failed&dn=DN-8")
+		self.assertEqual(orphan[1]["target"], "/cashier?status=%C3%89cart")
+
 	def test_preparateur_payload_omits_fleet_planning_and_payments(self):
 		with (
 			patch.object(dashboard, "_load_pickable_orders", return_value=[_order(delivery_date="2026-08-26")]),
@@ -167,7 +210,8 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertNotIn("pipeline", payload)
 		self.assertEqual(payload["dispatch"]["ready"], 1)
 		self.assertTrue(any(alert["id"] == "prep-overdue" for alert in payload["alerts"]))
-		self.assertTrue(any(alert["id"] == "dispatch-ready" for alert in payload["alerts"]))
+		self.assertTrue(any(alert["target"] == "/preparation?dateScope=overdue" for alert in payload["alerts"]))
+		self.assertFalse(any(alert["id"] == "dispatch-ready" for alert in payload["alerts"]))
 
 	def test_responsable_payload_includes_pipeline_and_payments(self):
 		live = [

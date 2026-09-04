@@ -25,10 +25,11 @@ const mocks = vi.hoisted(() => ({
     draft_pick_list: undefined as string | undefined,
     has_available_stock: true,
     stock_shortages: [] as Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number }>,
+    custom_preparation_status: undefined as string | undefined,
     items: [
       { item_code: "ART-1", item_name: "Article 1", warehouse: "Magasins - MP", required: 12, available: 0, uom: "Unité" },
       { item_code: "ART-2", item_name: "Article 2", warehouse: "Magasins - MP", required: 2, available: 10, uom: "Unité" },
-    ],
+    ] as Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number; uom: string; pick_list?: string | null }>,
   },
   pickListData: {
     message: {

@@ -78,6 +78,12 @@
   --color-hairline: var(--border);
   --color-hairline-strong: var(--border-strong);
   --color-subtle: var(--text-subtle);
+  --color-invert-foreground: var(--invert-foreground);
+  --color-invert: var(--invert);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info-foreground: var(--info-foreground);
+  --color-success-foreground: var(--success-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
 }
 
 :root {
@@ -121,6 +127,12 @@
   --surface-subtle: oklch(0.97 0 0);
   --border-strong: oklch(0.87 0 0);
   --text-subtle: oklch(0.65 0 0);
+  --destructive-foreground: var(--color-red-800);
+  --success-foreground: var(--color-emerald-900);
+  --info-foreground: var(--color-violet-900);
+  --warning-foreground: var(--color-yellow-900);
+  --invert: var(--color-zinc-900);
+  --invert-foreground: var(--color-zinc-50);
 }
 
 .dark {
@@ -162,6 +174,12 @@
   --surface-subtle: oklch(0.269 0 0);
   --border-strong: oklch(1 0 0 / 18%);
   --text-subtle: oklch(0.708 0 0);
+  --destructive-foreground: var(--color-red-600);
+  --success-foreground: var(--color-emerald-600);
+  --info-foreground: var(--color-violet-600);
+  --warning-foreground: var(--color-yellow-600);
+  --invert: var(--color-zinc-700);
+  --invert-foreground: var(--color-zinc-50);
 }
 
 @layer base {

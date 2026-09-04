@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AlertTriangle, Banknote, Check, CircleDollarSign, LoaderCircle, ReceiptText, RefreshCw } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
@@ -41,9 +42,10 @@ function paymentEdits(payments: CashCollection[]) {
 }
 
 export function CashierPage({ canResolveDiscrepancy = false }: { canResolveDiscrepancy?: boolean }) {
+  const [searchParams] = useSearchParams();
   const [dateFrom, setDateFrom] = useState(isoDate(-7));
   const [dateTo, setDateTo] = useState(isoDate());
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(() => searchParams.get("status") || "");
   const [selectedRoute, setSelectedRoute] = useState("");
   const [countedCash, setCountedCash] = useState("");
   const [reason, setReason] = useState("");

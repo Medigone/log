@@ -59,9 +59,9 @@ vi.mock("@/features/today/FleetMap", () => ({
   ),
 }));
 
-function renderPage() {
+function renderPage(entry = "/deliveries") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[entry]}>
       <DeliveriesPage />
     </MemoryRouter>,
   );
@@ -100,6 +100,12 @@ describe("DeliveriesPage", () => {
     await user.click(screen.getByRole("button", { name: /échecs/i }));
     expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
     expect(screen.getByText("Client C")).toBeInTheDocument();
+  });
+
+  it("filtre les échecs depuis l’URL", () => {
+    renderPage("/deliveries?kpi=failed");
+    expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
+    expect(screen.queryByText("Carte flotte LIV-1 LIV-2")).not.toBeInTheDocument();
   });
 
   it("sélectionne une tournée au clic dans le tableau", async () => {
