@@ -230,8 +230,19 @@ export function orderPickListState(order: {
   return "none";
 }
 
-export function orderPickListStatus(state: OrderPickListState): { label: string; tone: StatusTone } {
-  if (state === "draft") return { label: "Liste brouillon", tone: "warning" };
-  if (state === "submitted") return { label: "Liste soumise", tone: "success" };
+export function orderPickListStatus(
+  state: OrderPickListState,
+  order?: { pick_incomplete?: boolean },
+): { label: string; tone: StatusTone } {
+  if (state === "draft") {
+    return order?.pick_incomplete
+      ? { label: "Liste incomplète", tone: "warning" }
+      : { label: "Liste brouillon", tone: "warning" };
+  }
+  if (state === "submitted") {
+    return order?.pick_incomplete
+      ? { label: "Liste partielle", tone: "warning" }
+      : { label: "Liste soumise", tone: "success" };
+  }
   return { label: "Aucune liste", tone: "neutral" };
 }

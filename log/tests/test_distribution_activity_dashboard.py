@@ -63,7 +63,29 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertEqual(stats["later"], 1)
 		self.assertEqual(stats["inProgressPickLists"], 1)
 		self.assertEqual(stats["shortageOrders"], 1)
+		self.assertEqual(stats["readyToComplete"], 0)
 		self.assertEqual(stats["remainingQty"], 20)
+
+	def test_summarize_preparation_exposes_ready_to_complete(self):
+		stats = dashboard.summarize_preparation([], [], shortage_count=0, day="2026-08-28", ready_to_complete=3)
+		self.assertEqual(stats["readyToComplete"], 3)
+
+	def test_build_now_puts_reliquat_ahead_of_pick_lists(self):
+		items = dashboard.build_now(
+			role="preparateur",
+			preparation={
+				"readyToComplete": 2,
+				"pickLists": [{"name": "PICK-1", "salesOrderCount": 1, "remainingQty": 3}],
+			},
+			fulfillment=None,
+			fleet=None,
+			payments=None,
+		)
+		self.assertEqual(items[0]["id"], "prep-complete")
+		self.assertEqual(items[0]["title"], "Reliquats à prélever")
+		self.assertEqual(items[0]["target"], "/preparation?complete=1")
+		self.assertEqual(items[0]["tone"], "warning")
+		self.assertEqual(items[1]["id"], "pick-PICK-1")
 
 	def test_summarize_fulfillment_groups_loading_and_returns(self):
 		stats = dashboard.summarize_fulfillment(
@@ -109,6 +131,27 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertEqual(stats["overdue"], 1)
 		self.assertEqual(stats["notes"][0]["deliveryNote"], "MAT-DN-2026-00003")
 
+	def test_summarize_shipped_trend_fills_fourteen_days(self):
+		values = dashboard.summarize_shipped_trend({"2026-08-15": 2, "2026-08-28": 5}, "2026-08-28")
+		self.assertEqual(len(values), 14)
+		self.assertEqual(values[0], 2)
+		self.assertEqual(values[-1], 5)
+		self.assertEqual(sum(values), 7)
+
+	def test_suggest_route_groups_ignores_assigned_and_singletons(self):
+		suggestions = dashboard.suggest_route_groups(
+			[
+				{"deliveryNote": "DN-1", "customerCity": "Hydra", "qty": 4},
+				{"deliveryNote": "DN-2", "customerCity": "Hydra", "qty": 2},
+				{"deliveryNote": "DN-3", "customerCity": "Kouba", "qty": 8},
+				{"deliveryNote": "DN-4", "customerCity": "Hydra", "routeId": "LIV-1", "qty": 9},
+			]
+		)
+		self.assertEqual(len(suggestions), 1)
+		self.assertEqual(suggestions[0]["id"], "Hydra")
+		self.assertEqual(suggestions[0]["noteIds"], ["DN-1", "DN-2"])
+		self.assertIn("6", suggestions[0]["detail"])
+
 	def test_summarize_payments_splits_control_and_gaps(self):
 		stats = dashboard.summarize_payments(
 			[
@@ -141,7 +184,7 @@ class TestActivityDashboard(unittest.TestCase):
 					bon_de_livraison="DN-9",
 				)
 			],
-			preparation={"shortageOrders": 1, "overdue": 2},
+			preparation={"shortageOrders": 1, "overdue": 2, "readyToComplete": 3},
 			fulfillment={"returnsPending": 1},
 			fleet={"failedStops": 3},
 			planning={"overdue": 1},
@@ -151,6 +194,7 @@ class TestActivityDashboard(unittest.TestCase):
 		by_id = {alert["id"]: alert["target"] for alert in alerts}
 		self.assertEqual(by_id["EX-1"], "/planning/routes/LIV-1?dn=DN-9")
 		self.assertEqual(by_id["prep-shortages"], "/preparation?shortage=1")
+		self.assertEqual(by_id["prep-complete"], "/preparation?complete=1")
 		self.assertEqual(by_id["prep-overdue"], "/preparation?dateScope=overdue")
 		self.assertEqual(by_id["fulfillment-returns"], "/stock?focus=route")
 		self.assertEqual(by_id["stock-missing"], "/stock?focus=missing")
@@ -176,6 +220,7 @@ class TestActivityDashboard(unittest.TestCase):
 			patch.object(dashboard, "_load_pickable_orders", return_value=[_order(delivery_date="2026-08-26")]),
 			patch.object(dashboard, "_load_draft_pick_lists", return_value=[_pick()]),
 			patch.object(dashboard, "_count_shortage_orders", return_value=1),
+			patch.object(dashboard, "_count_ready_to_complete_orders", return_value=0),
 			patch.object(dashboard, "_load_open_routes", return_value=[_route(statut_chargement="À charger")]),
 			patch.object(dashboard, "_vehicle_label", return_value="Camion A"),
 			patch.object(dashboard, "_load_vehicle_stocks", return_value=[
@@ -193,6 +238,7 @@ class TestActivityDashboard(unittest.TestCase):
 					"loadingStatus": "À charger",
 				},
 			]),
+			patch.object(dashboard, "_load_shipped_counts", return_value={}),
 			patch.object(dashboard, "_load_pending_cashier_routes") as cashier,
 		):
 			payload = dashboard.build_activity_dashboard(role="preparateur", date="2026-08-28")
@@ -209,6 +255,8 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertNotIn("payments", payload)
 		self.assertNotIn("pipeline", payload)
 		self.assertEqual(payload["dispatch"]["ready"], 1)
+		self.assertEqual(payload["shippedTrend"], [0] * 14)
+		self.assertEqual(payload["routeSuggestions"], [])
 		self.assertTrue(any(alert["id"] == "prep-overdue" for alert in payload["alerts"]))
 		self.assertTrue(any(alert["target"] == "/preparation?dateScope=overdue" for alert in payload["alerts"]))
 		self.assertFalse(any(alert["id"] == "dispatch-ready" for alert in payload["alerts"]))
@@ -231,6 +279,7 @@ class TestActivityDashboard(unittest.TestCase):
 			patch.object(dashboard, "_load_pickable_orders", return_value=[_order()]),
 			patch.object(dashboard, "_load_draft_pick_lists", return_value=[]),
 			patch.object(dashboard, "_count_shortage_orders", return_value=0),
+			patch.object(dashboard, "_count_ready_to_complete_orders", return_value=0),
 			patch.object(dashboard, "_load_open_routes", return_value=[_route()]),
 			patch.object(dashboard, "_vehicle_label", return_value="Camion A"),
 			patch.object(dashboard, "_load_route_children", return_value=[]),
@@ -255,6 +304,7 @@ class TestActivityDashboard(unittest.TestCase):
 			patch.object(dashboard, "_load_today_payments", return_value=[{"montant": 800, "statut_controle": "Déclaré"}]),
 			patch.object(dashboard, "_load_cash_box_balances", return_value=[{"balance": 1200}]),
 			patch.object(dashboard, "_load_open_exceptions", return_value=[]),
+			patch.object(dashboard, "_load_shipped_counts", return_value={"2026-08-28": 3}),
 		):
 			payload = dashboard.build_activity_dashboard(role="responsable", date="2026-08-28")
 
@@ -268,6 +318,8 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertEqual(payload["payments"]["toControl"], 1)
 		self.assertEqual(payload["payments"]["declaredToday"], 800)
 		self.assertEqual(payload["fleet"]["inProgress"], 1)
+		self.assertEqual(payload["shippedTrend"][-1], 3)
+		self.assertEqual(payload["routeSuggestions"], [])
 		self.assertTrue(any(item["kind"] == "route" for item in payload["now"]))
 		self.assertTrue(any(item["kind"] == "dispatch" for item in payload["now"]))
 
@@ -276,6 +328,7 @@ class TestActivityDashboard(unittest.TestCase):
 			patch.object(dashboard, "_load_pickable_orders", return_value=[]),
 			patch.object(dashboard, "_load_draft_pick_lists", return_value=[]),
 			patch.object(dashboard, "_count_shortage_orders", return_value=0),
+			patch.object(dashboard, "_count_ready_to_complete_orders", return_value=0),
 			patch.object(dashboard, "_load_open_routes", return_value=[]),
 			patch.object(dashboard, "build_lite_routes", return_value=[]),
 			patch.object(dashboard, "_load_route_children", return_value=[]),
@@ -286,6 +339,7 @@ class TestActivityDashboard(unittest.TestCase):
 			patch.object(dashboard, "_load_vehicle_stocks", return_value=[]),
 			patch.object(dashboard, "_load_open_exceptions", return_value=[]),
 			patch.object(dashboard, "_load_pending_cashier_routes") as cashier,
+			patch.object(dashboard, "_load_shipped_counts", return_value={}),
 		):
 			payload = dashboard.build_activity_dashboard(role="planificateur", date="2026-08-28")
 
@@ -294,6 +348,7 @@ class TestActivityDashboard(unittest.TestCase):
 		self.assertNotIn("payments", payload)
 		self.assertEqual(payload["pipeline"]["cashier"], 0)
 		self.assertEqual(payload["pipeline"]["toDispatch"], 0)
+		self.assertEqual(payload["shippedTrend"], [0] * 14)
 
 
 if __name__ == "__main__":

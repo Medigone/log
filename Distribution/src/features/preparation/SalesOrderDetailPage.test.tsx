@@ -24,6 +24,10 @@ const mocks = vi.hoisted(() => ({
     existing_pick_list: undefined as string | undefined,
     draft_pick_list: undefined as string | undefined,
     has_available_stock: true,
+    pick_incomplete: false as boolean | undefined,
+    ready_to_complete: false as boolean | undefined,
+    uncovered_qty: undefined as number | undefined,
+    pick_lists: undefined as Array<{ name: string; docstatus: number }> | undefined,
     stock_shortages: [] as Array<{ item_code: string; item_name: string; warehouse: string; required: number; available: number }>,
     custom_preparation_status: undefined as string | undefined,
     items: [
@@ -133,6 +137,10 @@ describe("SalesOrderDetailPage", () => {
     mocks.detail.existing_pick_list = undefined;
     mocks.detail.draft_pick_list = undefined;
     mocks.detail.has_available_stock = true;
+    mocks.detail.pick_incomplete = false;
+    mocks.detail.ready_to_complete = false;
+    mocks.detail.uncovered_qty = undefined;
+    mocks.detail.pick_lists = undefined;
     mocks.detail.stock_shortages = [
       { item_code: "ART-1", item_name: "Article 1", warehouse: "Magasins - MP", required: 12, available: 0 },
     ];
@@ -149,46 +157,36 @@ describe("SalesOrderDetailPage", () => {
     expect(screen.getByText("Article 1")).toBeInTheDocument();
     expect(screen.getByText("Article 2")).toBeInTheDocument();
     expect(screen.getByText("Rupture")).toBeInTheDocument();
-    expect(screen.getByText("OK")).toBeInTheDocument();
+    expect(screen.getByText("À prélever")).toBeInTheDocument();
     expect(screen.getAllByText("Client Test 1").length).toBeGreaterThan(0);
     expect(screen.getByText("Alger Centre · Alger")).toBeInTheDocument();
     expect(screen.getAllByText("Sans liste")).toHaveLength(2);
   });
 
-  it("crée la liste de prélèvement depuis la fiche puis ouvre la session", async () => {
+  it("n’expose pas de création de liste depuis la fiche", () => {
     mocks.detail.stock_shortages = [];
     mocks.detail.items = [
       { item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", required: 2, available: 10, uom: "Unité" },
     ];
-    const user = userEvent.setup();
     renderDetail();
-    await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
-    expect(screen.getByRole("dialog", { name: /confirmer la création/i })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /confirmer la création/i }));
-    await waitFor(() => expect(mocks.createPickList).toHaveBeenCalledWith(["SO-1"]));
-    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("crée la liste du disponible depuis la fiche si une ligne est en rupture", async () => {
-    const user = userEvent.setup();
+  it("signale une rupture sur la fiche sans bouton de création", () => {
     renderDetail();
-    await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
-    expect(screen.getByRole("dialog", { name: /prélever le disponible/i })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /créer la liste du disponible/i }));
-    await waitFor(() => expect(mocks.createPickList).toHaveBeenCalledWith(["SO-1"]));
-    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
+    expect(screen.getByText("Rupture")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
   });
 
-  it("bloque la confirmation si aucun article n’a de stock", async () => {
+  it("laisse une commande sans stock visible, sans bouton de création", () => {
     mocks.detail.has_available_stock = false;
     mocks.detail.items = [
       { item_code: "ART-1", item_name: "Article 1", warehouse: "Magasins - MP", required: 12, available: 0, uom: "Unité" },
     ];
-    const user = userEvent.setup();
     renderDetail();
-    await user.click(screen.getByRole("button", { name: /créer la liste de prélèvement/i }));
-    expect(screen.getByRole("dialog", { name: /stock insuffisant/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /confirmer la création/i })).toBeDisabled();
+    expect(screen.getByText("Rupture")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
     expect(mocks.createPickList).not.toHaveBeenCalled();
   });
 
@@ -239,5 +237,28 @@ describe("SalesOrderDetailPage", () => {
     renderDetail();
     await user.click(screen.getByRole("button", { name: /prendre connaissance des modifications/i }));
     await waitFor(() => expect(mocks.acknowledgeModification).toHaveBeenCalledWith("SO-1"));
+  });
+
+  it("signale un reliquat à prélever et ouvre la liste existante", () => {
+    mocks.detail.can_create_pick_list = true;
+    mocks.detail.ready_to_complete = true;
+    mocks.detail.pick_incomplete = true;
+    mocks.detail.uncovered_qty = 12;
+    mocks.detail.draft_pick_list = "PL-1";
+    mocks.detail.pick_lists = [{ name: "PL-1", docstatus: 0 }];
+    mocks.detail.stock_shortages = [];
+    mocks.detail.has_available_stock = true;
+    mocks.detail.items = [
+      { item_code: "ART-1", item_name: "Article 1", warehouse: "Magasins - MP", required: 12, available: 12, uom: "Unité", pick_list: null },
+      { item_code: "ART-2", item_name: "Article 2", warehouse: "Magasins - MP", required: 2, available: 10, uom: "Unité", pick_list: "PL-1" },
+    ];
+    renderDetail();
+
+    expect(screen.getByText("À compléter")).toBeInTheDocument();
+    expect(screen.getByText("À prélever")).toBeInTheDocument();
+    expect(screen.getByText("Sur liste")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ouvrir la liste/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /compléter la liste/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
   });
 });

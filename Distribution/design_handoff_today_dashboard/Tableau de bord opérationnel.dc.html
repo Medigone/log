@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 0; background: #fafafa; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #18181b; text-decoration: none; }
+  a:hover { color: #52525b; }
+  input { font-family: inherit; }
+  input:focus { outline: none; }
+</style>
+</helmet>
+<div style="font-family: Geist, system-ui, -apple-system, sans-serif; color: #09090b; background: #fafafa; min-height: 100vh; font-size: 14px;">
+
+  <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 20px; background: #ffffff; border-bottom: 1px solid #e4e4e7; position: sticky; top: 0; z-index: 20;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+      <div style="width: 14px; height: 12px; border: 1.5px solid currentColor; border-radius: 2px; display: flex;"><div style="width: 5px; border-right: 1.5px solid currentColor;"></div></div>
+    </div>
+    <div style="width: 1px; height: 18px; background: #e4e4e7;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717a;">
+      <span>Exploitation</span><span style="color: #d4d4d8;">/</span><span style="color: #09090b; font-weight: 500;">Tableau de bord</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fafafa; color: #a1a1aa; font-size: 13px; min-width: 240px; cursor: pointer;" style-hover="background: #ffffff; border-color: #d4d4d8;">
+      <div style="width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%;"></div>
+      <span>Rechercher un bon, un client…</span>
+      <div style="flex: 1;"></div>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 5px; border: 1px solid #e4e4e7; border-radius: 4px; background: #ffffff;">⌘K</span>
+    </div>
+    <div style="width: 28px; height: 28px; border-radius: 50%; background: #18181b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">MB</div>
+  </div>
+
+  <div style="max-width: 1480px; margin: 0 auto; padding: 22px 20px 56px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa;">Opérationnel · vendredi 05/09/2026</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.02em;">Aujourd’hui</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; background: #fef2f2; color: #b91c1c; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #fecaca; white-space: nowrap;" style-hover="background: #fee2e2;" onClick="{{ toggleAlertDetail }}">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>3 anomalies
+          </span>
+        </div>
+        <div style="font-size: 13px; color: #71717a;">7 bons en attente · 3 anomalies · aucune tournée lancée</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; padding: 2px; background: #f4f4f5; border-radius: 8px; gap: 2px;">
+          <div style="padding: 5px 10px; font-size: 13px; font-weight: 500; background: #ffffff; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.06); cursor: pointer;">Jour</div>
+          <div style="padding: 5px 10px; font-size: 13px; color: #71717a; border-radius: 6px; cursor: pointer;" style-hover="color: #09090b;">Semaine</div>
+        </div>
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Préparer</div>
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 6px; background: #18181b; color: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;">Planifier une tournée <span style="opacity: 0.6;">→</span></div>
+      </div>
+    </div>
+
+    <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 9px 12px; border: 1px solid #fecaca; background: #fffafa; border-radius: 10px; flex-wrap: wrap;">
+        <span style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #dc2626; color: #ffffff; font-size: 11px; font-weight: 700;">!</span>
+        <span style="font-size: 13px; font-weight: 600; color: #7f1d1d;">3 anomalies bloquent la journée</span>
+        <div style="width: 1px; height: 16px; background: #fecaca;"></div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #991b1b; cursor: pointer;" style-hover="text-decoration: underline;"><span style="width: 5px; height: 5px; border-radius: 50%; background: #dc2626;"></span>1 rupture de stock</div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #991b1b; cursor: pointer;" style-hover="text-decoration: underline;"><span style="width: 5px; height: 5px; border-radius: 50%; background: #dc2626;"></span>1 préparation en retard</div>
+        <div style="display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #92400e; cursor: pointer;" style-hover="text-decoration: underline;" onClick="{{ selectLate }}"><span style="width: 5px; height: 5px; border-radius: 50%; background: #d97706;"></span>4 BL prêts sans tournée</div>
+        <div style="flex: 1;"></div>
+        <div style="height: 26px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; background: #18181b; color: #ffffff; font-size: 12px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;" onClick="{{ expandAlerts }}">Tout traiter</div>
+        <div style="font-size: 12px; color: #a1a1aa; cursor: pointer;" style-hover="color: #52525b;" onClick="{{ hideAlerts }}">✕</div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ showCards }}" hint-placeholder-val="{{ false }}">
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+        <div style="border: 1px solid #fecaca; background: #fffafa; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #7f1d1d;">Ruptures de stock</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c;">1</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">CMD-2026-00142 · stock insuffisant sur 2 lignes.</div>
+          <div style="font-size: 12px; font-weight: 500; color: #b91c1c; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;">Voir les lignes manquantes →</div>
+        </div>
+        <div style="border: 1px solid #fecaca; background: #fffafa; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #7f1d1d;">Préparation en retard</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c;">1</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">CMD-2026-00151 · date de livraison dépassée.</div>
+          <div style="font-size: 12px; font-weight: 500; color: #b91c1c; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;">Lancer le prélèvement →</div>
+        </div>
+        <div style="border: 1px solid #fde68a; background: #fffdf7; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #78350f;">BL prêts sans tournée</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fffbeb; color: #a16207;">4</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">Prêts au quai, date dépassée, aucun véhicule affecté.</div>
+          <div style="font-size: 12px; font-weight: 500; color: #a16207; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ selectLate }}">Sélectionner les 4 bons →</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">1 · À préparer</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c; white-space: nowrap;">1 bloqué</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">2</span>
+          <span style="font-size: 12px; color: #71717a;">commandes</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 22%; height: 100%; background: #18181b;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">2 · À planifier</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c; white-space: nowrap;">4 en retard</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">5</span>
+          <span style="font-size: 12px; color: #71717a;">bons sans tournée</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 56%; height: 100%; background: #18181b;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">3 · À charger</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: #d4d4d8;">0</span>
+          <span style="font-size: 12px; color: #a1a1aa;">tournée au quai</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5;"></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">4 · En tournée</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; color: #d4d4d8;">0</span>
+          <span style="font-size: 12px; color: #a1a1aa;">tournées en cours</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5;"></div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1.95fr) minmax(320px, 1fr); gap: 18px; align-items: start;">
+
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid #e4e4e7;">
+          <span style="font-size: 14px; font-weight: 600;">File de travail</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">7 bons</span>
+          <div style="flex: 1;"></div>
+          <div style="display: flex; padding: 2px; background: #f4f4f5; border-radius: 8px; gap: 2px;">
+            <div style="padding: 4px 10px; font-size: 12.5px; font-weight: 500; border-radius: 6px; cursor: pointer; background: {{ kanbanBg }}; color: {{ kanbanColor }}; box-shadow: {{ kanbanShadow }};" onClick="{{ setKanban }}">Pipeline</div>
+            <div style="padding: 4px 10px; font-size: 12.5px; font-weight: 500; border-radius: 6px; cursor: pointer; background: {{ tableBg }}; color: {{ tableColor }}; box-shadow: {{ tableShadow }};" onClick="{{ setTable }}">Tableau</div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+          <input type="text" placeholder="Filtrer par référence ou client…" value="{{ query }}" onChange="{{ onQuery }}" style="height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 13px; width: 230px; color: #09090b;" style-focus="border-color: #a1a1aa;" />
+          <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid {{ lateBorder }}; background: {{ lateBg }}; color: {{ lateColor }};" onClick="{{ toggleLate }}">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span> En retard
+          </div>
+          <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid {{ readyBorder }}; background: {{ readyBg }}; color: {{ readyColor }};" onClick="{{ toggleReady }}">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span> Préparé
+          </div>
+          <div style="flex: 1;"></div>
+          <div style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa;">{{ resultLabel }}</div>
+        </div>
+
+        <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #18181b; color: #ffffff; flex-wrap: wrap;">
+            <span style="font-size: 13px; font-weight: 500;">{{ selectionLabel }}</span>
+            <div style="flex: 1;"></div>
+            <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; background: #ffffff; color: #18181b; font-size: 12px; font-weight: 600; cursor: pointer;">Créer une tournée</div>
+            <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; border: 1px solid #3f3f46; font-size: 12px; cursor: pointer;" style-hover="background: #27272a;">Affecter un véhicule</div>
+            <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; color: #a1a1aa; font-size: 12px; cursor: pointer;" style-hover="color: #ffffff;" onClick="{{ clearSelection }}">Effacer</div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isTable }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display: grid; grid-template-columns: 34px minmax(0, 1.25fr) minmax(0, 1fr) 92px 108px 88px 34px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+              <div style="padding: 7px 0;"></div>
+              <div style="padding: 7px 0;">Référence</div>
+              <div style="padding: 7px 0;">Client · Ville</div>
+              <div style="padding: 7px 0;">Livraison</div>
+              <div style="padding: 7px 0;">Statut</div>
+              <div style="padding: 7px 0; text-align: right;">Lignes / kg</div>
+              <div style="padding: 7px 0;"></div>
+            </div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="7">
+              <div style="display: grid; grid-template-columns: 34px minmax(0, 1.25fr) minmax(0, 1fr) 92px 108px 88px 34px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; cursor: pointer; background: {{ r.bg }};" style-hover="background: #fafafa;" onClick="{{ r.toggle }}">
+                <div style="padding: 9px 0;">
+                  <div style="width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #ffffff; border: 1.5px solid {{ r.boxBorder }}; background: {{ r.boxBg }};">{{ r.check }}</div>
+                </div>
+                <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500;">{{ r.ref }}</span>
+                  <span style="font-size: 11px; color: #a1a1aa;">{{ r.note }}</span>
+                </div>
+                <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                  <span style="font-size: 13px;">{{ r.client }}</span>
+                  <span style="font-size: 11px; color: #a1a1aa;">{{ r.city }}</span>
+                </div>
+                <div style="padding: 9px 0; font-size: 12.5px; color: {{ r.dateColor }};">{{ r.date }}</div>
+                <div style="padding: 9px 0;">
+                  <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500; background: {{ r.badgeBg }}; color: {{ r.badgeFg }};">
+                    <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.badgeDot }};"></span>{{ r.status }}
+                  </span>
+                </div>
+                <div style="padding: 9px 0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 12px; color: #52525b;">{{ r.load }}</div>
+                <div style="padding: 9px 0; text-align: right; color: #a1a1aa; font-size: 15px;">⋯</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isKanban }}" hint-placeholder-val="{{ true }}">
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: #f4f4f5;">
+            <sc-for list="{{ columns }}" as="col" hint-placeholder-count="4">
+              <div style="background: #ffffff; display: flex; flex-direction: column; min-height: 300px;">
+                <div style="display: flex; align-items: center; gap: 6px; padding: 10px; border-bottom: 1px solid #f4f4f5; background: #fcfcfc;">
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: #52525b; white-space: nowrap;">{{ col.title }}</span>
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; padding: 1px 5px; border-radius: 5px; background: #f4f4f5; color: #52525b;">{{ col.count }}</span>
+                </div>
+                <div style="padding: 8px; display: flex; flex-direction: column; gap: 8px;">
+                  <sc-for list="{{ col.cards }}" as="c" hint-placeholder-count="2">
+                    <div style="border: 1px solid #e4e4e7; border-radius: 9px; padding: 9px; display: flex; flex-direction: column; gap: 6px; cursor: pointer; background: {{ c.bg }};" style-hover="border-color: #a1a1aa;" onClick="{{ c.toggle }}">
+                      <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; font-weight: 500;">{{ c.short }}</span>
+                        <div style="flex: 1;"></div>
+                        <span style="width: 6px; height: 6px; border-radius: 50%; background: {{ c.badgeDot }};"></span>
+                      </div>
+                      <div style="font-size: 12px; color: #52525b;">{{ c.client }}</div>
+                      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 2px 6px;">
+                        <span style="font-size: 11px; white-space: nowrap; flex: 0 0 auto; color: {{ c.dateColor }};">{{ c.date }}</span>
+                        <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #a1a1aa; white-space: nowrap; flex: 0 0 auto;">{{ c.load }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ col.empty }}" hint-placeholder-val="{{ false }}">
+                    <div style="border: 1px dashed #e4e4e7; border-radius: 9px; padding: 14px 10px; text-align: center; font-size: 11.5px; color: #a1a1aa; line-height: 1.5;">{{ col.emptyText }}</div>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="padding: 42px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+            <div style="width: 34px; height: 34px; border-radius: 9px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 14px;">✓</div>
+            <div style="font-size: 13px; font-weight: 600;">Aucun bon ne correspond</div>
+            <div style="font-size: 12.5px; color: #71717a; max-width: 320px; line-height: 1.5;">Aucun résultat pour ce filtre. Réinitialisez pour retrouver les 7 bons du jour.</div>
+            <div style="margin-top: 4px; height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser les filtres</div>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="padding: 12px 14px; border-bottom: 1px solid #f4f4f5; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 14px; font-weight: 600;">Carte des livraisons</span>
+            <div style="flex: 1;"></div>
+            <span style="font-size: 12px; color: #71717a;">7 points · 139 km</span>
+          </div>
+          <div style="position: relative; height: 210px; background-color: #f6f6f5; background-image: linear-gradient(#ececeb 1px, transparent 1px), linear-gradient(90deg, #ececeb 1px, transparent 1px); background-size: 28px 28px;">
+            <div style="position: absolute; left: 0; right: 0; top: 34%; height: 3px; background: #e4e4e3;"></div>
+            <div style="position: absolute; left: 22%; top: 0; bottom: 0; width: 3px; background: #e4e4e3;"></div>
+            <div style="position: absolute; left: 18%; top: 22%; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 22px; height: 22px; border-radius: 50%; background: #18181b; color: #ffffff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.25);">3</span>
+              <span style="font-size: 11px; font-weight: 500; background: #ffffff; padding: 1px 5px; border-radius: 4px; border: 1px solid #e4e4e7; white-space: nowrap;">Lille</span>
+            </div>
+            <div style="position: absolute; left: 52%; top: 41%; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 20px; height: 20px; border-radius: 50%; background: #dc2626; color: #ffffff; font-size: 10.5px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.25);">2</span>
+              <span style="font-size: 11px; font-weight: 500; background: #ffffff; padding: 1px 5px; border-radius: 4px; border: 1px solid #e4e4e7; white-space: nowrap;">Douai</span>
+            </div>
+            <div style="position: absolute; left: 30%; top: 66%; display: flex; align-items: center; gap: 6px;">
+              <span style="width: 18px; height: 18px; border-radius: 50%; background: #52525b; color: #ffffff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.25);">1</span>
+              <span style="font-size: 11px; font-weight: 500; background: #ffffff; padding: 1px 5px; border-radius: 4px; border: 1px solid #e4e4e7; white-space: nowrap;">Arras</span>
+            </div>
+            <div style="position: absolute; right: 8%; top: 20%; display: flex; align-items: center; gap: 6px; white-space: nowrap;">
+              <span style="width: 18px; height: 18px; border-radius: 50%; background: #52525b; color: #ffffff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 4px rgba(0,0,0,0.25);">1</span>
+              <span style="font-size: 11px; font-weight: 500; background: #ffffff; padding: 1px 5px; border-radius: 4px; border: 1px solid #e4e4e7; white-space: nowrap;">Valenciennes</span>
+            </div>
+            <div style="position: absolute; left: 10px; bottom: 10px; display: flex; align-items: center; gap: 10px; padding: 5px 8px; background: rgba(255,255,255,0.94); border: 1px solid #e4e4e7; border-radius: 7px;">
+              <span style="display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: #52525b;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #dc2626;"></span>En retard</span>
+              <span style="display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: #52525b;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #18181b;"></span>À planifier</span>
+            </div>
+            <div style="position: absolute; right: 10px; top: 10px; padding: 4px 9px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 7px; font-size: 11.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Ouvrir la carte</div>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="padding: 12px 14px; border-bottom: 1px solid #f4f4f5; display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 14px; font-weight: 600;">Tournées du jour</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">0 active</span>
+          </div>
+          <div style="padding: 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;">
+            <div style="font-size: 13px; font-weight: 600;">Aucune tournée lancée</div>
+            <div style="font-size: 12.5px; color: #71717a; line-height: 1.55;">5 bons attendent une affectation, dont 4 en retard. Deux regroupements par axe sont possibles.</div>
+            <div style="height: 32px; padding: 0 12px; display: flex; align-items: center; gap: 6px; background: #18181b; color: #ffffff; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;" onClick="{{ selectLate }}">Planifier les 4 bons en retard <span style="opacity: 0.6;">→</span></div>
+          </div>
+          <div style="padding: 12px 14px; border-top: 1px solid #f4f4f5; background: #fafafa; display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">Regroupements suggérés</div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 10px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 9px; cursor: pointer;" style-hover="border-color: #d4d4d8;">
+              <div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
+                <span style="font-size: 12.5px; font-weight: 500;">Axe Nord · 3 bons</span>
+                <span style="font-size: 11px; color: #a1a1aa;">Lille, Roubaix · 1 240 kg · 87 km</span>
+              </div>
+              <span style="font-size: 11.5px; font-weight: 600;">Créer</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 9px 10px; background: #ffffff; border: 1px solid #e4e4e7; border-radius: 9px; cursor: pointer;" style-hover="border-color: #d4d4d8;">
+              <div style="display: flex; flex-direction: column; gap: 2px; flex: 1;">
+                <span style="font-size: 12.5px; font-weight: 500;">Axe Sud · 2 bons</span>
+                <span style="font-size: 11px; color: #a1a1aa;">Douai, Arras · 640 kg · 52 km</span>
+              </div>
+              <span style="font-size: 11.5px; font-weight: 600;">Créer</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="padding: 12px 14px; display: flex; align-items: flex-start; gap: 8px; border-bottom: 1px solid #f4f4f5;">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-size: 14px; font-weight: 600;">Bons expédiés · 14 jours</span>
+              <span style="font-size: 11.5px; color: #a1a1aa;">Moyenne 11,4 / jour</span>
+            </div>
+            <div style="flex: 1;"></div>
+            <span style="font-size: 11.5px; font-weight: 500; padding: 2px 7px; border-radius: 999px; background: #f0fdf4; color: #15803d;">+8 %</span>
+          </div>
+          <div style="padding: 14px; display: flex; align-items: flex-end; gap: 4px; height: 92px;">
+            <sc-for list="{{ trend }}" as="t" hint-placeholder-count="14">
+              <div style="flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%;" title="{{ t.label }}">
+                <div style="border-radius: 3px 3px 0 0; height: {{ t.h }}; background: {{ t.color }};"></div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding: 0 14px 12px; display: flex; justify-content: space-between; font-family: 'Geist Mono', monospace; font-size: 10px; color: #a1a1aa;">
+            <span>23/08</span><span>29/08</span><span>05/09</span>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="padding: 12px 14px; border-bottom: 1px solid #f4f4f5; display: flex; align-items: center; justify-content: space-between;">
+            <span style="font-size: 14px; font-weight: 600;">Ressources</span>
+            <span style="font-size: 12px; color: #71717a;">3 véhicules</span>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <div style="display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid #f4f4f5;">
+              <div style="width: 30px; height: 30px; border-radius: 8px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 10px; font-weight: 500; color: #52525b;">19T</div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 12.5px; font-weight: 500;">AB-431-CD</span>
+                <span style="font-size: 11px; color: #a1a1aa;">M. Dubois · 0 / 8 000 kg</span>
+              </div>
+              <span style="font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: #f0fdf4; color: #15803d; font-weight: 500;">Disponible</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid #f4f4f5;">
+              <div style="width: 30px; height: 30px; border-radius: 8px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 10px; font-weight: 500; color: #52525b;">12T</div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 12.5px; font-weight: 500;">EF-902-GH</span>
+                <span style="font-size: 11px; color: #a1a1aa;">Mme Renard · 0 / 5 000 kg</span>
+              </div>
+              <span style="font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: #f0fdf4; color: #15803d; font-weight: 500;">Disponible</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; padding: 11px 14px;">
+              <div style="width: 30px; height: 30px; border-radius: 8px; background: #f4f4f5; display: flex; align-items: center; justify-content: center; font-family: 'Geist Mono', monospace; font-size: 10px; font-weight: 500; color: #a1a1aa;">3T5</div>
+              <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+                <span style="font-size: 12.5px; font-weight: 500; color: #71717a;">IJ-118-KL</span>
+                <span style="font-size: 11px; color: #a1a1aa;">Maintenance jusqu’au 08/09</span>
+              </div>
+              <span style="font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: #f4f4f5; color: #71717a; font-weight: 500;">Indispo.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;mainView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;kanban&quot;,&quot;table&quot;],&quot;default&quot;:&quot;kanban&quot;,&quot;tsType&quot;:&quot;'kanban' | 'table'&quot;,&quot;section&quot;:&quot;File de travail&quot;},&quot;alertStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;masque&quot;,&quot;bandeau&quot;,&quot;cartes&quot;],&quot;default&quot;:&quot;masque&quot;,&quot;tsType&quot;:&quot;'masque' | 'bandeau' | 'cartes'&quot;,&quot;section&quot;:&quot;Anomalies&quot;}}">
+const DATA = [
+  { ref: 'CMD-2026-00142', client: 'CLIENT 1', city: 'Lens', date: '05/09/2026', stage: 'prep', status: 'Rupture', note: 'Prélèvement bloqué · 2 lignes', load: '6 l · 420 kg', late: false, blocked: true },
+  { ref: 'CMD-2026-00151', client: 'CLIENT 3', city: 'Béthune', date: '04/09/2026', stage: 'prep', status: 'En retard', note: 'À prélever · date dépassée', load: '3 l · 180 kg', late: true, blocked: false },
+  { ref: 'MAT-DN-2026-00005', client: 'CLIENT 2', city: 'Lille', date: '30/08/2026', stage: 'plan', status: 'En retard', note: 'Prêt · sans tournée', load: '8 l · 610 kg', late: true, blocked: false },
+  { ref: 'MAT-DN-2026-00006', client: 'CLIENT 2', city: 'Roubaix', date: '02/09/2026', stage: 'plan', status: 'En retard', note: 'Prêt · sans tournée', load: '4 l · 300 kg', late: true, blocked: false },
+  { ref: 'MAT-DN-2026-00009', client: 'CLIENT 2', city: 'Lille', date: '03/09/2026', stage: 'plan', status: 'En retard', note: 'Prêt · sans tournée', load: '5 l · 330 kg', late: true, blocked: false },
+  { ref: 'MAT-DN-2026-00007', client: 'CLIENT 1', city: 'Douai', date: '04/09/2026', stage: 'plan', status: 'En retard', note: 'Prêt · sans tournée', load: '7 l · 480 kg', late: true, blocked: false },
+  { ref: 'MAT-DN-2026-00008', client: 'CLIENT 2', city: 'Arras', date: '05/09/2026', stage: 'plan', status: 'Préparé', note: 'Prêt · sans tournée', load: '2 l · 160 kg', late: false, blocked: false }
+];
+
+const TREND = [9, 12, 7, 14, 11, 4, 0, 13, 15, 10, 12, 8, 14, 11];
+
+class Component extends DCLogic {
+  state = { view: null, alerts: null, query: '', late: false, ready: false, sel: {} };
+
+  get view() { return this.state.view || this.props.mainView || 'kanban'; }
+  get alertMode() { return this.state.alerts || this.props.alertStyle || 'bandeau'; }
+
+  badge(d) {
+    if (d.blocked) return { bg: '#fef2f2', fg: '#b91c1c', dot: '#dc2626' };
+    if (d.late) return { bg: '#fef2f2', fg: '#b91c1c', dot: '#dc2626' };
+    if (d.status === 'Préparé') return { bg: '#fffbeb', fg: '#a16207', dot: '#d97706' };
+    return { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa' };
+  }
+
+  filtered() {
+    const q = this.state.query.trim().toLowerCase();
+    return DATA.filter(d => {
+      if (q && !(d.ref.toLowerCase().includes(q) || d.client.toLowerCase().includes(q) || d.city.toLowerCase().includes(q))) return false;
+      if (this.state.late && !d.late) return false;
+      if (this.state.ready && d.status !== 'Préparé') return false;
+      return true;
+    });
+  }
+
+  toggle(ref) {
+    this.setState(s => {
+      const sel = Object.assign({}, s.sel);
+      if (sel[ref]) delete sel[ref]; else sel[ref] = true;
+      return { sel };
+    });
+  }
+
+  renderVals() {
+    const list = this.filtered();
+    const sel = this.state.sel;
+    const selCount = Object.keys(sel).length;
+    const mode = this.alertMode;
+    const view = this.view;
+    const hidden = mode === 'masque';
+
+    const rows = list.map(d => {
+      const b = this.badge(d);
+      const on = !!sel[d.ref];
+      return {
+        ref: d.ref, short: d.ref.replace('MAT-DN-2026-', 'BL ').replace('CMD-2026-', 'CMD '),
+        client: d.client, city: d.city, date: d.date, note: d.note, load: d.load, status: d.status,
+        badgeBg: b.bg, badgeFg: b.fg, badgeDot: b.dot,
+        dateColor: d.late ? '#b91c1c' : '#52525b',
+        bg: on ? '#f8f8f8' : '#ffffff',
+        boxBorder: on ? '#18181b' : '#d4d4d8',
+        boxBg: on ? '#18181b' : '#ffffff',
+        check: on ? '✓' : '',
+        toggle: () => this.toggle(d.ref)
+      };
+    });
+
+    const byStage = st => rows.filter(r => DATA.find(d => d.ref === r.ref).stage === st);
+    const columns = [
+      { title: '1 · À préparer', stage: 'prep', emptyText: 'Rien à prélever' },
+      { title: '2 · À planifier', stage: 'plan', emptyText: 'Tous les bons sont affectés' },
+      { title: '3 · À charger', stage: 'load', emptyText: 'Aucune tournée au quai' },
+      { title: '4 · En tournée', stage: 'road', emptyText: 'Aucune tournée en cours' }
+    ].map(c => {
+      const cards = byStage(c.stage);
+      return { title: c.title, count: cards.length, cards, empty: cards.length === 0, emptyText: c.emptyText };
+    });
+
+    const max = Math.max.apply(null, TREND);
+    const trend = TREND.map((v, i) => ({
+      label: v + ' bons',
+      h: Math.max(3, Math.round((v / max) * 64)) + 'px',
+      color: i === TREND.length - 1 ? '#18181b' : (v === 0 ? '#f4f4f5' : '#d4d4d8')
+    }));
+
+    const chip = on => on
+      ? { border: '#18181b', bg: '#18181b', color: '#ffffff' }
+      : { border: '#e4e4e7', bg: '#ffffff', color: '#52525b' };
+    const lc = chip(this.state.late);
+    const rc = chip(this.state.ready);
+    const tab = on => on
+      ? { bg: '#ffffff', color: '#09090b', shadow: '0 1px 2px rgba(0,0,0,0.06)' }
+      : { bg: 'transparent', color: '#71717a', shadow: 'none' };
+    const kt = tab(view === 'kanban');
+    const tt = tab(view === 'table');
+
+    return {
+      rows, columns, trend,
+      isTable: view === 'table' && list.length > 0,
+      isKanban: view === 'kanban' && list.length > 0,
+      isEmpty: list.length === 0,
+      showBanner: !hidden && mode === 'bandeau',
+      showCards: !hidden && mode === 'cartes',
+      query: this.state.query,
+      resultLabel: list.length + ' / ' + DATA.length + ' bons',
+      hasSelection: selCount > 0,
+      selectionLabel: selCount + (selCount > 1 ? ' bons sélectionnés' : ' bon sélectionné'),
+      lateBorder: lc.border, lateBg: lc.bg, lateColor: lc.color,
+      readyBorder: rc.border, readyBg: rc.bg, readyColor: rc.color,
+      kanbanBg: kt.bg, kanbanColor: kt.color, kanbanShadow: kt.shadow,
+      tableBg: tt.bg, tableColor: tt.color, tableShadow: tt.shadow,
+      onQuery: e => this.setState({ query: e.target.value }),
+      toggleLate: () => this.setState(s => ({ late: !s.late })),
+      toggleReady: () => this.setState(s => ({ ready: !s.ready })),
+      resetFilters: () => this.setState({ query: '', late: false, ready: false }),
+      setKanban: () => this.setState({ view: 'kanban' }),
+      setTable: () => this.setState({ view: 'table' }),
+      hideAlerts: () => this.setState({ alerts: 'masque' }),
+      toggleAlertDetail: () => this.setState({ alerts: mode === 'masque' ? 'cartes' : 'masque' }),
+      expandAlerts: () => this.setState({ alerts: 'cartes' }),
+      clearSelection: () => this.setState({ sel: {} }),
+      selectLate: () => {
+        const sel = {};
+        DATA.filter(d => d.stage === 'plan' && d.late).forEach(d => { sel[d.ref] = true; });
+        this.setState({ sel, view: 'table' });
+      }
+    };
+  }
+}
+
+</script>
+</body>
+</html>

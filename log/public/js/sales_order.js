@@ -6,6 +6,8 @@ frappe.ui.form.on("Sales Order", {
 		const hide = () => {
 			frm.remove_custom_button(__("Delivery Note"), __("Create"));
 			frm.remove_custom_button(__("Bon de livraison"), __("Créer"));
+			frm.remove_custom_button(__("Pick List"), __("Create"));
+			frm.remove_custom_button(__("Liste de prélèvement"), __("Créer"));
 		};
 		hide();
 		setTimeout(hide, 400);

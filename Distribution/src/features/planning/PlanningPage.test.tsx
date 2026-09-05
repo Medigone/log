@@ -561,4 +561,10 @@ describe("PlanningPage", () => {
     expect(within(table).queryByText("DN-PAGE-01")).not.toBeInTheDocument();
     expect(within(table).getByText("DN-PAGE-21")).toBeInTheDocument();
   });
+
+  it("ouvre l’affectation groupée depuis ?select=", async () => {
+    renderPage("/planning?select=DN-1,MAT-DN-2026-00003");
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/affecter 2 bl/i)).toBeInTheDocument();
+  });
 });

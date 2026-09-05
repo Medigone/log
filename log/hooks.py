@@ -186,7 +186,10 @@ doc_events = {
         "on_update": "log.services.portal_notifications.on_livraison_update",
     },
     "Sales Order": {
-        "on_submit": "log.services.portal_notifications.on_sales_order_submit",
+        "on_submit": [
+            "log.services.portal_notifications.on_sales_order_submit",
+            "log.pick_list_ops.on_sales_order_submit",
+        ],
         "on_update_after_submit": [
             "log.order_change_ops.invalidate_order_distribution",
             "log.services.portal_notifications.on_sales_order_update_after_submit",
@@ -211,6 +214,15 @@ doc_events = {
     },
     "Campagne Portail": {
         "on_update": "log.services.portal_notifications.on_campagne_portail_update",
+    },
+    "Stock Reconciliation": {
+        "on_submit": "log.pick_list_ops.on_stock_inbound",
+    },
+    "Purchase Receipt": {
+        "on_submit": "log.pick_list_ops.on_stock_inbound",
+    },
+    "Stock Entry": {
+        "on_submit": "log.pick_list_ops.on_stock_inbound",
     },
 }
 

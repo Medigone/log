@@ -32,3 +32,4 @@ log.patches.v1_0.initialize_portal_pwa
 log.patches.v1_0.initialize_order_changed_pick_lists
 log.patches.v1_0.add_preparation_modification_ack
 log.patches.v1_0.add_sales_order_item_stock_columns
+log.patches.v1_0.ensure_draft_pick_lists_for_open_orders

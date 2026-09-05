@@ -8,13 +8,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { CreatePickListDialog } from "@/features/preparation/CreatePickListDialog";
 import { OrderModifiedAlert } from "@/features/preparation/OrderModifiedAlert";
 import { apiErrorMessage } from "@/shared/api/distribution";
 import {
   usePreparationMutations,
   useSalesOrderPickDetail,
   orderIsModified,
+  orderReadyToComplete,
+  pickLineState,
   type SalesOrderPickLine,
 } from "@/shared/api/preparation";
 import { salesOrderDeskStatus, orderPickListState, orderPickListStatus } from "@/shared/design/statusTone";
@@ -28,8 +29,12 @@ function pickListNames(order: { pick_lists?: Array<{ name: string }>; draft_pick
   return [];
 }
 
-function lineIsShort(line: SalesOrderPickLine) {
-  return line.required > (line.available || 0) + 0.000001;
+function lineStatus(line: SalesOrderPickLine) {
+  const state = pickLineState(line);
+  if (state === "shortage") return { label: "Rupture", tone: "danger" as const };
+  if (state === "on_list") return { label: "Sur liste", tone: "info" as const };
+  if (state === "to_pick") return { label: "À prélever", tone: "warning" as const };
+  return { label: "OK", tone: "success" as const };
 }
 
 function SummaryCard({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -49,18 +54,16 @@ export function SalesOrderDetailPage() {
   const navigate = useNavigate();
   const name = orderId ? decodeURIComponent(orderId) : "";
   const { data, error, isLoading, mutate } = useSalesOrderPickDetail(name || undefined);
-  const { createPickList, creating, acknowledgeModification, acknowledging } = usePreparationMutations();
+  const { acknowledgeModification, acknowledging } = usePreparationMutations();
   const order = data?.message;
-  const [confirming, setConfirming] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const modified = orderIsModified(order);
 
   const goBack = () => navigate("/preparation");
   const shortages = order?.stock_shortages || [];
-  const canCreate = order?.can_create_pick_list !== false && !modified;
   const lists = order ? pickListNames(order) : [];
   const desk = salesOrderDeskStatus(order?.status);
-  const pick = orderPickListStatus(orderPickListState(order || {}));
+  const pick = orderPickListStatus(orderPickListState(order || {}), order || {});
   const requested = order?.requested_qty ?? order?.total_qty ?? 0;
   const picked = order?.picked_qty ?? 0;
   const percent = requested > 0 ? Math.min(100, Math.round((picked / requested) * 100)) : 0;
@@ -108,17 +111,15 @@ export function SalesOrderDetailPage() {
     {
       id: "status",
       header: "État",
-      sortValue: (row) => (lineIsShort(row) ? 1 : 0),
-      cell: (row) =>
-        lineIsShort(row) ? (
-          <StatusBadge tone="danger" size="sm">
-            Rupture
+      sortValue: (row) => pickLineState(row),
+      cell: (row) => {
+        const status = lineStatus(row);
+        return (
+          <StatusBadge tone={status.tone} size="sm">
+            {status.label}
           </StatusBadge>
-        ) : (
-          <StatusBadge tone="success" size="sm">
-            OK
-          </StatusBadge>
-        ),
+        );
+      },
     },
     {
       id: "pick_list",
@@ -141,24 +142,6 @@ export function SalesOrderDetailPage() {
         ),
     },
   ];
-
-  const handleCreate = async () => {
-    if (!order || !canCreate || order.has_available_stock === false) return;
-    setErrorMessage("");
-    try {
-      const session = await createPickList([order.name]);
-      const pickLists = (session?.pick_lists || [])
-        .map((pickList) => pickList?.name)
-        .filter((listName): listName is string => Boolean(listName));
-      if (!pickLists.length) {
-        throw new Error("La création n’a retourné aucune liste de prélèvement. Rechargez la page puis réessayez.");
-      }
-      navigate(`/preparation?pick_lists=${pickLists.join(",")}&created=1`);
-    } catch (mutationError) {
-      setConfirming(false);
-      setErrorMessage(apiErrorMessage(mutationError));
-    }
-  };
 
   const handleAcknowledge = async () => {
     if (!order) return;
@@ -220,9 +203,13 @@ export function SalesOrderDetailPage() {
             ) : null}
             {shortages.length > 0 ? (
               <StatusBadge tone="danger">Stock insuffisant</StatusBadge>
-            ) : (
+            ) : null}
+            {orderReadyToComplete(order) ? (
+              <StatusBadge tone="warning">À compléter</StatusBadge>
+            ) : null}
+            {shortages.length === 0 && !orderReadyToComplete(order) ? (
               <StatusBadge tone="success">Stock OK</StatusBadge>
-            )}
+            ) : null}
           </>
         }
         actions={
@@ -234,11 +221,6 @@ export function SalesOrderDetailPage() {
             >
               <ClipboardList />
               {lists.length > 1 ? "Ouvrir les listes" : "Ouvrir la liste"}
-            </Button>
-          ) : canCreate ? (
-            <Button onClick={() => setConfirming(true)} disabled={creating}>
-              <ClipboardList />
-              {creating ? "Création…" : "Créer la liste de prélèvement"}
             </Button>
           ) : null
         }
@@ -285,14 +267,6 @@ export function SalesOrderDetailPage() {
           }
         />
       </section>
-
-      <CreatePickListDialog
-        open={confirming}
-        orders={[order]}
-        creating={creating}
-        onOpenChange={setConfirming}
-        onConfirm={handleCreate}
-      />
     </div>
   );
 }

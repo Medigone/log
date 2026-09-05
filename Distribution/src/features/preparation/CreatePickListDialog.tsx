@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { type SalesOrderRow, type StockShortage } from "@/shared/api/preparation";
+import { type SalesOrderRow, type StockShortage, orderReadyToComplete } from "@/shared/api/preparation";
 import { formatQuantity } from "@/shared/format";
 
 function shortagesOf(order: SalesOrderRow): StockShortage[] {
@@ -19,6 +19,14 @@ function shortagesOf(order: SalesOrderRow): StockShortage[] {
 
 function orderHasNothingToPick(order: SalesOrderRow) {
   return order.has_available_stock === false;
+}
+
+function orderHasDraft(order: SalesOrderRow) {
+  return Boolean(order.draft_pick_list || order.draft_pick_lists?.length || order.pick_lists?.some((list) => Number(list.docstatus) === 0));
+}
+
+function orderHasSubmitted(order: SalesOrderRow) {
+  return Boolean(order.existing_pick_list || order.pick_lists?.some((list) => Number(list.docstatus) === 1));
 }
 
 export function CreatePickListDialog({
@@ -36,24 +44,51 @@ export function CreatePickListDialog({
 }) {
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const nothingToPick = orders.length > 0 && orders.every(orderHasNothingToPick);
-  const partial = !nothingToPick && orders.some((order) => shortagesOf(order).length > 0);
+  const completing = !nothingToPick && orders.some(orderReadyToComplete);
+  const completingDraft = completing && orders.some((order) => orderReadyToComplete(order) && orderHasDraft(order));
+  const completingSubmitted = completing && !completingDraft && orders.some((order) => orderReadyToComplete(order) && orderHasSubmitted(order));
+  const partial = !nothingToPick && !completing && orders.some((order) => shortagesOf(order).length > 0);
 
   useEffect(() => {
     if (open) confirmButtonRef.current?.focus();
   }, [open]);
 
-  const title = nothingToPick ? "Stock insuffisant" : partial ? "Prélever le disponible" : "Confirmer la création";
+  const title = nothingToPick
+    ? "Stock insuffisant"
+    : completingDraft
+      ? "Compléter la liste"
+      : completingSubmitted
+        ? "Créer la liste du reliquat"
+        : partial
+          ? "Prélever le disponible"
+          : "Confirmer la création";
   const description = nothingToPick
     ? "Aucun article n’a de stock disponible. Réapprovisionnez l’entrepôt avant de créer une liste."
-    : partial
-      ? "La liste ne contiendra que le stock actuel. Le manquant restera sur la commande pour une prochaine liste, une fois le stock réceptionné."
-      : `${orders.length} ${orders.length > 1 ? "listes de prélèvement seront créées" : "liste de prélèvement sera créée"}, une par commande sélectionnée.`;
+    : completingDraft
+      ? "Le stock revenu sera ajouté à la liste de prélèvement existante, sans perdre les quantités déjà saisies."
+      : completingSubmitted
+        ? "La première liste ne couvre pas toute la commande. Une nouvelle liste sera créée pour le reliquat maintenant en stock."
+        : partial
+          ? "La liste ne contiendra que le stock actuel. Le manquant restera sur la commande pour une prochaine liste, une fois le stock réceptionné."
+          : `${orders.length} ${orders.length > 1 ? "listes de prélèvement seront créées" : "liste de prélèvement sera créée"}, une par commande sélectionnée.`;
   const footerHint = nothingToPick
     ? "Réceptionnez le stock, puis réessayez."
-    : partial
-      ? "Les articles en rupture resteront à préparer plus tard, sans modifier la commande."
-      : "Les listes seront créées en brouillon et pourront être contrôlées avant la génération des bons de livraison.";
-  const confirmLabel = creating ? "Création…" : partial ? "Créer la liste du disponible" : "Confirmer la création";
+    : completingDraft
+      ? "Les articles déjà sur la liste restent en place."
+      : completingSubmitted
+        ? "La commande restera liée aux deux listes jusqu’à préparation complète."
+        : partial
+          ? "Les articles en rupture resteront à préparer plus tard, sans modifier la commande."
+          : "Les listes seront créées en brouillon et pourront être contrôlées avant la génération des bons de livraison.";
+  const confirmLabel = creating
+    ? "Création…"
+    : completingDraft
+      ? "Compléter la liste"
+      : completingSubmitted
+        ? "Créer la liste du reliquat"
+        : partial
+          ? "Créer la liste du disponible"
+          : "Confirmer la création";
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && !creating && onOpenChange(false)}>
@@ -61,7 +96,7 @@ export function CreatePickListDialog({
         <DialogHeader>
           <div className="flex items-start gap-3">
             <div
-              className={`shrink-0 rounded-md p-2 ${nothingToPick || partial ? "bg-red-50 text-red-700" : "bg-brand-50 text-brand-700"}`}
+              className={`shrink-0 rounded-md p-2 ${nothingToPick || partial ? "bg-red-50 text-red-700" : completing ? "bg-amber-50 text-amber-800" : "bg-brand-50 text-brand-700"}`}
             >
               {nothingToPick || partial ? <AlertTriangle className="size-5" /> : <ClipboardList className="size-5" />}
             </div>
@@ -91,6 +126,11 @@ export function CreatePickListDialog({
                       {shortage.warehouse ? ` · ${shortage.warehouse}` : ""}
                     </p>
                   ))}
+                  {orderReadyToComplete(order) && !shortages.length ? (
+                    <p className="text-xs text-amber-800">
+                      Reliquat à prélever{order.uncovered_qty ? ` · ${formatQuantity(order.uncovered_qty)}` : ""}
+                    </p>
+                  ) : null}
                 </div>
               );
             })}

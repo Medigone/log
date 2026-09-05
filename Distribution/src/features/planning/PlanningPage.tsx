@@ -313,6 +313,7 @@ export function PlanningPage() {
   const kanbanDate = searchParams.get("date") || isoDateWithOffset();
   const blDate = searchParams.get("blDate") || "";
   const status = searchParams.get("status") || "";
+  const selectParam = searchParams.get("select") || "";
   const [editing, setEditing] = useState<DeliveryNoteAssignment>();
   const [notice, setNotice] = useState("");
   const [failure, setFailure] = useState("");
@@ -326,6 +327,36 @@ export function PlanningPage() {
   const [deleteFailure, setDeleteFailure] = useState("");
 
   const isKanban = tab === "bl" && view === "kanban";
+
+  useEffect(() => {
+    if (!selectParam) return;
+    const notes = [
+      ...new Set(
+        selectParam
+          .split(",")
+          .map((value) => {
+            try {
+              return decodeURIComponent(value.trim());
+            } catch {
+              return value.trim();
+            }
+          })
+          .filter(Boolean),
+      ),
+    ];
+    if (!notes.length) return;
+    setBulkError("");
+    setBulkTarget({ deliveryNotes: notes, mode: "new" });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete("select");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [selectParam, setSearchParams]);
+
   const { data, error, isLoading, mutate } = usePlanningBoard(
     isKanban ? kanbanDate : "",
     isKanban ? kanbanDate : "",

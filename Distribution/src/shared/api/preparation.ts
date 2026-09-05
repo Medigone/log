@@ -36,6 +36,9 @@ export interface SalesOrderRow {
   existing_pick_list?: string;
   can_create_pick_list?: boolean;
   has_available_stock?: boolean;
+  pick_incomplete?: boolean;
+  ready_to_complete?: boolean;
+  uncovered_qty?: number;
   stock_shortages?: StockShortage[];
   items?: SalesOrderPickLine[];
 }
@@ -262,6 +265,19 @@ export function usePreparationMutations() {
 
 export function orderIsModified(row?: { custom_preparation_status?: string | null } | null) {
   return row?.custom_preparation_status === "Modifiée";
+}
+
+export function orderReadyToComplete(row?: Pick<SalesOrderRow, "ready_to_complete"> | null) {
+  return Boolean(row?.ready_to_complete);
+}
+
+export type PickLineState = "shortage" | "on_list" | "to_pick" | "ok";
+
+export function pickLineState(line: Pick<SalesOrderPickLine, "required" | "available" | "pick_list">): PickLineState {
+  if ((line.required || 0) <= 0.000001) return "ok";
+  if (line.required > (line.available || 0) + 0.000001) return "shortage";
+  if (line.pick_list) return "on_list";
+  return "to_pick";
 }
 
 export function usePickListOrderChanged(pickListNames: string[], onChanged: (reason?: string) => void) {

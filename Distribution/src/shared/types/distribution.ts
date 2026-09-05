@@ -672,6 +672,7 @@ export interface ActivityPreparation {
   inProgressPickLists: number;
   remainingQty: number;
   shortageOrders: number;
+  readyToComplete?: number;
   pickLists: ActivityPickList[];
 }
 
@@ -741,7 +742,12 @@ export interface ActivityPlanning {
 
 export interface ActivityDispatchNote {
   deliveryNote: string;
+  customer?: string | null;
   customerName?: string | null;
+  customerCity?: string | null;
+  qty?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
   requestedDate?: string | null;
   lifecycle: string;
   planningStatus?: string;
@@ -784,6 +790,13 @@ export interface ActivityPipeline {
   cashier: number;
 }
 
+export interface ActivityRouteSuggestion {
+  id: string;
+  label: string;
+  detail: string;
+  noteIds: string[];
+}
+
 export interface ActivityDashboardData {
   date: string;
   role: DistributionRole | string;
@@ -797,6 +810,8 @@ export interface ActivityDashboardData {
   payments?: ActivityPayments;
   alerts?: ActivityAlert[];
   now?: ActivityNowItem[];
+  shippedTrend?: number[];
+  routeSuggestions?: ActivityRouteSuggestion[];
 }
 
 export type DocumentAlert = "expired" | "expiring" | "valid" | "missing" | null;

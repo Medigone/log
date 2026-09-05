@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   OrderItemsList,
@@ -31,7 +30,6 @@ import {
   CheckCircle,
   ClipboardList,
   Package,
-  Plus,
   Printer,
   QrCode,
   RotateCcw,
@@ -47,6 +45,7 @@ import {
   applyBarcodeScan,
   getPickGroupLocations,
   orderIsModified,
+  orderReadyToComplete,
   usePickListOrderChanged,
   type DeliveryNoteResult,
   type PickGroup,
@@ -54,7 +53,6 @@ import {
   type SalesOrderRow,
 } from "@/shared/api/preparation";
 import { PickListQueue } from "@/features/preparation/PickListQueue";
-import { CreatePickListDialog } from "@/features/preparation/CreatePickListDialog";
 import { OrderModifiedAlert } from "@/features/preparation/OrderModifiedAlert";
 import { ReturnControlPanel, usePendingReturnRoutes } from "@/features/preparation/ReturnControlPanel";
 import { PickFloorView, type ScanSnapshot } from "@/features/preparation/PickFloorView";
@@ -79,9 +77,16 @@ const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
 
 type DateScope = "all" | "today" | "tomorrow" | "overdue";
 type ListFilter = "all" | "none" | "draft" | "submitted";
+type StockFilter = "all" | "shortage" | "complete";
 
 function dateScopeFromParam(value: string | null): DateScope {
   if (value === "today" || value === "tomorrow" || value === "overdue") return value;
+  return "all";
+}
+
+function stockFilterFromParam(searchParams: URLSearchParams): StockFilter {
+  if (searchParams.get("complete") === "1") return "complete";
+  if (searchParams.get("shortage") === "1") return "shortage";
   return "all";
 }
 
@@ -146,8 +151,18 @@ function stockShortages(order: SalesOrderRow) {
   return order.stock_shortages || [];
 }
 
-function orderCanCreate(order: SalesOrderRow) {
-  return order.can_create_pick_list !== false && !orderIsModified(order);
+function StockStatusBadge({ order }: { order: SalesOrderRow }) {
+  const shortage = stockShortages(order).length > 0;
+  const ready = orderReadyToComplete(order);
+  if (!shortage && !ready) {
+    return <span className="whitespace-nowrap text-muted-foreground">OK</span>;
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {shortage ? <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge> : null}
+      {ready ? <StatusBadge tone="warning" size="sm">À compléter</StatusBadge> : null}
+    </span>
+  );
 }
 
 function orderPickListNames(order: SalesOrderRow): string[] {
@@ -250,10 +265,6 @@ function SalesOrderPicker({
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [errorMessage, setErrorMessage] = useState("");
-  const [confirming, setConfirming] = useState(false);
-  const [pendingOrders, setPendingOrders] = useState<SalesOrderRow[]>([]);
   const [dateScope, setDateScope] = useState<DateScope>(() => dateScopeFromParam(searchParams.get("dateScope")));
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -261,19 +272,13 @@ function SalesOrderPicker({
   const [commune, setCommune] = useState("");
   const [customer, setCustomer] = useState("");
   const [listFilter, setListFilter] = useState<ListFilter>("all");
-  const [shortageOnly, setShortageOnly] = useState(() => searchParams.get("shortage") === "1");
+  const [stockFilter, setStockFilter] = useState<StockFilter>(() => stockFilterFromParam(searchParams));
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
-  const { data, mutate, error, isLoading } = usePreparationQueue();
-  const { createPickList, creating } = usePreparationMutations();
+  const { data, error, isLoading } = usePreparationQueue();
 
   const orders = useMemo(() => data?.message || [], [data?.message]);
   const visible = orders;
-  const pickable = useMemo(() => visible.filter(orderCanCreate), [visible]);
-  const selectedOrders = useMemo(
-    () => pickable.filter((order) => selected.has(order.name)),
-    [pickable, selected],
-  );
   const wilayas = useMemo(
     () => Array.from(new Set(visible.map((order) => order.custom_wilaya).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "fr")),
     [visible],
@@ -321,47 +326,16 @@ function SalesOrderPicker({
       if (dateScope === "overdue" && (!orderDate || orderDate >= today)) return false;
       if (dateFrom && (!orderDate || orderDate < dateFrom)) return false;
       if (dateTo && (!orderDate || orderDate > dateTo)) return false;
-      if (shortageOnly && !stockShortages(row).length) return false;
+      if (stockFilter === "shortage" && !stockShortages(row).length) return false;
+      if (stockFilter === "complete" && !orderReadyToComplete(row)) return false;
       return true;
     });
-  }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, shortageOnly, visible, search, wilaya]);
+  }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, stockFilter, visible, search, wilaya]);
 
-  const creatableFiltered = useMemo(() => filtered.filter(orderCanCreate), [filtered]);
-  const allSelected = creatableFiltered.length > 0 && creatableFiltered.every((row) => selected.has(row.name));
-  const someSelected = !allSelected && creatableFiltered.some((row) => selected.has(row.name));
-  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune || customer || listFilter !== "all" || shortageOnly);
-
-  const toggleAllFiltered = () => {
-    handleSelectAll(!allSelected);
-  };
+  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune || customer || listFilter !== "all" || stockFilter !== "all");
 
   const openDetail = (order: SalesOrderRow) => {
     navigate(`/preparation/commandes/${encodeURIComponent(order.name)}`);
-  };
-
-  const openCreate = (orders: SalesOrderRow[]) => {
-    setPendingOrders(orders);
-    setConfirming(true);
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      creatableFiltered.forEach((order) => {
-        if (checked) next.add(order.name);
-        else next.delete(order.name);
-      });
-      return next;
-    });
-  };
-
-  const handleSelectRow = (order: SalesOrderRow, checked: boolean) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(order.name);
-      else next.delete(order.name);
-      return next;
-    });
   };
 
   const resetFilters = () => {
@@ -373,27 +347,7 @@ function SalesOrderPicker({
     setCommune("");
     setCustomer("");
     setListFilter("all");
-    setShortageOnly(false);
-  };
-
-  const handleCreate = async () => {
-    const names = pendingOrders.map((order) => order.name);
-    if (!names.length || pendingOrders.every((order) => order.has_available_stock === false)) return;
-    setErrorMessage("");
-    try {
-      const session = await createPickList(names);
-      const pickLists = (session?.pick_lists || [])
-        .map((pickList) => pickList?.name)
-        .filter((name): name is string => Boolean(name));
-      if (!pickLists.length) {
-        throw new Error("La création n’a retourné aucune liste de prélèvement. Rechargez la page puis réessayez.");
-      }
-      onOpenPickLists(pickLists, true);
-      mutate();
-    } catch (mutationError) {
-      setConfirming(false);
-      setErrorMessage(apiErrorMessage(mutationError));
-    }
+    setStockFilter("all");
   };
 
   const emptyOrders = (
@@ -433,34 +387,6 @@ function SalesOrderPicker({
   };
 
   const orderColumns: Array<ColumnDef<DataGridFeatures, SalesOrderRow>> = [
-    {
-      id: "select",
-      header: () => (
-        <div className="flex h-full items-center justify-center">
-          <Checkbox
-            aria-label="Tout sélectionner"
-            checked={allSelected}
-            indeterminate={someSelected}
-            disabled={!creatableFiltered.length}
-            onCheckedChange={(checked) => handleSelectAll(checked === true)}
-          />
-        </div>
-      ),
-      cell: ({ row }) =>
-        orderCanCreate(row.original) ? (
-          <div className="flex h-full items-center justify-center">
-            <Checkbox
-              aria-label={`Sélectionner ${row.original.name}`}
-              checked={selected.has(row.original.name)}
-              onCheckedChange={(checked) => handleSelectRow(row.original, checked === true)}
-            />
-          </div>
-        ) : null,
-      size: 40,
-      enableSorting: false,
-      enableHiding: false,
-      meta: { headerClassName: "px-0 text-center", cellClassName: "px-0 text-center" },
-    },
     {
       id: "name",
       accessorKey: "name",
@@ -537,15 +463,9 @@ function SalesOrderPicker({
     },
     {
       id: "stock",
-      accessorFn: (row) => stockShortages(row).length,
+      accessorFn: (row) => stockShortages(row).length || (row.ready_to_complete ? 0.5 : 0),
       ...namedHeader("Stock"),
-      cell: ({ row }) => (
-        stockShortages(row.original).length > 0 ? (
-          <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
-        ) : (
-          <span className="whitespace-nowrap text-muted-foreground">OK</span>
-        )
-      ),
+      cell: ({ row }) => <StockStatusBadge order={row.original} />,
       size: 130,
     },
     {
@@ -554,8 +474,7 @@ function SalesOrderPicker({
       ...namedHeader("Liste"),
       cell: ({ row }) => {
         const lists = orderPickListNames(row.original);
-        const pick = orderPickListStatus(orderPickListState(row.original));
-        const createLabel = `Créer la liste de ${row.original.name}`;
+        const pick = orderPickListStatus(orderPickListState(row.original), row.original);
         return (
           <div className="flex h-full items-center justify-end gap-1.5 whitespace-nowrap">
             <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
@@ -566,19 +485,7 @@ function SalesOrderPicker({
             ) : null}
             {lists.length ? (
               <OpenDraftListsButton icon names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row.original)} />
-            ) : (
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                disabled={creating || orderIsModified(row.original)}
-                aria-label={createLabel}
-                title={createLabel}
-                onClick={() => openCreate([row.original])}
-              >
-                <Plus />
-              </Button>
-            )}
+            ) : null}
           </div>
         );
       },
@@ -590,32 +497,16 @@ function SalesOrderPicker({
 
   return (
     <div className="flex flex-col gap-5">
-      {(error || errorMessage) && (
+      {(error) && (
         <Alert>
           <AlertDescription>
-            {errorMessage || "Impossible de charger les commandes à préparer."}
+            Impossible de charger les commandes à préparer.
           </AlertDescription>
         </Alert>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold">Commandes ({filtered.length})</h2>
-          {selectedOrders.length > 0 && (
-            <Badge aria-live="polite" className="bg-brand-100 text-brand-800 hover:bg-brand-100">
-              {selectedOrders.length} sélectionnée{selectedOrders.length > 1 ? "s" : ""}
-            </Badge>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={toggleAllFiltered} disabled={!creatableFiltered.length}>
-            {allSelected ? "Tout désélectionner" : "Tout sélectionner"}
-          </Button>
-          <Button size="sm" onClick={() => openCreate(selectedOrders)} disabled={!selectedOrders.length || creating}>
-            <ClipboardList data-icon="inline-start" />
-            {creating ? "Création…" : "Créer la liste de prélèvement"}
-          </Button>
-        </div>
+        <h2 className="text-base font-semibold">Commandes ({filtered.length})</h2>
       </div>
 
       <Toolbar>
@@ -647,11 +538,12 @@ function SalesOrderPicker({
         />
         <FilterSelect
           label="Stock"
-          value={shortageOnly ? "shortage" : "all"}
-          onChange={(value) => setShortageOnly(value === "shortage")}
+          value={stockFilter}
+          onChange={(value) => setStockFilter(value as StockFilter)}
           options={[
             { value: "all", label: "Tous" },
             { value: "shortage", label: "Rupture" },
+            { value: "complete", label: "À compléter" },
           ]}
         />
         <FilterSelect
@@ -727,7 +619,7 @@ function SalesOrderPicker({
             {filtered.map((row) => {
               const lists = orderPickListNames(row);
               const desk = salesOrderDeskStatus(row.status);
-              const pick = orderPickListStatus(orderPickListState(row));
+              const pick = orderPickListStatus(orderPickListState(row), row);
               const items = row.items || [];
               const itemsOpen = expandedOrders.has(row.name);
               return (
@@ -737,13 +629,6 @@ function SalesOrderPicker({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    {orderCanCreate(row) ? (
-                      <Checkbox
-                        aria-label={`Sélectionner ${row.name}`}
-                        checked={selected.has(row.name)}
-                        onCheckedChange={(checked) => handleSelectRow(row, checked === true)}
-                      />
-                    ) : null}
                     <button type="button" className="min-w-0 text-left" onClick={() => openDetail(row)}>
                       <div className="text-sm font-medium">{row.name}</div>
                       <div className="truncate text-xs text-muted-foreground">
@@ -754,24 +639,18 @@ function SalesOrderPicker({
                   </div>
                   {lists.length ? (
                     <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
-                  ) : (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={creating || orderIsModified(row)}
-                      aria-label={`Créer la liste de ${row.name}`}
-                      onClick={() => openCreate([row])}
-                    >
-                      Créer
-                    </Button>
-                  )}
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
                   <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
                   {orderIsModified(row) && <StatusBadge tone="warning" size="sm">Modifiée</StatusBadge>}
-                  {stockShortages(row).length > 0 && <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>}
+                  {stockShortages(row).length > 0 ? (
+                    <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
+                  ) : null}
+                  {orderReadyToComplete(row) ? (
+                    <StatusBadge tone="warning" size="sm">À compléter</StatusBadge>
+                  ) : null}
                 </div>
                 <PickProgressBar order={row} />
                 {items.length ? (
@@ -794,14 +673,6 @@ function SalesOrderPicker({
           </div>
         </>
       )}
-
-      <CreatePickListDialog
-        open={confirming}
-        orders={pendingOrders}
-        creating={creating}
-        onOpenChange={setConfirming}
-        onConfirm={handleCreate}
-      />
     </div>
   );
 }

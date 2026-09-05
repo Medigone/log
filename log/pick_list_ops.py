@@ -93,6 +93,7 @@ def _serialize_order_pick_lines(items, available_by_item, pick_by_item=None):
 		if not item_code or item.get("delivered_by_supplier"):
 			continue
 		line = {
+			"name": item.get("name"),
 			"item_code": item_code,
 			"item_name": item.get("item_name") or item_code,
 			"warehouse": item.get("warehouse"),
@@ -182,6 +183,28 @@ def has_available_stock_for_items(items, *, available_by_item: dict[str, float],
 	return False
 
 
+def count_ready_to_complete_orders(orders) -> int:
+	"""Commandes avec un reliquat non couvert et du stock maintenant disponible."""
+	so_names = [order.name for order in orders if order.name]
+	if not so_names:
+		return 0
+	coverage = _draft_pick_coverage_for_orders(so_names)
+	stock_status = _stock_shortages_for_orders(orders)
+	count = 0
+	for order in orders:
+		cov = coverage.get(order.name) or {}
+		if flt(cov.get("uncovered_qty")) <= 0.000001:
+			continue
+		available = {
+			line.get("item_code"): line.get("available")
+			for line in (stock_status.get(order.name) or {}).get("items") or []
+			if line.get("item_code")
+		}
+		if _uncovered_has_stock(cov, available):
+			count += 1
+	return count
+
+
 def _stock_shortages_for_orders(orders) -> dict[str, dict]:
 	so_names = [order.name for order in orders]
 	if not so_names:
@@ -190,6 +213,7 @@ def _stock_shortages_for_orders(orders) -> dict[str, dict]:
 		"Sales Order Item",
 		filters={"parent": ["in", so_names]},
 		fields=[
+			"name",
 			"parent",
 			"item_code",
 			"item_name",
@@ -354,10 +378,27 @@ def _active_pick_progress_for_orders(sales_orders) -> dict[str, dict]:
 	return result
 
 
-def _apply_order_pick_fields(order, progress=None, covering=None, draft_names=None):
+def _uncovered_has_stock(coverage_row, available_by_item) -> bool:
+	"""True si au moins une ligne non couverte a du stock prélevable."""
+	for row in (coverage_row or {}).get("uncovered_items") or []:
+		if min(flt(row.get("qty")), flt(available_by_item.get(row.get("item_code")))) > 0.000001:
+			return True
+	return False
+
+
+def _apply_order_pick_fields(
+	order,
+	progress=None,
+	covering=None,
+	draft_names=None,
+	coverage=None,
+	uncovered_has_stock=None,
+):
 	"""Pose pick_lists, quantités et flags de création sur une ligne commande."""
 	progress = progress or {}
+	coverage = coverage or {}
 	lists = list(progress.get("pick_lists") or [])
+	covering = covering or coverage.get("covering")
 	if not lists:
 		for name in draft_names or []:
 			lists.append({"name": name, "docstatus": 0})
@@ -366,19 +407,34 @@ def _apply_order_pick_fields(order, progress=None, covering=None, draft_names=No
 	drafts = [pl["name"] for pl in lists if cint(pl.get("docstatus")) == 0]
 	submitted = [pl["name"] for pl in lists if cint(pl.get("docstatus")) == 1]
 	picked = flt(progress.get("picked_qty"))
-	requested = flt(progress.get("requested_qty"))
+	requested = flt(order.get("total_qty"))
+	if requested <= 0:
+		requested = flt(progress.get("requested_qty"))
 	if not lists:
-		requested = flt(order.get("total_qty"))
 		picked = requested * flt(order.get("per_picked")) / 100.0 if flt(order.get("per_picked")) else 0.0
-	elif requested <= 0:
-		requested = flt(order.get("total_qty"))
+	elif picked <= 0 and flt(order.get("per_picked")):
+		picked = requested * flt(order.get("per_picked")) / 100.0
+	if coverage:
+		uncovered_qty = flt(coverage.get("uncovered_qty"))
+	elif not lists:
+		uncovered_qty = max(requested - picked, 0.0)
+	else:
+		uncovered_qty = 0.0
+	pick_incomplete = uncovered_qty > 0.000001
+	if uncovered_has_stock is None:
+		ready_to_complete = False
+	else:
+		ready_to_complete = pick_incomplete and bool(uncovered_has_stock)
 	order["pick_lists"] = lists
 	order["picked_qty"] = picked
 	order["requested_qty"] = requested
 	order["draft_pick_lists"] = drafts
 	order["draft_pick_list"] = drafts[0] if drafts else None
 	order["existing_pick_list"] = covering or (submitted[0] if submitted else None)
-	order["can_create_pick_list"] = not lists
+	order["uncovered_qty"] = uncovered_qty
+	order["pick_incomplete"] = pick_incomplete
+	order["ready_to_complete"] = ready_to_complete
+	order["can_create_pick_list"] = (not covering) and (not lists or ready_to_complete)
 	return order
 
 
@@ -407,18 +463,58 @@ def _remaining_qty_by_so_item(items) -> dict[str, float]:
 	return remaining
 
 
-def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
-	"""Commande → Pick List brouillon qui couvre encore toutes les lignes à prélever."""
+def _draft_pick_coverage_for_orders(sales_orders) -> dict[str, dict]:
+	"""Commande → restant à prélever vs allocation des Pick Lists brouillon."""
+	empty = {
+		"covering": None,
+		"remaining_qty": 0.0,
+		"allocated_qty": 0.0,
+		"uncovered_qty": 0.0,
+		"uncovered_items": [],
+		"remaining_by_item": {},
+		"allocated_by_item": {},
+	}
 	if not sales_orders:
 		return {}
+	result = {
+		name: {
+			"covering": None,
+			"remaining_qty": 0.0,
+			"allocated_qty": 0.0,
+			"uncovered_qty": 0.0,
+			"uncovered_items": [],
+			"remaining_by_item": {},
+			"allocated_by_item": {},
+		}
+		for name in sales_orders
+	}
 	so_items = frappe.get_all(
 		"Sales Order Item",
 		filters={"parent": ["in", list(sales_orders)]},
-		fields=["name", "parent", "qty", "picked_qty", "delivered_qty", "conversion_factor", "delivered_by_supplier"],
+		fields=[
+			"name",
+			"parent",
+			"item_code",
+			"item_name",
+			"qty",
+			"picked_qty",
+			"delivered_qty",
+			"conversion_factor",
+			"delivered_by_supplier",
+		],
 	)
 	remaining_by_order: dict[str, dict[str, float]] = defaultdict(dict)
+	item_meta: dict[str, dict] = {}
+	remaining_qty_by_order: dict[str, float] = defaultdict(float)
 	for item in so_items:
-		remaining_by_order[item.parent].update(_remaining_qty_by_so_item([item]))
+		remaining = _remaining_qty_by_so_item([item])
+		remaining_by_order[item.parent].update(remaining)
+		for so_item, qty in remaining.items():
+			remaining_qty_by_order[item.parent] += qty
+			item_meta[so_item] = {
+				"item_code": item.get("item_code"),
+				"item_name": item.get("item_name") or item.get("item_code"),
+			}
 
 	pl_items = frappe.get_all(
 		"Pick List Item",
@@ -427,7 +523,29 @@ def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
 	)
 	parents = list({row.parent for row in pl_items})
 	if not parents:
-		return {}
+		for so_name, remaining in remaining_by_order.items():
+			uncovered_items = []
+			uncovered_qty = 0.0
+			for so_item, required in remaining.items():
+				meta = item_meta.get(so_item) or {}
+				uncovered_items.append(
+					{
+						"sales_order_item": so_item,
+						"item_code": meta.get("item_code"),
+						"item_name": meta.get("item_name"),
+						"qty": required,
+					}
+				)
+				uncovered_qty += required
+			result[so_name] = {
+				**empty,
+				"remaining_qty": remaining_qty_by_order.get(so_name, 0.0),
+				"uncovered_qty": uncovered_qty,
+				"uncovered_items": uncovered_items,
+				"remaining_by_item": remaining,
+			}
+		return result
+
 	active = set(
 		frappe.get_all(
 			"Pick List",
@@ -443,50 +561,109 @@ def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
 		orders_on_pl[row.parent].add(row.sales_order)
 		qty_by_pl_so[row.parent][row.sales_order_item] += flt(row.qty)
 
-	covering = {}
-	for so_name, remaining in remaining_by_order.items():
+	for so_name in sales_orders:
+		remaining = remaining_by_order.get(so_name) or {}
+		covering_pl = None
+		allocated_by_item: dict[str, float] = {}
 		for pl_name, orders in orders_on_pl.items():
 			if so_name not in orders:
 				continue
-			if pick_list_covers_remaining_items(remaining, qty_by_pl_so[pl_name]):
-				covering[so_name] = pl_name
+			qty_map = qty_by_pl_so[pl_name]
+			if pick_list_covers_remaining_items(remaining, qty_map):
+				covering_pl = pl_name
+				allocated_by_item = dict(qty_map)
 				break
-	return covering
+		if covering_pl is None:
+			for pl_name, orders in orders_on_pl.items():
+				if so_name not in orders:
+					continue
+				for so_item, qty in qty_by_pl_so[pl_name].items():
+					allocated_by_item[so_item] = allocated_by_item.get(so_item, 0.0) + qty
+
+		uncovered_items = []
+		uncovered_qty = 0.0
+		allocated_qty = 0.0
+		for so_item, required in remaining.items():
+			allocated = flt(allocated_by_item.get(so_item))
+			allocated_qty += min(allocated, required)
+			gap = required - allocated
+			if gap > 0.000001:
+				meta = item_meta.get(so_item) or {}
+				uncovered_items.append(
+					{
+						"sales_order_item": so_item,
+						"item_code": meta.get("item_code"),
+						"item_name": meta.get("item_name"),
+						"qty": gap,
+					}
+				)
+				uncovered_qty += gap
+
+		result[so_name] = {
+			"covering": covering_pl,
+			"remaining_qty": remaining_qty_by_order.get(so_name, 0.0),
+			"allocated_qty": allocated_qty,
+			"uncovered_qty": uncovered_qty,
+			"uncovered_items": uncovered_items,
+			"remaining_by_item": remaining,
+			"allocated_by_item": allocated_by_item,
+		}
+	return result
 
 
-def _pick_lists_by_so_item(sales_order) -> dict[str, str]:
-	"""Ligne commande → Pick List active (brouillon d’abord, sinon la plus récente)."""
-	if not sales_order:
+def _covering_pick_lists_for_orders(sales_orders) -> dict[str, str]:
+	"""Commande → Pick List brouillon qui couvre encore toutes les lignes à prélever."""
+	return {
+		name: row["covering"]
+		for name, row in _draft_pick_coverage_for_orders(sales_orders).items()
+		if row.get("covering")
+	}
+
+
+def _pick_lists_by_so_item_for_orders(sales_orders) -> dict[str, dict[str, str]]:
+	"""Commande → {ligne commande → Pick List active (brouillon d’abord)}."""
+	if not sales_orders:
 		return {}
 	rows = frappe.get_all(
 		"Pick List Item",
-		filters={"sales_order": sales_order},
-		fields=["parent", "sales_order_item"],
+		filters={"sales_order": ["in", list(sales_orders)]},
+		fields=["parent", "sales_order", "sales_order_item"],
 	)
 	if not rows:
-		return {}
+		return {name: {} for name in sales_orders}
 	parents = list({row.parent for row in rows if row.parent})
 	if not parents:
-		return {}
+		return {name: {} for name in sales_orders}
 	lists = frappe.get_all(
 		"Pick List",
 		filters={"name": ["in", parents], "docstatus": ["<", 2], "purpose": "Delivery"},
 		fields=["name", "docstatus", "modified"],
 	)
 	if not lists:
-		return {}
+		return {name: {} for name in sales_orders}
 	lists.sort(key=lambda pl: pl.modified or "", reverse=True)
 	lists.sort(key=lambda pl: 0 if pl.docstatus == 0 else 1)
 	rank = {pl.name: index for index, pl in enumerate(lists)}
-	chosen: dict[str, str] = {}
+	chosen_by_order: dict[str, dict[str, str]] = {name: {} for name in sales_orders}
 	for row in rows:
+		so_name = row.sales_order
+		if not so_name and len(sales_orders) == 1:
+			so_name = sales_orders[0]
 		key = row.sales_order_item
-		if not key or row.parent not in rank:
+		if not so_name or not key or row.parent not in rank:
 			continue
+		chosen = chosen_by_order.setdefault(so_name, {})
 		previous = chosen.get(key)
 		if previous is None or rank[row.parent] < rank[previous]:
 			chosen[key] = row.parent
-	return chosen
+	return chosen_by_order
+
+
+def _pick_lists_by_so_item(sales_order) -> dict[str, str]:
+	"""Ligne commande → Pick List active (brouillon d’abord, sinon la plus récente)."""
+	if not sales_order:
+		return {}
+	return _pick_lists_by_so_item_for_orders([sales_order]).get(sales_order) or {}
 
 
 def _delete_stale_draft_pick_list(pick_list_name: str) -> None:
@@ -705,18 +882,27 @@ def get_sales_orders_to_pick(search=None, limit=100):
 	)
 	so_names = [o.name for o in orders]
 	progress_by_order = _active_pick_progress_for_orders(so_names)
-	covering = _covering_pick_lists_for_orders(so_names)
+	coverage_by_order = _draft_pick_coverage_for_orders(so_names)
 	stock_status = _stock_shortages_for_orders(orders)
+	pick_by_order = _pick_lists_by_so_item_for_orders(so_names)
 	for order in orders:
 		status = stock_status.get(order.name) or {}
+		coverage = coverage_by_order.get(order.name) or {}
+		items = status.get("items") or []
+		pick_map = pick_by_order.get(order.name) or {}
+		available_by_item = {line.get("item_code"): line.get("available") for line in items if line.get("item_code")}
+		for line in items:
+			line["pick_list"] = pick_map.get(line.get("name"))
 		_apply_order_pick_fields(
 			order,
 			progress_by_order.get(order.name),
-			covering=covering.get(order.name),
+			covering=coverage.get("covering"),
+			coverage=coverage,
+			uncovered_has_stock=_uncovered_has_stock(coverage, available_by_item),
 		)
 		order["stock_shortages"] = status.get("shortages") or []
 		order["has_available_stock"] = status.get("has_available_stock", False)
-		order["items"] = status.get("items") or []
+		order["items"] = items
 	return _attach_commune_names(orders)
 
 
@@ -729,7 +915,8 @@ def serialize_sales_order_pick_detail(so):
 	bundle_codes = _bundle_item_codes(item_codes)
 	pick_by_item = _pick_lists_by_so_item(name)
 	lines = _serialize_order_pick_lines(items, available_by_item, pick_by_item)
-	covering = _covering_pick_lists_for_orders([name]).get(name)
+	coverage = _draft_pick_coverage_for_orders([name]).get(name) or {}
+	covering = coverage.get("covering")
 	draft_names = _draft_pick_list_names_by_order([name]).get(name) or []
 	progress = _active_pick_progress_for_orders([name]).get(name) or {}
 	header = {
@@ -757,7 +944,14 @@ def serialize_sales_order_pick_detail(so):
 		),
 		"items": lines,
 	}
-	_apply_order_pick_fields(header, progress, covering=covering, draft_names=draft_names)
+	_apply_order_pick_fields(
+		header,
+		progress,
+		covering=covering,
+		draft_names=draft_names,
+		coverage=coverage,
+		uncovered_has_stock=_uncovered_has_stock(coverage, available_by_item),
+	)
 	return _attach_commune_names([header])[0]
 
 
@@ -933,6 +1127,260 @@ def cint_or_default(value, default):
 		return default
 
 
+_PICK_LOCATION_COPY_SKIP = {
+	"name",
+	"parent",
+	"parentfield",
+	"parenttype",
+	"idx",
+	"creation",
+	"modified",
+	"modified_by",
+	"owner",
+	"docstatus",
+	"doctype",
+}
+
+
+def _location_as_dict(row) -> dict:
+	as_dict = getattr(row, "as_dict", None)
+	if callable(as_dict):
+		return as_dict()
+	if isinstance(row, dict):
+		return dict(row)
+	return {key: getattr(row, key) for key in dir(row) if not key.startswith("_")}
+
+
+def _append_pick_location(doc, source_row, qty=None):
+	"""Ajoute une ligne de prélèvement sans reprendre le picked_qty source."""
+	payload = {
+		key: value
+		for key, value in _location_as_dict(source_row).items()
+		if key not in _PICK_LOCATION_COPY_SKIP
+	}
+	payload["picked_qty"] = 0
+	if qty is not None:
+		conversion = flt(payload.get("conversion_factor")) or 1
+		payload["qty"] = qty
+		payload["stock_qty"] = qty * conversion
+	return doc.append("locations", payload)
+
+
+def _allocated_qty_by_so_item(locations) -> dict[str, float]:
+	allocated: dict[str, float] = defaultdict(float)
+	for loc in locations or []:
+		so_item = _child_get(loc, "sales_order_item")
+		if so_item:
+			allocated[so_item] += flt(_child_get(loc, "qty"))
+	return allocated
+
+
+def _map_pick_list_from_sales_order(so_name):
+	from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
+
+	return create_pick_list(so_name)
+
+
+def _enrich_draft_pick_list(doc, so_name):
+	"""Ajoute au brouillon les lignes maintenant en stock, sans écraser les picked_qty."""
+	so = frappe.get_doc("Sales Order", so_name)
+	remaining = _remaining_qty_by_so_item(so.items)
+	allocated = _allocated_qty_by_so_item(doc.get("locations"))
+	if remaining and pick_list_covers_remaining_items(remaining, allocated):
+		return doc
+
+	unreserve_sales_order_stock(so_name)
+	fresh = _map_pick_list_from_sales_order(so_name)
+	if not fresh or not fresh.get("locations"):
+		return doc
+
+	existing_index = {}
+	for loc in doc.get("locations") or []:
+		key = (
+			_child_get(loc, "sales_order_item"),
+			_child_get(loc, "warehouse"),
+			_child_get(loc, "batch_no") or "",
+		)
+		existing_index[key] = loc
+
+	running = dict(allocated)
+	added = False
+	for loc in fresh.get("locations") or []:
+		so_item = _child_get(loc, "sales_order_item")
+		if not so_item:
+			continue
+		needed = flt(remaining.get(so_item)) - flt(running.get(so_item))
+		if needed <= 0.000001:
+			continue
+		take = min(flt(_child_get(loc, "qty")), needed)
+		if take <= 0.000001:
+			continue
+		key = (so_item, _child_get(loc, "warehouse"), _child_get(loc, "batch_no") or "")
+		existing = existing_index.get(key)
+		if existing and flt(_child_get(existing, "picked_qty")) <= 0.000001:
+			conversion = flt(_child_get(existing, "conversion_factor")) or 1
+			new_qty = flt(_child_get(existing, "qty")) + take
+			existing.qty = new_qty
+			existing.stock_qty = new_qty * conversion
+		else:
+			new_row = _append_pick_location(doc, loc, qty=take)
+			existing_index[key] = new_row
+		running[so_item] = flt(running.get(so_item)) + take
+		added = True
+
+	if added:
+		doc.save(ignore_permissions=True)
+	return doc
+
+
+def _background_context() -> bool:
+	flags = getattr(frappe, "flags", None)
+	if not flags:
+		return False
+	return bool(
+		flags.get("in_import")
+		or flags.get("in_migrate")
+		or flags.get("in_install")
+		or flags.get("in_patch")
+	)
+
+
+def _sales_order_auto_pick_eligible(so) -> bool:
+	if not so:
+		return False
+	if cint(so.get("docstatus") if hasattr(so, "get") else getattr(so, "docstatus", 0)) != 1:
+		return False
+	status = so.get("status") if hasattr(so, "get") else getattr(so, "status", None)
+	if status in CLOSED_SO_STATUSES:
+		return False
+	meta = getattr(so, "meta", None)
+	if meta and meta.has_field("skip_delivery_note") and so.get("skip_delivery_note"):
+		return False
+	if flt(so.get("per_delivered") if hasattr(so, "get") else getattr(so, "per_delivered", 0)) >= 100:
+		return False
+	if flt(so.get("per_picked") if hasattr(so, "get") else getattr(so, "per_picked", 0)) >= 100:
+		return False
+	return True
+
+
+def _build_or_reuse_pick_list(so_name, *, grouped_error=False):
+	"""Réouvre, enrichit ou crée une Pick List brouillon. None si rien à allouer."""
+	covering = _covering_pick_lists_for_orders([so_name]).get(so_name)
+	if covering:
+		return frappe.get_doc("Pick List", covering)
+	existing = _draft_pick_lists_for_orders([so_name])
+	if existing:
+		orders = existing[0]["sales_orders"]
+		if orders != {so_name}:
+			if grouped_error:
+				frappe.throw(
+					_("La commande {0} appartient à une ancienne Pick List groupée {1}.").format(
+						so_name, existing[0]["name"]
+					)
+				)
+			return None
+		doc = frappe.get_doc("Pick List", existing[0]["name"])
+		return _enrich_draft_pick_list(doc, so_name)
+	unreserve_sales_order_stock(so_name)
+	target = _map_pick_list_from_sales_order(so_name)
+	if not target or not target.get("locations"):
+		return None
+	target.purpose = "Delivery"
+	target.pick_manually = 0
+	target.insert(ignore_permissions=True)
+	return target
+
+
+def ensure_draft_pick_list(so_name=None, **_kwargs):
+	"""Crée ou complète silencieusement la Pick List brouillon d'une commande ouverte."""
+	if not so_name or _background_context():
+		return None
+	try:
+		so = frappe.get_doc("Sales Order", so_name)
+		if not _sales_order_auto_pick_eligible(so):
+			return None
+		return _build_or_reuse_pick_list(so_name)
+	except Exception:
+		frappe.log_error(title=_("Pick List automatique {0}").format(so_name))
+		return None
+
+
+def enqueue_ensure_draft_pick_list(so_name):
+	if not so_name or _background_context():
+		return
+	frappe.enqueue(
+		"log.pick_list_ops.ensure_draft_pick_list",
+		queue="short",
+		enqueue_after_commit=True,
+		so_name=so_name,
+	)
+
+
+def on_sales_order_submit(doc, method=None):
+	enqueue_ensure_draft_pick_list(getattr(doc, "name", None))
+
+
+def on_stock_inbound(doc, method=None):
+	if _background_context():
+		return
+	frappe.enqueue(
+		"log.pick_list_ops.ensure_open_order_pick_lists",
+		queue="short",
+		enqueue_after_commit=True,
+	)
+
+
+def _load_open_pickable_orders(limit=500):
+	filters = {
+		"docstatus": 1,
+		"status": ["not in", list(CLOSED_SO_STATUSES)],
+		"per_picked": ["<", 100],
+		"per_delivered": ["<", 100],
+	}
+	try:
+		if frappe.get_meta("Sales Order").has_field("skip_delivery_note"):
+			filters["skip_delivery_note"] = 0
+	except Exception:
+		pass
+	return frappe.get_all(
+		"Sales Order",
+		filters=filters,
+		fields=["name", "company", "status", "total_qty", "per_picked"],
+		limit=limit,
+	)
+
+
+def ensure_open_order_pick_lists(**_kwargs):
+	"""Enrichit ou crée les listes des commandes ouvertes dès que du stock est disponible."""
+	if _background_context():
+		return
+	try:
+		orders = _load_open_pickable_orders()
+		if not orders:
+			return
+		so_names = [order.name for order in orders]
+		coverage = _draft_pick_coverage_for_orders(so_names)
+		stock_status = _stock_shortages_for_orders(orders)
+		for order in orders:
+			if (order.get("status") if hasattr(order, "get") else getattr(order, "status", None)) in CLOSED_SO_STATUSES:
+				continue
+			cov = coverage.get(order.name) or {}
+			if cov.get("covering"):
+				continue
+			status = stock_status.get(order.name) or {}
+			available = {
+				line.get("item_code"): line.get("available")
+				for line in status.get("items") or []
+				if line.get("item_code")
+			}
+			ready = _uncovered_has_stock(cov, available)
+			if not ready and not status.get("has_available_stock"):
+				continue
+			ensure_draft_pick_list(order.name)
+	except Exception:
+		frappe.log_error(title=_("Pick List automatique — commandes ouvertes"))
+
+
 @frappe.whitelist()
 def create_pick_list_from_sales_orders(sales_orders):
 	"""Crée une Pick List par commande et retourne une session groupée pour l'interface."""
@@ -948,35 +1396,14 @@ def create_pick_list_from_sales_orders(sales_orders):
 	for name in sales_orders:
 		_sales_order_pickable(name)
 
-	from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
-
 	docs = []
 	empty_orders = []
 	for so_name in sales_orders:
-		covering = _covering_pick_lists_for_orders([so_name]).get(so_name)
-		if covering:
-			docs.append(frappe.get_doc("Pick List", covering))
-			continue
-		existing = _draft_pick_lists_for_orders([so_name])
-		if existing:
-			orders = existing[0]["sales_orders"]
-			if orders != {so_name}:
-				frappe.throw(
-					_("La commande {0} appartient à une ancienne Pick List groupée {1}.").format(
-						so_name, existing[0]["name"]
-					)
-				)
-			docs.append(frappe.get_doc("Pick List", existing[0]["name"]))
-			continue
-		unreserve_sales_order_stock(so_name)
-		target = create_pick_list(so_name)
-		if not target or not target.get("locations"):
+		doc = _build_or_reuse_pick_list(so_name, grouped_error=True)
+		if doc:
+			docs.append(doc)
+		else:
 			empty_orders.append(so_name)
-			continue
-		target.purpose = "Delivery"
-		target.pick_manually = 0
-		target.insert(ignore_permissions=True)
-		docs.append(target)
 	if not docs:
 		_throw_if_no_available_stock(empty_orders[0] if empty_orders else sales_orders[0])
 	return serialize_pick_session(docs)

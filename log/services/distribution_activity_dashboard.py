@@ -6,7 +6,7 @@ from typing import Any
 from urllib.parse import quote, urlencode
 
 import frappe
-from frappe.utils import flt, getdate, today
+from frappe.utils import add_days, flt, getdate, today
 
 from log.api.distribution_rules import parse_gps_value
 
@@ -21,7 +21,7 @@ PENDING_PAYMENT_STATES = ("Déclaré", "À contrôler")
 NOW_LIMIT = 12
 PICK_LIST_LIMIT = 12
 READY_NOTE_STATUSES = ("Préparé", "Non Livré")
-DISPATCH_NOTE_LIMIT = 12
+DISPATCH_NOTE_LIMIT = 40
 
 SECTIONS_BY_ROLE = {
 	"preparateur": {"preparation", "fulfillment", "dispatch", "stock", "alerts", "now"},
@@ -91,7 +91,7 @@ def _attr(row: Any, key: str, default=None):
 	return getattr(row, key, default)
 
 
-def summarize_preparation(orders, pick_lists, shortage_count: int, day: str) -> dict[str, Any]:
+def summarize_preparation(orders, pick_lists, shortage_count: int, day: str, ready_to_complete: int = 0) -> dict[str, Any]:
 	overdue = today_count = later = 0
 	qty = 0.0
 	for order in orders:
@@ -111,6 +111,7 @@ def summarize_preparation(orders, pick_lists, shortage_count: int, day: str) -> 
 		"inProgressPickLists": len(pick_lists),
 		"remainingQty": round(qty, 3),
 		"shortageOrders": int(shortage_count),
+		"readyToComplete": int(ready_to_complete),
 		"pickLists": [
 			{
 				"name": _attr(row, "name"),
@@ -191,6 +192,44 @@ def summarize_planning(unassigned: list[dict[str, Any]], day: str) -> dict[str, 
 		"unassigned": len(unassigned),
 		"overdue": overdue,
 	}
+
+
+def summarize_shipped_trend(counts_by_day: dict[str, int], day: str) -> list[int]:
+	"""14 jours glissants, le dernier index = `day`."""
+	end = getdate(day)
+	values = []
+	for offset in range(13, -1, -1):
+		key = date_str(add_days(end, -offset))
+		values.append(int(counts_by_day.get(key, 0)))
+	return values
+
+
+def suggest_route_groups(notes: list[dict[str, Any]], *, min_size: int = 2) -> list[dict[str, Any]]:
+	"""Regroupe les bons non affectés par commune (au moins `min_size` bons)."""
+	buckets: dict[str, list[dict[str, Any]]] = {}
+	for note in notes:
+		if note.get("routeId"):
+			continue
+		city = str(note.get("customerCity") or "").strip()
+		if not city:
+			continue
+		buckets.setdefault(city, []).append(note)
+	suggestions: list[dict[str, Any]] = []
+	for city, members in buckets.items():
+		if len(members) < min_size:
+			continue
+		qty = sum(flt(row.get("qty")) for row in members)
+		detail = f"{qty:g} articles" if qty else f"{len(members)} BL"
+		suggestions.append(
+			{
+				"id": city,
+				"label": f"{city} · {len(members)} bons",
+				"detail": detail,
+				"noteIds": [row["deliveryNote"] for row in members],
+			}
+		)
+	suggestions.sort(key=lambda row: (-len(row["noteIds"]), row["label"]))
+	return suggestions[:5]
 
 
 def summarize_dispatch(notes: list[dict[str, Any]], day: str) -> dict[str, Any]:
@@ -313,6 +352,16 @@ def build_alerts(
 				"target": _with_query("/preparation", shortage="1"),
 			}
 		)
+	if preparation and preparation.get("readyToComplete"):
+		alerts.append(
+			{
+				"id": "prep-complete",
+				"tone": "warning",
+				"title": "Préparation à compléter",
+				"detail": f"{preparation['readyToComplete']} commande(s) avec du stock revenu, reliquat non prélevé.",
+				"target": _with_query("/preparation", complete="1"),
+			}
+		)
 	if preparation and preparation.get("overdue"):
 		alerts.append(
 			{
@@ -383,11 +432,22 @@ def build_alerts(
 				"target": _with_query("/cashier", status="À contrôler"),
 			}
 		)
-	return alerts[:8]
+	return alerts[:10]
 
 
 def build_now(*, role: str, preparation, fulfillment, fleet, payments, dispatch=None) -> list[dict[str, Any]]:
 	items: list[dict[str, Any]] = []
+	if (preparation or {}).get("readyToComplete"):
+		items.append(
+			{
+				"id": "prep-complete",
+				"kind": "pick",
+				"title": "Reliquats à prélever",
+				"detail": f"{preparation['readyToComplete']} commande(s) · stock disponible",
+				"tone": "warning",
+				"target": "/preparation?complete=1",
+			}
+		)
 	for note in ((dispatch or {}).get("notes") or [])[:4]:
 		route_id = note.get("routeId")
 		items.append(
@@ -520,6 +580,14 @@ def _count_shortage_orders(orders) -> int:
 
 	stock_status = _stock_shortages_for_orders(orders)
 	return sum(1 for status in stock_status.values() if status.get("shortages"))
+
+
+def _count_ready_to_complete_orders(orders) -> int:
+	if not orders:
+		return 0
+	from log.pick_list_ops import count_ready_to_complete_orders
+
+	return count_ready_to_complete_orders(orders)
 
 
 def _load_draft_pick_lists(limit=PICK_LIST_LIMIT):
@@ -694,20 +762,74 @@ def _load_unassigned_notes(_day: str, limit=500) -> list[dict[str, Any]]:
 	return unassigned
 
 
+def _dn_ready_fields() -> list[str]:
+	fields = [
+		"name",
+		"custom_date_de_livraison",
+		"custom_statut",
+		"custom_tournee",
+		"custom_statut_planification",
+		"customer_name",
+		"customer",
+		"total_qty",
+	]
+	if frappe.db.has_column("Delivery Note", "custom_commune"):
+		fields.append("custom_commune")
+	return fields
+
+
+def _commune_labels(commune_ids: list[str]) -> dict[str, str]:
+	ids = list(dict.fromkeys(name for name in commune_ids if name))
+	if not ids:
+		return {}
+	try:
+		rows = frappe.get_all("Commune", filters={"name": ["in", ids]}, fields=["name", "nom"])
+	except Exception:
+		return {name: name for name in ids}
+	return {row.name: (row.nom or row.name) for row in rows}
+
+
+def enrich_dispatch_notes(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""Ajoute commune, GPS et quantité sans casser les notes déjà sérialisées."""
+	gps = _customer_gps_map([note.get("customer") for note in notes if note.get("customer")])
+	labels = _commune_labels([note.get("communeId") for note in notes if note.get("communeId")])
+	for note in notes:
+		place = gps.get(note.get("customer") or "") or {}
+		commune_id = note.pop("communeId", None)
+		if commune_id and "customerCity" not in note:
+			note["customerCity"] = labels.get(commune_id) or commune_id
+		if place.get("latitude") is not None:
+			note["latitude"] = place.get("latitude")
+			note["longitude"] = place.get("longitude")
+	return notes
+
+
+def _load_shipped_counts(day: str) -> dict[str, int]:
+	if not frappe.db.has_column("Delivery Note", "custom_statut"):
+		return {}
+	start = date_str(add_days(getdate(day), -13))
+	rows = frappe.db.sql(
+		"""
+		SELECT DATE(COALESCE(posting_date, creation)) AS day, COUNT(*) AS total
+		FROM `tabDelivery Note`
+		WHERE docstatus < 2
+		  AND custom_statut IN ('Livré', 'Partiellement Livré')
+		  AND DATE(COALESCE(posting_date, creation)) BETWEEN %(start)s AND %(day)s
+		GROUP BY DATE(COALESCE(posting_date, creation))
+		""",
+		{"start": start, "day": day},
+		as_dict=True,
+	)
+	return {date_str(row.day): int(row.total or 0) for row in rows}
+
+
 def _load_ready_notes(limit=500) -> list[dict[str, Any]]:
 	if not frappe.db.has_column("Delivery Note", "custom_statut"):
 		return []
 	eligible = frappe.get_all(
 		"Delivery Note",
 		filters={"docstatus": 0, "custom_statut": ["in", list(READY_NOTE_STATUSES)]},
-		fields=[
-			"name",
-			"custom_date_de_livraison",
-			"custom_statut",
-			"custom_tournee",
-			"custom_statut_planification",
-			"customer_name",
-		],
+		fields=_dn_ready_fields(),
 		order_by="custom_date_de_livraison asc, creation asc",
 		limit=limit,
 	)
@@ -726,10 +848,14 @@ def _load_ready_notes(limit=500) -> list[dict[str, Any]]:
 		route_id = assigned.get(row.name) or _attr(row, "custom_tournee") or None
 		route = routes.get(route_id) if route_id else None
 		route_date = _attr(route, "date_liv") if route else None
+		qty = flt(_attr(row, "total_qty"))
 		notes.append(
 			{
 				"deliveryNote": row.name,
+				"customer": _attr(row, "customer"),
 				"customerName": row.customer_name,
+				"communeId": _attr(row, "custom_commune"),
+				"qty": qty or None,
 				"requestedDate": str(row.custom_date_de_livraison or "") or None,
 				"lifecycle": row.custom_statut,
 				"planningStatus": row.custom_statut_planification or "Non planifié",
@@ -739,7 +865,7 @@ def _load_ready_notes(limit=500) -> list[dict[str, Any]]:
 				"loadingStatus": _attr(route, "statut_chargement") if route else None,
 			}
 		)
-	return notes
+	return enrich_dispatch_notes(notes)
 
 
 def _customer_gps_map(customers: list[str]) -> dict[str, dict[str, Any]]:
@@ -873,7 +999,12 @@ def build_activity_dashboard(*, role: str, date=None) -> dict[str, Any]:
 	orders = _load_pickable_orders() if "preparation" in sections else []
 	pick_lists = _load_draft_pick_lists() if "preparation" in sections else []
 	shortage_count = _count_shortage_orders(orders) if "preparation" in sections else 0
-	preparation = summarize_preparation(orders, pick_lists, shortage_count, day) if "preparation" in sections else None
+	ready_count = _count_ready_to_complete_orders(orders) if "preparation" in sections else 0
+	preparation = (
+		summarize_preparation(orders, pick_lists, shortage_count, day, ready_to_complete=ready_count)
+		if "preparation" in sections
+		else None
+	)
 
 	open_routes = _load_open_routes() if sections & {"fulfillment", "fleet"} else []
 	if "fulfillment" in sections:
@@ -911,8 +1042,12 @@ def build_activity_dashboard(*, role: str, date=None) -> dict[str, Any]:
 		fleet = summarize_fleet(build_lite_routes(live_candidates, children, notes, gps))
 
 	planning = summarize_planning(_load_unassigned_notes(day), day) if "planning" in sections else None
-	dispatch = summarize_dispatch(_load_ready_notes(), day) if "dispatch" in sections else None
+	ready_notes = _load_ready_notes() if "dispatch" in sections else []
+	dispatch = summarize_dispatch(ready_notes, day) if "dispatch" in sections else None
 	stock = summarize_stock(_load_vehicle_stocks()) if "stock" in sections else None
+	payload["shippedTrend"] = summarize_shipped_trend(_load_shipped_counts(day), day)
+	if "dispatch" in sections:
+		payload["routeSuggestions"] = suggest_route_groups(ready_notes)
 
 	payments = None
 	if "payments" in sections:

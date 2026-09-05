@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { formatQuantity } from "@/shared/format"
 import type { RecentPickListItem, SalesOrderPickLine } from "@/shared/api/preparation"
+import { pickLineState } from "@/shared/api/preparation"
 
 /** Même hauteur de ligne pour Commandes, Listes, Retours et sous-grilles d’articles.
  *  Cibler `[data-row-id]` évite d’écraser la cellule dépliée (colspan) qui contient le sous-tableau. */
@@ -82,7 +83,15 @@ export function namedHeader(title: string) {
 }
 
 export function pickLineIsShort(line: Pick<SalesOrderPickLine, "required" | "available">) {
-  return line.required > (line.available || 0) + 0.000001
+  return pickLineState(line) === "shortage"
+}
+
+function pickLineStatus(line: SalesOrderPickLine) {
+  const state = pickLineState(line)
+  if (state === "shortage") return { label: "Rupture", tone: "danger" as const }
+  if (state === "on_list") return { label: "Sur liste", tone: "info" as const }
+  if (state === "to_pick") return { label: "À prélever", tone: "warning" as const }
+  return { label: "OK", tone: "success" as const }
 }
 
 export function ItemIdentity({ code, name }: { code: string; name?: string }) {
@@ -192,18 +201,16 @@ export function OrderItemsSubGrid({ items }: { items: SalesOrderPickLine[] }) {
       },
       {
         id: "status",
-        accessorFn: (row) => (pickLineIsShort(row) ? 1 : 0),
+        accessorFn: (row) => pickLineState(row),
         ...namedHeader("État"),
-        cell: ({ row }) =>
-          pickLineIsShort(row.original) ? (
-            <StatusBadge tone="danger" size="sm">
-              Rupture
+        cell: ({ row }) => {
+          const status = pickLineStatus(row.original)
+          return (
+            <StatusBadge tone={status.tone} size="sm">
+              {status.label}
             </StatusBadge>
-          ) : (
-            <StatusBadge tone="success" size="sm">
-              OK
-            </StatusBadge>
-          ),
+          )
+        },
         size: 110,
       },
     ],
@@ -300,13 +307,16 @@ export function OrderItemsList({ items }: { items: SalesOrderPickLine[] }) {
               {formatQuantity(item.required)}
               {item.uom ? ` ${item.uom}` : ""}
             </span>
-            {pickLineIsShort(item) ? (
-              <StatusBadge tone="danger" size="sm">
-                Rupture
-              </StatusBadge>
-            ) : (
-              <span className="text-muted-foreground">{formatQuantity(item.available)} dispo</span>
-            )}
+            {(() => {
+              const status = pickLineStatus(item)
+              return status.label === "OK" ? (
+                <span className="text-muted-foreground">{formatQuantity(item.available)} dispo</span>
+              ) : (
+                <StatusBadge tone={status.tone} size="sm">
+                  {status.label}
+                </StatusBadge>
+              )
+            })()}
           </div>
         </li>
       ))}

@@ -8,11 +8,17 @@ from log.pick_list_ops import (
 	_apply_order_pick_fields,
 	_attach_commune_names,
 	_covering_pick_lists_for_orders,
+	_draft_pick_coverage_for_orders,
 	_draft_pick_list_names_by_order,
+	_enrich_draft_pick_list,
 	_enrich_recent_pick_lists,
 	_pick_lists_by_so_item,
 	_serialize_order_pick_lines,
+	_uncovered_has_stock,
+	count_ready_to_complete_orders,
 	create_pick_list_from_sales_orders,
+	ensure_draft_pick_list,
+	ensure_open_order_pick_lists,
 	get_pick_session,
 	get_recent_pick_lists,
 	has_available_stock_for_items,
@@ -23,6 +29,8 @@ from log.pick_list_ops import (
 	serialize_pick_session,
 	stock_shortages_for_items,
 	unreserve_sales_order_stock,
+	on_sales_order_submit,
+	on_stock_inbound,
 )
 
 
@@ -261,6 +269,44 @@ class TestPickListCoverage(unittest.TestCase):
 		self.assertEqual(_covering_pick_lists_for_orders(["SO-1"]), {})
 
 
+class TestDraftPickCoverage(unittest.TestCase):
+	@patch("log.pick_list_ops.frappe.get_all")
+	def test_uncovered_qty_after_partial_draft(self, get_all):
+		so_items = [
+			frappe._dict(
+				name="SOI-1",
+				parent="SO-1",
+				item_code="ART-1",
+				item_name="Article 1",
+				qty=5,
+				picked_qty=0,
+				delivered_qty=0,
+				conversion_factor=1,
+				delivered_by_supplier=0,
+			),
+			frappe._dict(
+				name="SOI-2",
+				parent="SO-1",
+				item_code="ART-2",
+				item_name="Article 2",
+				qty=3,
+				picked_qty=0,
+				delivered_qty=0,
+				conversion_factor=1,
+				delivered_by_supplier=0,
+			),
+		]
+		pl_items = [frappe._dict(parent="PL-1", sales_order="SO-1", sales_order_item="SOI-1", qty=5)]
+		get_all.side_effect = [so_items, pl_items, ["PL-1"]]
+
+		coverage = _draft_pick_coverage_for_orders(["SO-1"])["SO-1"]
+		self.assertIsNone(coverage["covering"])
+		self.assertEqual(coverage["uncovered_qty"], 3)
+		self.assertEqual(coverage["uncovered_items"][0]["item_code"], "ART-2")
+		self.assertTrue(_uncovered_has_stock(coverage, {"ART-2": 3}))
+		self.assertFalse(_uncovered_has_stock(coverage, {"ART-2": 0}))
+
+
 class TestOrderPickProgress(unittest.TestCase):
 	@patch("log.pick_list_ops.frappe.get_all")
 	def test_aggregates_draft_and_submitted_pick_lists(self, get_all):
@@ -306,6 +352,39 @@ class TestOrderPickProgress(unittest.TestCase):
 		self.assertFalse(order["can_create_pick_list"])
 		self.assertEqual(order["existing_pick_list"], "PL-1")
 		self.assertEqual(order["picked_qty"], 12)
+		self.assertFalse(order["pick_incomplete"])
+		self.assertFalse(order["ready_to_complete"])
+
+	def test_apply_fields_uses_order_qty_and_allows_reliquat_after_partial_submit(self):
+		order = {"name": "SO-1", "total_qty": 14, "per_picked": 50}
+		_apply_order_pick_fields(
+			order,
+			{"pick_lists": [{"name": "PL-1", "docstatus": 1}], "picked_qty": 10, "requested_qty": 10},
+			coverage={
+				"covering": None,
+				"uncovered_qty": 4,
+				"uncovered_items": [{"item_code": "ART-2", "qty": 4}],
+			},
+			uncovered_has_stock=True,
+		)
+		self.assertEqual(order["requested_qty"], 14)
+		self.assertEqual(order["picked_qty"], 10)
+		self.assertTrue(order["pick_incomplete"])
+		self.assertTrue(order["ready_to_complete"])
+		self.assertTrue(order["can_create_pick_list"])
+		self.assertEqual(order["uncovered_qty"], 4)
+
+	def test_apply_fields_blocks_create_when_covering_draft_exists(self):
+		order = {"name": "SO-1", "total_qty": 12}
+		_apply_order_pick_fields(
+			order,
+			{"pick_lists": [{"name": "PL-1", "docstatus": 0}], "picked_qty": 0, "requested_qty": 12},
+			covering="PL-1",
+			coverage={"covering": "PL-1", "uncovered_qty": 0, "uncovered_items": []},
+			uncovered_has_stock=False,
+		)
+		self.assertFalse(order["can_create_pick_list"])
+		self.assertFalse(order["pick_incomplete"])
 
 
 class TestPickListStockGuard(unittest.TestCase):
@@ -404,11 +483,11 @@ class TestSalesOrderPickDetail(unittest.TestCase):
 	@patch("log.pick_list_ops._attach_commune_names", side_effect=lambda orders: orders)
 	@patch("log.pick_list_ops._active_pick_progress_for_orders", return_value={})
 	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
-	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops._draft_pick_coverage_for_orders", return_value={})
 	@patch("log.pick_list_ops._bundle_item_codes", return_value=set())
 	@patch("log.pick_list_ops._company_available_qty", return_value={"ART-1": 0, "ART-2": 10})
 	@patch("log.pick_list_ops._pick_lists_by_so_item", return_value={})
-	def test_detail_exposes_shortage_and_ok_lines(self, _pick_map, _available, _bundles, _covering, _drafts, _progress, _communes):
+	def test_detail_exposes_shortage_and_ok_lines(self, _pick_map, _available, _bundles, _coverage, _drafts, _progress, _communes):
 		result = serialize_sales_order_pick_detail(self._order())
 
 		self.assertEqual(result["name"], "SO-1")
@@ -426,11 +505,14 @@ class TestSalesOrderPickDetail(unittest.TestCase):
 	@patch("log.pick_list_ops._attach_commune_names", side_effect=lambda orders: orders)
 	@patch("log.pick_list_ops._active_pick_progress_for_orders", return_value={})
 	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
-	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={"SO-1": "PL-COVER"})
+	@patch(
+		"log.pick_list_ops._draft_pick_coverage_for_orders",
+		return_value={"SO-1": {"covering": "PL-COVER", "uncovered_qty": 0, "uncovered_items": []}},
+	)
 	@patch("log.pick_list_ops._bundle_item_codes", return_value=set())
 	@patch("log.pick_list_ops._company_available_qty", return_value={"ART-1": 20, "ART-2": 10})
 	@patch("log.pick_list_ops._pick_lists_by_so_item", return_value={})
-	def test_covered_order_cannot_create_pick_list(self, _pick_map, _available, _bundles, _covering, _drafts, _progress, _communes):
+	def test_covered_order_cannot_create_pick_list(self, _pick_map, _available, _bundles, _coverage, _drafts, _progress, _communes):
 		result = serialize_sales_order_pick_detail(self._order())
 
 		self.assertFalse(result["can_create_pick_list"])
@@ -440,24 +522,36 @@ class TestSalesOrderPickDetail(unittest.TestCase):
 	@patch("log.pick_list_ops._attach_commune_names", side_effect=lambda orders: orders)
 	@patch("log.pick_list_ops._active_pick_progress_for_orders", return_value={})
 	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[{"name": "PL-DRAFT", "sales_orders": {"SO-1"}}])
-	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch(
+		"log.pick_list_ops._draft_pick_coverage_for_orders",
+		return_value={
+			"SO-1": {
+				"covering": None,
+				"uncovered_qty": 12,
+				"uncovered_items": [{"item_code": "ART-1", "item_name": "Article 1", "qty": 12}],
+			}
+		},
+	)
 	@patch("log.pick_list_ops._bundle_item_codes", return_value=set())
 	@patch("log.pick_list_ops._company_available_qty", return_value={"ART-1": 20, "ART-2": 10})
 	@patch("log.pick_list_ops._pick_lists_by_so_item", return_value={})
-	def test_draft_order_cannot_create_pick_list(self, _pick_map, _available, _bundles, _covering, _drafts, _progress, _communes):
+	def test_incomplete_draft_can_complete_when_stock_returns(self, _pick_map, _available, _bundles, _coverage, _drafts, _progress, _communes):
 		result = serialize_sales_order_pick_detail(self._order())
 
-		self.assertFalse(result["can_create_pick_list"])
+		self.assertTrue(result["can_create_pick_list"])
+		self.assertTrue(result["pick_incomplete"])
+		self.assertTrue(result["ready_to_complete"])
 		self.assertEqual(result["draft_pick_list"], "PL-DRAFT")
+		self.assertEqual(result["uncovered_qty"], 12)
 
 	@patch("log.pick_list_ops._attach_commune_names", side_effect=lambda orders: orders)
 	@patch("log.pick_list_ops._active_pick_progress_for_orders", return_value={})
 	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[{"name": "PL-1", "sales_orders": {"SO-1"}}])
-	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops._draft_pick_coverage_for_orders", return_value={})
 	@patch("log.pick_list_ops._bundle_item_codes", return_value=set())
 	@patch("log.pick_list_ops._company_available_qty", return_value={"ART-1": 0, "ART-2": 10})
 	@patch("log.pick_list_ops._pick_lists_by_so_item", return_value={"SOI-2": "PL-1"})
-	def test_detail_attaches_pick_list_only_on_covered_lines(self, _pick_map, _available, _bundles, _covering, _drafts, _progress, _communes):
+	def test_detail_attaches_pick_list_only_on_covered_lines(self, _pick_map, _available, _bundles, _coverage, _drafts, _progress, _communes):
 		result = serialize_sales_order_pick_detail(self._order())
 
 		self.assertIsNone(result["items"][0]["pick_list"])
@@ -503,19 +597,21 @@ class TestSalesOrderPickDetail(unittest.TestCase):
 
 
 class TestCreatePickListFromSalesOrders(unittest.TestCase):
+	@patch("log.pick_list_ops._enrich_draft_pick_list", side_effect=lambda doc, so: doc)
 	@patch("log.pick_list_ops.serialize_pick_session", return_value={"name": "SESSION"})
 	@patch("log.pick_list_ops.frappe.get_doc")
 	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[{"name": "PL-DRAFT", "sales_orders": {"SO-1"}}])
 	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
 	@patch("log.pick_list_ops._sales_order_pickable")
 	@patch("log.pick_list_ops._require_preparation_role")
-	def test_reopens_existing_draft_instead_of_deleting(self, _role, _pickable, _covering, _drafts, get_doc, serialize):
+	def test_reopens_existing_draft_instead_of_deleting(self, _role, _pickable, _covering, _drafts, get_doc, serialize, enrich):
 		draft = frappe._dict(name="PL-DRAFT", locations=[{"item_code": "ART-1"}])
 		get_doc.return_value = draft
 
 		result = create_pick_list_from_sales_orders(["SO-1"])
 
 		get_doc.assert_called_once_with("Pick List", "PL-DRAFT")
+		enrich.assert_called_once_with(draft, "SO-1")
 		serialize.assert_called_once_with([draft])
 		self.assertEqual(result["name"], "SESSION")
 
@@ -526,7 +622,7 @@ class TestCreatePickListFromSalesOrders(unittest.TestCase):
 			create_pick_list_from_sales_orders(["SO-1"])
 		self.assertIn("Acceptez", str(raised.exception))
 
-	@patch("erpnext.selling.doctype.sales_order.sales_order.create_pick_list")
+	@patch("log.pick_list_ops._map_pick_list_from_sales_order")
 	@patch("log.pick_list_ops._throw_if_no_available_stock", side_effect=Exception("Aucun article disponible"))
 	@patch("log.pick_list_ops.unreserve_sales_order_stock")
 	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
@@ -540,6 +636,130 @@ class TestCreatePickListFromSalesOrders(unittest.TestCase):
 			create_pick_list_from_sales_orders(["SO-1"])
 
 		throw_empty.assert_called_once_with("SO-1")
+
+	@patch("log.pick_list_ops.serialize_pick_session", return_value={"name": "SESSION"})
+	@patch("log.pick_list_ops.frappe.get_doc")
+	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={"SO-1": "PL-COVER"})
+	@patch("log.pick_list_ops._sales_order_pickable")
+	@patch("log.pick_list_ops._require_preparation_role")
+	def test_reopens_covering_draft_without_enrich(self, _role, _pickable, _covering, get_doc, serialize):
+		draft = frappe._dict(name="PL-COVER")
+		get_doc.return_value = draft
+
+		result = create_pick_list_from_sales_orders(["SO-1"])
+
+		get_doc.assert_called_once_with("Pick List", "PL-COVER")
+		serialize.assert_called_once_with([draft])
+		self.assertEqual(result["name"], "SESSION")
+
+	@patch("log.pick_list_ops.serialize_pick_session", return_value={"name": "SESSION"})
+	@patch("log.pick_list_ops._map_pick_list_from_sales_order")
+	@patch("log.pick_list_ops.unreserve_sales_order_stock")
+	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
+	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops._sales_order_pickable")
+	@patch("log.pick_list_ops._require_preparation_role")
+	def test_creates_reliquat_list_after_submitted_partial(
+		self, _role, _pickable, _covering, _drafts, unreserve, create_pl, serialize
+	):
+		target = Mock()
+		target.get.side_effect = lambda key, default=None: [{"item_code": "ART-2"}] if key == "locations" else default
+		create_pl.return_value = target
+
+		result = create_pick_list_from_sales_orders(["SO-1"])
+
+		unreserve.assert_called_once_with("SO-1")
+		create_pl.assert_called_once_with("SO-1")
+		self.assertEqual(target.purpose, "Delivery")
+		target.insert.assert_called_once_with(ignore_permissions=True)
+		serialize.assert_called_once_with([target])
+		self.assertEqual(result["name"], "SESSION")
+
+
+class TestEnrichDraftPickList(unittest.TestCase):
+	@patch("log.pick_list_ops.unreserve_sales_order_stock")
+	@patch("log.pick_list_ops._map_pick_list_from_sales_order")
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_appends_restocked_location_without_resetting_picked_qty(self, get_doc, create_pl, _unreserve):
+		existing = frappe._dict(
+			item_code="ART-2",
+			sales_order_item="SOI-2",
+			warehouse="DEPOT",
+			batch_no=None,
+			qty=2,
+			stock_qty=2,
+			picked_qty=1,
+			conversion_factor=1,
+		)
+		locations = [existing]
+
+		def append(_field, payload):
+			row = frappe._dict(payload)
+			locations.append(row)
+			return row
+
+		doc = frappe._dict(locations=locations, append=append, save=Mock())
+		so = Mock()
+		so.items = [
+				frappe._dict(
+					name="SOI-1",
+					item_code="ART-1",
+					qty=12,
+					picked_qty=0,
+					delivered_qty=0,
+					conversion_factor=1,
+					delivered_by_supplier=0,
+				),
+				frappe._dict(
+					name="SOI-2",
+					item_code="ART-2",
+					qty=2,
+					picked_qty=0,
+					delivered_qty=0,
+					conversion_factor=1,
+					delivered_by_supplier=0,
+				),
+		]
+		get_doc.return_value = so
+		create_pl.return_value = frappe._dict(
+			locations=[
+				frappe._dict(
+					item_code="ART-1",
+					item_name="Article 1",
+					sales_order_item="SOI-1",
+					warehouse="DEPOT",
+					batch_no=None,
+					qty=12,
+					stock_qty=12,
+					conversion_factor=1,
+					picked_qty=0,
+				)
+			]
+		)
+
+		result = _enrich_draft_pick_list(doc, "SO-1")
+
+		self.assertEqual(len(result.locations), 2)
+		self.assertEqual(existing.picked_qty, 1)
+		self.assertEqual(result.locations[1]["item_code"], "ART-1")
+		self.assertEqual(result.locations[1]["picked_qty"], 0)
+		self.assertEqual(result.locations[1]["qty"], 12)
+		doc.save.assert_called_once()
+
+
+class TestReadyToCompleteCount(unittest.TestCase):
+	@patch("log.pick_list_ops._stock_shortages_for_orders")
+	@patch("log.pick_list_ops._draft_pick_coverage_for_orders")
+	def test_counts_orders_with_uncovered_stock(self, coverage, stock):
+		coverage.return_value = {
+			"SO-1": {"uncovered_qty": 4, "uncovered_items": [{"item_code": "ART-2", "qty": 4}]},
+			"SO-2": {"uncovered_qty": 2, "uncovered_items": [{"item_code": "ART-9", "qty": 2}]},
+		}
+		stock.return_value = {
+			"SO-1": {"items": [{"item_code": "ART-2", "available": 4, "required": 4}]},
+			"SO-2": {"items": [{"item_code": "ART-9", "available": 0, "required": 2}]},
+		}
+		self.assertEqual(count_ready_to_complete_orders([frappe._dict(name="SO-1"), frappe._dict(name="SO-2")]), 1)
 
 
 class TestRecentPickLists(unittest.TestCase):
@@ -753,6 +973,131 @@ class TestGetPickSessionModificationPending(unittest.TestCase):
 		self.assertTrue(result["modification_pending"])
 		clear.assert_not_called()
 		serialize.assert_called_once()
+
+
+class TestEnsureDraftPickList(unittest.TestCase):
+	@patch("log.pick_list_ops._build_or_reuse_pick_list")
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_skips_closed_order(self, get_doc, build):
+		get_doc.return_value = frappe._dict(docstatus=1, status="Closed", per_picked=0, per_delivered=0)
+		self.assertIsNone(ensure_draft_pick_list("SO-1"))
+		build.assert_not_called()
+
+	@patch("log.pick_list_ops._build_or_reuse_pick_list")
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_skips_fully_picked_order(self, get_doc, build):
+		get_doc.return_value = frappe._dict(docstatus=1, status="To Deliver", per_picked=100, per_delivered=0)
+		self.assertIsNone(ensure_draft_pick_list("SO-1"))
+		build.assert_not_called()
+
+	@patch("log.pick_list_ops._map_pick_list_from_sales_order", return_value=frappe._dict(locations=[]))
+	@patch("log.pick_list_ops.unreserve_sales_order_stock")
+	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
+	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_returns_none_when_no_stock(self, get_doc, _covering, _drafts, unreserve, _map):
+		get_doc.return_value = frappe._dict(docstatus=1, status="To Deliver", per_picked=0, per_delivered=0)
+		self.assertIsNone(ensure_draft_pick_list("SO-1"))
+		unreserve.assert_called_once_with("SO-1")
+
+	@patch("log.pick_list_ops._map_pick_list_from_sales_order")
+	@patch("log.pick_list_ops.unreserve_sales_order_stock")
+	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
+	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_creates_draft_when_stock_available(self, get_doc, _covering, _drafts, unreserve, map_pl):
+		get_doc.return_value = frappe._dict(docstatus=1, status="To Deliver", per_picked=0, per_delivered=0)
+		target = Mock()
+		target.get.side_effect = lambda key, default=None: [{"item_code": "ART-1"}] if key == "locations" else default
+		map_pl.return_value = target
+
+		result = ensure_draft_pick_list("SO-1")
+
+		unreserve.assert_called_once_with("SO-1")
+		self.assertEqual(target.purpose, "Delivery")
+		target.insert.assert_called_once_with(ignore_permissions=True)
+		self.assertIs(result, target)
+
+	@patch("log.pick_list_ops._enrich_draft_pick_list", side_effect=lambda doc, so: doc)
+	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[{"name": "PL-DRAFT", "sales_orders": {"SO-1"}}])
+	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_enriches_existing_incomplete_draft(self, get_doc, _covering, _drafts, enrich):
+		so = frappe._dict(docstatus=1, status="To Deliver", per_picked=0, per_delivered=0)
+		draft = frappe._dict(name="PL-DRAFT")
+		get_doc.side_effect = [so, draft]
+
+		result = ensure_draft_pick_list("SO-1")
+
+		enrich.assert_called_once_with(draft, "SO-1")
+		self.assertIs(result, draft)
+
+	@patch("log.pick_list_ops._map_pick_list_from_sales_order")
+	@patch("log.pick_list_ops.unreserve_sales_order_stock")
+	@patch("log.pick_list_ops._draft_pick_lists_for_orders", return_value=[])
+	@patch("log.pick_list_ops._covering_pick_lists_for_orders", return_value={})
+	@patch("log.pick_list_ops.frappe.get_doc")
+	def test_creates_second_list_after_submitted_partial(self, get_doc, _covering, _drafts, unreserve, map_pl):
+		get_doc.return_value = frappe._dict(docstatus=1, status="To Deliver", per_picked=40, per_delivered=0)
+		target = Mock()
+		target.get.side_effect = lambda key, default=None: [{"item_code": "ART-2"}] if key == "locations" else default
+		map_pl.return_value = target
+
+		result = ensure_draft_pick_list("SO-1")
+
+		unreserve.assert_called_once_with("SO-1")
+		map_pl.assert_called_once_with("SO-1")
+		target.insert.assert_called_once_with(ignore_permissions=True)
+		self.assertIs(result, target)
+
+
+class TestEnsureOpenOrderPickLists(unittest.TestCase):
+	@patch("log.pick_list_ops.ensure_draft_pick_list")
+	@patch("log.pick_list_ops._stock_shortages_for_orders")
+	@patch("log.pick_list_ops._draft_pick_coverage_for_orders")
+	@patch("log.pick_list_ops._load_open_pickable_orders")
+	def test_creates_for_ready_and_skips_covering_and_closed(self, load, coverage, stock, ensure):
+		load.return_value = [
+			frappe._dict(name="SO-CLOSED", status="Closed", company="C1"),
+			frappe._dict(name="SO-COVER", status="To Deliver", company="C1"),
+			frappe._dict(name="SO-READY", status="To Deliver", company="C1"),
+			frappe._dict(name="SO-EMPTY", status="To Deliver", company="C1"),
+		]
+		coverage.return_value = {
+			"SO-CLOSED": {"covering": None, "uncovered_items": [{"item_code": "ART-2", "qty": 2}]},
+			"SO-COVER": {"covering": "PL-1", "uncovered_items": []},
+			"SO-READY": {"covering": None, "uncovered_items": [{"item_code": "ART-2", "qty": 2}]},
+			"SO-EMPTY": {"covering": None, "uncovered_items": [{"item_code": "ART-9", "qty": 1}]},
+		}
+		stock.return_value = {
+			"SO-CLOSED": {"has_available_stock": True, "items": [{"item_code": "ART-2", "available": 4}]},
+			"SO-COVER": {"has_available_stock": True, "items": [{"item_code": "ART-1", "available": 4}]},
+			"SO-READY": {"has_available_stock": True, "items": [{"item_code": "ART-2", "available": 4}]},
+			"SO-EMPTY": {"has_available_stock": False, "items": [{"item_code": "ART-9", "available": 0}]},
+		}
+
+		ensure_open_order_pick_lists()
+
+		ensure.assert_called_once_with("SO-READY")
+
+
+class TestAutoPickHooks(unittest.TestCase):
+	@patch("log.pick_list_ops.frappe.enqueue")
+	@patch("log.pick_list_ops._background_context", return_value=False)
+	def test_submit_enqueues_ensure_after_commit(self, _bg, enqueue):
+		on_sales_order_submit(frappe._dict(name="SO-1"))
+		enqueue.assert_called_once()
+		self.assertEqual(enqueue.call_args.args[0], "log.pick_list_ops.ensure_draft_pick_list")
+		self.assertEqual(enqueue.call_args.kwargs["so_name"], "SO-1")
+		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
+
+	@patch("log.pick_list_ops.frappe.enqueue")
+	@patch("log.pick_list_ops._background_context", return_value=False)
+	def test_stock_inbound_enqueues_open_orders_job(self, _bg, enqueue):
+		on_stock_inbound(frappe._dict(name="REC-1"))
+		enqueue.assert_called_once()
+		self.assertEqual(enqueue.call_args.args[0], "log.pick_list_ops.ensure_open_order_pick_lists")
+		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
 
 
 if __name__ == "__main__":
