@@ -15,6 +15,7 @@ import { formatQuantity } from "@/shared/format"
 import type { DeliveryNoteAssignment, DistributionRoute, PlanningResource, PlanningStatus } from "@/shared/types/distribution"
 import {
   canReprogramAssignment,
+  hasAssignmentAlert,
   PLANNING_STATUSES,
   dateKey,
   isoDateWithOffset,
@@ -100,7 +101,7 @@ export function DeliveryNotesBoard({
       if (wilaya && row.wilaya !== wilaya) return false
       if (driver && row.driver !== driver) return false
       if (vehicle && row.vehicle !== vehicle) return false
-      if (alertsOnly && !(row.planningAlert || row.requiresCustomerGeolocation)) return false
+      if (alertsOnly && !hasAssignmentAlert(row)) return false
       const requested = dateKey(row.requestedDate)
       if (dateScope === "today" && requested !== today) return false
       if (dateScope === "tomorrow" && requested !== tomorrow) return false

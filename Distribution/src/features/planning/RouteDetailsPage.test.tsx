@@ -100,7 +100,7 @@ vi.mock("@/components/reui/sortable", async (importOriginal) => {
     Sortable: (props: any) => (
       <>
         <actual.Sortable {...props} />
-        {props.value.length > 1 ? (
+        {props.value.length > 1 && String(props.className || "").includes("is-reorderable") ? (
           <button
             type="button"
             onClick={() => {
@@ -125,6 +125,7 @@ function extraStop(overrides: Partial<RouteStop> = {}): RouteStop {
   return {
     ...route.stops[0],
     deliveryNote: "DN-TEST-2",
+    customer: "CUST-2",
     customerName: "Client Bis",
     sequence: 2,
     items: [
@@ -479,6 +480,55 @@ describe("RouteDetailsPage", () => {
       expect(mocks.reorderRouteStops).toHaveBeenCalledWith("LIV-TEST-1", ["DN-TEST-2", "DN-TEST-1"], 2);
     } finally {
       route.stops = originalStops;
+    }
+  });
+
+  it("laisse réordonner une tournée publiée tant que le livreur n’a pas accepté", async () => {
+    const original = { lifecycle: route.lifecycle, publishedRevision: route.publishedRevision, stops: route.stops };
+    route.lifecycle = "Publiée";
+    route.publishedRevision = 2;
+    route.stops = [...route.stops, extraStop()];
+    mocks.reorderRouteStops.mockResolvedValue({ ...route, revision: 3, publishedRevision: 3 });
+    try {
+      const user = userEvent.setup();
+      renderDetails();
+      expect(screen.getByText(/le livreur devra accepter la nouvelle révision/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /déplacer client test/i })).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Simuler le réordonnancement" }));
+      await waitFor(() => {
+        expect(mocks.reorderRouteStops).toHaveBeenCalledWith("LIV-TEST-1", ["DN-TEST-2", "DN-TEST-1"], 2);
+      });
+    } finally {
+      route.lifecycle = original.lifecycle;
+      route.publishedRevision = original.publishedRevision;
+      route.stops = original.stops;
+    }
+  });
+
+  it("verrouille l’ordre dès que le livreur a accepté la révision", () => {
+    const original = {
+      lifecycle: route.lifecycle,
+      acknowledged: route.acknowledged,
+      publishedRevision: route.publishedRevision,
+      acknowledgedRevision: route.acknowledgedRevision,
+      stops: route.stops,
+    };
+    route.lifecycle = "Publiée";
+    route.acknowledged = true;
+    route.publishedRevision = 2;
+    route.acknowledgedRevision = 2;
+    route.stops = [...route.stops, extraStop()];
+    try {
+      renderDetails();
+      expect(screen.queryByRole("button", { name: "Simuler le réordonnancement" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /déplacer /i })).not.toBeInTheDocument();
+      expect(screen.getByText(/sélectionnez un arrêt pour vérifier/i)).toBeInTheDocument();
+    } finally {
+      route.lifecycle = original.lifecycle;
+      route.acknowledged = original.acknowledged;
+      route.publishedRevision = original.publishedRevision;
+      route.acknowledgedRevision = original.acknowledgedRevision;
+      route.stops = original.stops;
     }
   });
 });

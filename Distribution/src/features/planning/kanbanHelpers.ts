@@ -143,17 +143,39 @@ export function vehicleLabelFor(
   return vehicles.find((vehicle) => vehicle.name === vehicleId)?.label;
 }
 
-/** When dragging one selected BL, the whole selection moves; otherwise only the dragged card. */
+/** When dragging one selected BL, the whole selection moves; otherwise the customer group, else only the dragged card. */
 export function notesToMoveOnDrag(
   draggedDeliveryNote: string,
   selected: Iterable<string>,
   orderedIds: string[] = [],
+  groupIds: string[] = [],
 ): string[] {
   const selectedSet = selected instanceof Set ? selected : new Set(selected);
-  if (selectedSet.size <= 1 || !selectedSet.has(draggedDeliveryNote)) {
-    return [draggedDeliveryNote];
+  const orderedGroup = (ids: Iterable<string>) => {
+    const wanted = ids instanceof Set ? ids : new Set(ids);
+    const ordered = orderedIds.filter((id) => wanted.has(id));
+    const missing = [...wanted].filter((id) => !ordered.includes(id));
+    return ordered.length ? [...ordered, ...missing] : [...wanted];
+  };
+  if (selectedSet.size > 1 && selectedSet.has(draggedDeliveryNote)) {
+    return orderedGroup(selectedSet);
   }
-  const ordered = orderedIds.filter((id) => selectedSet.has(id));
-  const missing = [...selectedSet].filter((id) => !ordered.includes(id));
-  return ordered.length ? [...ordered, ...missing] : [...selectedSet];
+  if (groupIds.length > 1 && groupIds.includes(draggedDeliveryNote)) {
+    return orderedGroup(groupIds);
+  }
+  return [draggedDeliveryNote];
+}
+
+export function clusterKanbanItemsByCustomer(items: KanbanBLItem[]) {
+  const clusters: Array<{ key: string; customerName: string; items: KanbanBLItem[] }> = [];
+  for (const item of items) {
+    const key = item.assignment.customer || item.assignment.deliveryNote;
+    const last = clusters.at(-1);
+    if (last && last.key === key) {
+      last.items.push(item);
+      continue;
+    }
+    clusters.push({ key, customerName: item.assignment.customerName, items: [item] });
+  }
+  return clusters;
 }

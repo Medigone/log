@@ -47,15 +47,17 @@ function AlertCard({ tone, title, count, body, actionLabel, onAction }: AlertCar
 export function PlanningAlertsSummary({
   lateAssignments,
   alertAssignments,
+  splitAssignments = [],
   onSelectLate,
   onFilterAlerts,
 }: {
   lateAssignments: DeliveryNoteAssignment[];
   alertAssignments: DeliveryNoteAssignment[];
+  splitAssignments?: DeliveryNoteAssignment[];
   onSelectLate: () => void;
   onFilterAlerts: () => void;
 }) {
-  if (lateAssignments.length === 0 && alertAssignments.length === 0) return null;
+  if (lateAssignments.length === 0 && alertAssignments.length === 0 && splitAssignments.length === 0) return null;
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {lateAssignments.length > 0 && (
@@ -74,6 +76,16 @@ export function PlanningAlertsSummary({
           title="Données client incomplètes"
           count={alertAssignments.length}
           body="GPS client manquant : le livreur collectera la position ; l’itinéraire utilisera le centre de la commune."
+          actionLabel="Filtrer ces BL"
+          onAction={onFilterAlerts}
+        />
+      )}
+      {splitAssignments.length > 0 && (
+        <AlertCard
+          tone="warning"
+          title="Client déjà sur une autre tournée"
+          count={splitAssignments.length}
+          body={splitAssignments[0].splitVisitWarning || "Le même client a des bons sur plusieurs tournées aujourd’hui."}
           actionLabel="Filtrer ces BL"
           onAction={onFilterAlerts}
         />

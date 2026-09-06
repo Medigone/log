@@ -30,6 +30,7 @@ import {
   stopFormKey,
   type SavedStopForm,
 } from "@/features/driver/stopHelpers";
+import { itemGroups, visitKey, visitNotesLabel } from "@/features/driver/visitHelpers";
 import { useStopWizardSteps, wizardSteps, type WizardStep } from "@/features/driver/useStopWizardSteps";
 import { cn } from "@/lib/utils";
 
@@ -79,7 +80,7 @@ export function StopCompletionWizard({
   onClose: () => void;
   onPending: () => void;
 }) {
-  const draftKey = stopFormKey(routeId, stop.deliveryNote);
+  const draftKey = stopFormKey(routeId, visitKey(stop.customer, stop.deliveryNote) || stop.deliveryNote);
   const restored = useMemo(() => readStopForm(draftKey), [draftKey]);
   const [requestId] = useState(restored.requestId || crypto.randomUUID());
   const [outcome, setOutcome] = useState<DeliveryOutcome>(restored.outcome || "delivered");
@@ -93,6 +94,7 @@ export function StopCompletionWizard({
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
   const actions = useDistributionMutations();
+  const groups = useMemo(() => itemGroups(stop), [stop]);
   const suggestedAmount = useMemo(
     () => estimatedCollectableAmount(stop, outcome, quantities),
     [outcome, quantities, stop],
@@ -189,10 +191,13 @@ export function StopCompletionWizard({
       routeId,
       routeRevision,
       deliveryNote: stop.deliveryNote,
+      deliveryNotes: stop.deliveryNotes?.length ? stop.deliveryNotes : [stop.deliveryNote],
+      visitKey: visitKey(stop.customer, stop.deliveryNote),
       outcome,
       items: (stop.items || []).map((item) => ({
         itemName: item.name,
         deliveredQuantity: outcome === "partial" ? quantities[item.name] || 0 : item.remainingQuantity,
+        deliveryNote: item.deliveryNote || stop.deliveryNote,
       })),
       evidence: {
         latitude: evidence.latitude as number,
@@ -255,7 +260,7 @@ export function StopCompletionWizard({
     <Sheet open onOpenChange={(open) => !open && !saving && onClose()}>
       <SheetContent
         side="bottom"
-        aria-label={`Résultat ${stop.deliveryNote}`}
+        aria-label={`Résultat ${visitNotesLabel(stop)}`}
         showCloseButton={step !== "evidence"}
         className={cn(
           "max-h-[95vh] rounded-t-touch",
@@ -310,7 +315,7 @@ export function StopCompletionWizard({
           <>
         <SheetHeader>
           <p className="t-meta font-semibold text-brand-700">
-            {stop.deliveryNote} · {Math.min(stepIndex, steps.length - 1) + 1}/{steps.length}
+            {visitNotesLabel(stop)} · {Math.min(stepIndex, steps.length - 1) + 1}/{steps.length}
           </p>
           <SheetTitle>{stop.customerName}</SheetTitle>
           <p className="t-meta text-muted-foreground">{STEP_LABELS[step]}</p>
@@ -348,8 +353,13 @@ export function StopCompletionWizard({
           {step === "detail" && outcome === "partial" && (
             <fieldset>
               <legend className="t-section">Quantités livrées maintenant</legend>
-              <div className="mt-3 space-y-2">
-                {stop.items?.map((item) => (
+              <div className="mt-3 space-y-4">
+                {groups.map((group) => (
+                  <div key={group.deliveryNote} className="space-y-2">
+                    {groups.length > 1 ? (
+                      <p className="num t-meta font-semibold text-muted-foreground">{group.deliveryNote}</p>
+                    ) : null}
+                    {group.items.map((item) => (
                   <label key={item.name} className="flex items-center gap-3 rounded-touch border border-hairline bg-white p-3">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{item.itemName}</span>
@@ -368,6 +378,8 @@ export function StopCompletionWizard({
                       aria-label={`Quantité ${item.itemName}`}
                     />
                   </label>
+                    ))}
+                  </div>
                 ))}
               </div>
             </fieldset>

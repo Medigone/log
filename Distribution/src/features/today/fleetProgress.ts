@@ -23,7 +23,7 @@ export interface DashboardAlert {
   target?: string;
 }
 
-type ProgressRoute = Pick<ActivityLiveRoute, "lifecycle" | "stops" | "depot"> & {
+type ProgressRoute = Pick<ActivityLiveRoute, "lifecycle" | "stops" | "visits" | "depot"> & {
   alerts?: string[];
   vehicleLabel?: string | null;
   driverName?: string | null;
@@ -34,8 +34,8 @@ export function isLiveRoute(route: { lifecycle: RouteLifecycle | string }) {
   return LIVE_ROUTE_STATES.includes(route.lifecycle as RouteLifecycle);
 }
 
-export function routeStopCounts(routes: Array<{ stops: Array<{ status: string }> }>) {
-  const stops = routes.flatMap((route) => route.stops);
+export function routeStopCounts(routes: Array<{ visits?: Array<{ status: string }>; stops: Array<{ status: string }> }>) {
+  const stops = routes.flatMap((route) => mapStops(route));
   const state = (status: string) => getStopVisualStyle(status).state;
   return {
     total: stops.length,
@@ -67,10 +67,15 @@ export function fleetColor(index: number) {
   return FLEET_COLORS[index % FLEET_COLORS.length];
 }
 
-export function stopProgress(route: { stops: Array<{ status: string }> }): RouteProgress {
-  const total = route.stops.length;
-  const done = route.stops.filter((stop) => getStopVisualStyle(stop.status).processed).length;
-  const failed = route.stops.filter((stop) => getStopVisualStyle(stop.status).state === "failed").length;
+export function mapStops<T>(route: { visits?: T[]; stops: T[] }): T[] {
+  return route.visits?.length ? route.visits : route.stops;
+}
+
+export function stopProgress(route: { visits?: Array<{ status: string }>; stops: Array<{ status: string }> }): RouteProgress {
+  const stops = mapStops(route);
+  const total = stops.length;
+  const done = stops.filter((stop) => getStopVisualStyle(stop.status).processed).length;
+  const failed = stops.filter((stop) => getStopVisualStyle(stop.status).state === "failed").length;
   return {
     total,
     done,
@@ -80,14 +85,14 @@ export function stopProgress(route: { stops: Array<{ status: string }> }): Route
   };
 }
 
-export function nextPendingStop(route: { stops: ActivityLiveStop[] }): ActivityLiveStop | undefined {
-  return [...route.stops]
+export function nextPendingStop(route: { visits?: ActivityLiveStop[]; stops: ActivityLiveStop[] }): ActivityLiveStop | undefined {
+  return [...mapStops(route)]
     .sort((left, right) => left.sequence - right.sequence)
     .find((stop) => !getStopVisualStyle(stop.status).processed);
 }
 
-export function lastProcessedStop(route: { stops: ActivityLiveStop[] }): ActivityLiveStop | undefined {
-  return [...route.stops]
+export function lastProcessedStop(route: { visits?: ActivityLiveStop[]; stops: ActivityLiveStop[] }): ActivityLiveStop | undefined {
+  return [...mapStops(route)]
     .filter((stop) => getStopVisualStyle(stop.status).processed)
     .sort((left, right) => left.sequence - right.sequence)
     .at(-1);
@@ -98,15 +103,53 @@ function pointFromStop(stop?: { latitude?: number | null; longitude?: number | n
   return [stop.latitude, stop.longitude];
 }
 
-/** Position affichée du véhicule : prochain arrêt, dernier traité, sinon dépôt. */
-export function vehiclePosition(route: ProgressRoute): MapPoint | null {
-  if (route.lifecycle === "Retour dépôt" && route.depot) {
-    return [route.depot.latitude, route.depot.longitude];
+export const TRAVELED_PATH_COLOR = "#16a34a";
+
+function nearestLineIndex(line: MapPoint[], target: MapPoint) {
+  let best = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < line.length; index += 1) {
+    const point = line[index];
+    const distance = (point[0] - target[0]) ** 2 + (point[1] - target[1]) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
+    }
   }
-  return (
-    pointFromStop(route.lifecycle === "En cours" ? lastProcessedStop(route) || nextPendingStop(route) : nextPendingStop(route))
-    || (route.depot ? [route.depot.latitude, route.depot.longitude] : null)
-  );
+  return best;
+}
+
+/** Découpe le tracé GPS : vert jusqu’au dernier arrêt enregistré, couleur tournée pour le reste. */
+export function splitTraveledPath(
+  line: MapPoint[],
+  lastProcessed: MapPoint | null,
+  fullyTraveled = false,
+): { traveled: MapPoint[]; remaining: MapPoint[] } {
+  if (line.length < 2) return { traveled: [], remaining: line };
+  if (fullyTraveled) return { traveled: line, remaining: [] };
+  if (!lastProcessed) return { traveled: [], remaining: line };
+  const index = nearestLineIndex(line, lastProcessed);
+  if (index <= 0) return { traveled: [], remaining: line };
+  if (index >= line.length - 1) return { traveled: line, remaining: [] };
+  const split = line[index];
+  return {
+    traveled: line.slice(0, index + 1),
+    remaining: [split, ...line.slice(index + 1)],
+  };
+}
+
+/** Camion sur la carte : terrain seulement. Un brouillon ou une tournée terminée n’en a pas. */
+export function vehiclePosition(route: ProgressRoute): MapPoint | null {
+  if (route.lifecycle === "En cours") {
+    return (
+      pointFromStop(lastProcessedStop(route) || nextPendingStop(route))
+      || (route.depot ? [route.depot.latitude, route.depot.longitude] : null)
+    );
+  }
+  if (route.lifecycle === "Publiée" || route.lifecycle === "Retour dépôt") {
+    return route.depot ? [route.depot.latitude, route.depot.longitude] : null;
+  }
+  return null;
 }
 
 export function collectDashboardAlerts(
@@ -131,7 +174,7 @@ export function collectDashboardAlerts(
         target: `/planning/routes/${route.name}`,
       });
     }
-    for (const stop of route.stops) {
+    for (const stop of mapStops(route)) {
       if (getStopVisualStyle(stop.status).state !== "failed") continue;
       alerts.push({
         id: `${route.name}-${stop.deliveryNote}`,

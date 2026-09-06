@@ -9,6 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { canReorderRouteStops } from "@/features/planning/routeOrder";
 import { RouteStopDetail } from "@/features/planning/RouteStopDetail";
 import { RouteStopRail } from "@/features/planning/RouteStopRail";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
@@ -60,7 +61,7 @@ export function RouteStopsPanel({
     [route.stops, stopParam, focusNote],
   );
   const selectedStop = route.stops.find((stop) => stop.deliveryNote === selected);
-  const reorderable = route.lifecycle === "Brouillon" && route.stops.length > 1;
+  const reorderable = canReorderRouteStops(route, route.visits?.length || route.stops.length);
 
   useEffect(() => {
     if (!selected || searchParams.get("stop") === selected) return;
@@ -91,8 +92,10 @@ export function RouteStopsPanel({
       <div>
         <h2 className="t-section">Arrêts et bons de livraison</h2>
         <p className="t-body text-muted-foreground">
-          {route.lifecycle === "Brouillon"
-            ? "Glissez les arrêts pour choisir qui est livré avant qui, puis vérifiez chaque BL à droite."
+          {reorderable
+            ? route.lifecycle === "Publiée"
+              ? "Glissez les arrêts pour ajuster l’ordre. Le livreur devra accepter la nouvelle révision."
+              : "Glissez les arrêts pour choisir qui est livré avant qui, puis vérifiez chaque BL à droite."
             : "Sélectionnez un arrêt pour vérifier ses articles, son paiement et son QR."}
         </p>
       </div>

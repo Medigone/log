@@ -1,4 +1,11 @@
-import type { RouteStop } from "@/shared/types/distribution";
+import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
+
+export function canReorderRouteStops(
+  route: Pick<DistributionRoute, "lifecycle" | "acknowledged">,
+  stopCount = 0,
+) {
+  return !route.acknowledged && (route.lifecycle === "Brouillon" || route.lifecycle === "Publiée") && stopCount > 1;
+}
 
 export function reorderStops(stops: RouteStop[], source: number, target: number): RouteStop[] {
   if (source < 0 || target < 0 || source >= stops.length || target >= stops.length || source === target) return stops;

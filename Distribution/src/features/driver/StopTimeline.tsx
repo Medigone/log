@@ -7,6 +7,7 @@ import {
   type StopVisualState,
 } from "@/features/driver/driverMobile";
 import { completedStops } from "@/features/driver/stopHelpers";
+import { visitNotesLabel } from "@/features/driver/visitHelpers";
 import { cn } from "@/lib/utils";
 
 const MARKER_CLASS: Record<Extract<StopVisualState, "delivered" | "partial" | "failed">, string> = {
@@ -56,7 +57,7 @@ export function CompletedStopsTimeline({ stops }: { stops: RouteStop[] }) {
           const state = stopVisualState(stop, false);
           const visual = state === "current" || state === "upcoming" ? "delivered" : state;
           return (
-            <li key={stop.deliveryNote} className="flex gap-3">
+            <li key={stop.visitKey || stop.deliveryNote} className="flex gap-3">
               <div className="flex w-8 flex-col items-center">
                 <Marker state={visual} />
                 {index < done.length - 1 ? <span className="my-1 w-0.5 flex-1 bg-border" /> : null}
@@ -74,7 +75,11 @@ export function CompletedStopsTimeline({ stops }: { stops: RouteStop[] }) {
                     </span>
                   )}
                 </div>
-                <p className="mt-0.5 truncate t-meta text-subtle">{stopTimelineDetail(stop, visual)}</p>
+                <p className="mt-0.5 truncate t-meta text-subtle">
+                  {[stopTimelineDetail(stop, visual), (stop.deliveryNotes?.length || 0) > 1 ? visitNotesLabel(stop) : ""]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
               </div>
             </li>
           );

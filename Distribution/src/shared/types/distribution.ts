@@ -68,7 +68,9 @@ export interface RouteStopTax {
 }
 
 export interface RouteStop {
+  visitKey?: string;
   deliveryNote: string;
+  deliveryNotes?: string[];
   salesOrder?: string;
   customer: string;
   customerName: string;
@@ -96,6 +98,7 @@ export interface RouteStop {
   plannedDate?: string;
   routeId?: string;
   planningAlert?: string;
+  splitVisitWarning?: string;
   qrCode?: string;
   packageCount?: number;
   postingDate?: string;
@@ -108,6 +111,7 @@ export interface RouteStop {
   phone?: string;
   instructions?: string;
   items?: RouteStopItem[];
+  stops?: RouteStop[];
 }
 
 export interface StopPayment {
@@ -131,6 +135,7 @@ export interface RouteStopItem {
   remainingQuantity: number;
   rate?: number;
   amount?: number;
+  deliveryNote?: string;
 }
 
 export interface RouteDraft {
@@ -171,6 +176,7 @@ export interface DistributionRoute {
   totalCollected: number;
   totalAmount: number;
   stops: RouteStop[];
+  visits?: RouteStop[];
   depot?: RouteDepot;
   routing: RouteItinerary;
   stock: RouteStockSummary;
@@ -371,6 +377,7 @@ export interface DeliveryItemInput {
   deliveredQuantity: number;
   failureReason?: string;
   comment?: string;
+  deliveryNote?: string;
 }
 
 export interface PaymentInput {
@@ -521,6 +528,8 @@ export interface StopCompletionPayload {
   routeId: string;
   routeRevision?: number;
   deliveryNote: string;
+  deliveryNotes?: string[];
+  visitKey?: string;
   outcome: DeliveryOutcome;
   items: DeliveryItemInput[];
   payment?: PaymentInput;
@@ -735,6 +744,7 @@ export interface ActivityFulfillment {
 
 export interface ActivityLiveStop {
   deliveryNote: string;
+  deliveryNotes?: string[];
   customer?: string;
   customerName: string;
   status: string;
@@ -758,6 +768,7 @@ export interface ActivityLiveRoute {
   depot?: RouteDepot | null;
   routing?: { geometry?: RouteGeometry | null } | null;
   stops: ActivityLiveStop[];
+  visits?: ActivityLiveStop[];
   doneStops: number;
   remainingStops: number;
   failedStops: number;

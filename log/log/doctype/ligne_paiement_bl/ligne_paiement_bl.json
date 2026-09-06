@@ -1,0 +1,25 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["bon_de_livraison"],
+ "fields": [
+  {
+   "fieldname": "bon_de_livraison",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Bon de livraison",
+   "options": "Delivery Note",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "module": "Log",
+ "name": "Ligne Paiement BL",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

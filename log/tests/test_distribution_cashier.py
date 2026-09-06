@@ -122,6 +122,36 @@ class TestCashControlIndependence(unittest.TestCase):
 		]
 		self.assertEqual(cashier._requested_allocations(payment, requested), requested)
 
+	def test_payment_delivery_notes_include_visit_rows(self):
+		payment = frappe._dict(
+			bon_livraison="DN-1",
+			lignes_bl=[frappe._dict(bon_de_livraison="DN-1"), frappe._dict(bon_de_livraison="DN-2")],
+		)
+		self.assertEqual(cashier.payment_delivery_notes(payment), ["DN-1", "DN-2"])
+
+	def test_ensure_visit_invoices_creates_missing_child_invoices(self):
+		payment = frappe._dict(facture_source="SINV-1", bon_livraison="DN-1", lignes_bl=[frappe._dict(bon_de_livraison="DN-2")])
+		route = frappe._dict(name="LIV-1")
+		created = []
+
+		def fake_get_value(doctype, name, field=None):
+			if doctype == "Sales Invoice":
+				return 1
+			if doctype == "Delivery Note" and name == "DN-2":
+				return None
+			return None
+
+		def fake_create(_route, note):
+			created.append(note)
+			return ("SINV-2", "created")
+
+		with (
+			patch.object(cashier.frappe.db, "get_value", side_effect=fake_get_value),
+			patch.object(fulfillment, "create_and_submit_invoice", side_effect=fake_create),
+		):
+			self.assertEqual(cashier._ensure_visit_invoices(payment, route), "SINV-1")
+		self.assertEqual(created, ["DN-2"])
+
 
 if __name__ == "__main__":
 	unittest.main()

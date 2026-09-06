@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { RouteStop } from "@/shared/types/distribution";
 import { directionUrl, stopAddress } from "@/features/driver/stopHelpers";
+import { visitNotesLabel } from "@/features/driver/visitHelpers";
 import { formatDriverMoney, stopExpectedAmount } from "@/features/driver/driverMobile";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +90,9 @@ export function MapNextStopCard({
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-[16.5px] font-semibold tracking-tight">{stop.customerName}</h2>
           <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">{stopAddress(stop)}</p>
+          {(stop.deliveryNotes?.length || 0) > 1 ? (
+            <p className="mt-0.5 text-[12.5px] text-muted-foreground">{visitNotesLabel(stop)}</p>
+          ) : null}
         </div>
       </div>
       <div className="mt-2.5 grid grid-cols-2 gap-2">
@@ -148,7 +152,9 @@ export function CurrentStopCard({
               GPS client à collecter
             </StatusBadge>
           ) : null}
-          <span className="num rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">{stop.deliveryNote}</span>
+          <span className="num rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+            {visitNotesLabel(stop)}
+          </span>
         </div>
       </div>
 

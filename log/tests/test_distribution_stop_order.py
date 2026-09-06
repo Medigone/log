@@ -39,14 +39,27 @@ class TestNextRemainingOrder(unittest.TestCase):
 			["A", "B", "C"],
 		)
 
+	def test_promotes_every_open_note_of_the_same_customer(self):
+		self.assertEqual(
+			distribution._next_remaining_order(
+				["A1", "B1", "A2", "C1"],
+				{"A1": "Livré", "B1": "Enlevé", "A2": "Enlevé", "C1": "Préparé"},
+				"A2",
+				{"A1": "A", "A2": "A", "B1": "B", "C1": "C"},
+			),
+			["A1", "A2", "B1", "C1"],
+		)
+
 
 class TestReorderRouteStopsFlow(unittest.TestCase):
-	def test_draft_only_applies_order_and_bumps_revision(self):
+	def test_applies_order_and_keeps_published_until_accepted(self):
 		source = inspect.getsource(distribution.reorder_route_stops)
-		self.assertIn('!= "Brouillon"', source)
+		self.assertIn("can_reorder_route_stops", source)
 		self.assertIn("_apply_stop_order", source)
-		self.assertIn("_bump_route_revision", source)
+		self.assertIn("_advance_route_revision", source)
+		self.assertIn("revision_publiee", source)
 		self.assertIn("_lock_route", source)
+		self.assertNotIn('!= "Brouillon"', source)
 
 
 class TestSelectNextDeliveryStopFlow(unittest.TestCase):

@@ -8,7 +8,7 @@ from urllib.parse import quote, urlencode
 import frappe
 from frappe.utils import add_days, flt, getdate, today
 
-from log.api.distribution_rules import parse_gps_value
+from log.api.distribution_rules import parse_gps_value, group_stops_into_visits, TERMINAL_VISIT_STATES
 
 CLOSED_SO_STATUSES = ("Closed", "On Hold", "Completed", "Cancelled")
 ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours", "Retour dépôt", "Contrôle caisse")
@@ -927,9 +927,10 @@ def build_lite_routes(routes, children, delivery_notes, gps_by_customer) -> list
 		if lifecycle not in LIVE_ROUTE_STATES:
 			continue
 		stops = sorted(stops_by_route.get(name) or [], key=lambda stop: stop["sequence"])
-		done = sum(1 for stop in stops if is_terminal_stop(stop["status"]))
-		failed = sum(1 for stop in stops if is_failed_stop(stop["status"]))
-		next_stop = next((stop for stop in stops if not is_terminal_stop(stop["status"])), None)
+		visits = group_stops_into_visits(stops)
+		done = sum(1 for visit in visits if visit["status"] in TERMINAL_VISIT_STATES)
+		failed = sum(1 for visit in visits if is_failed_stop(visit["status"]))
+		next_visit = next((visit for visit in visits if visit["status"] not in TERMINAL_VISIT_STATES), None)
 		payload.append(
 			{
 				"name": name,
@@ -946,16 +947,17 @@ def build_lite_routes(routes, children, delivery_notes, gps_by_customer) -> list
 				"cashStatus": _attr(route, "statut_caisse") or "Sans encaissement",
 				"depot": _depot_point(_attr(route, "depot")),
 				"stops": stops,
+				"visits": visits,
 				"doneStops": done,
-				"remainingStops": max(len(stops) - done, 0),
+				"remainingStops": max(len(visits) - done, 0),
 				"failedStops": failed,
 				"nextStop": (
 					{
-						"deliveryNote": next_stop["deliveryNote"],
-						"customerName": next_stop["customerName"],
-						"status": next_stop["status"],
+						"deliveryNote": next_visit["deliveryNote"],
+						"customerName": next_visit["customerName"],
+						"status": next_visit["status"],
 					}
-					if next_stop
+					if next_visit
 					else None
 				),
 			}

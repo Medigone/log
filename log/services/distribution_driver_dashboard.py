@@ -108,20 +108,25 @@ def build_week_days(start: str, end: str, daily: dict[str, dict[str, Any]]) -> l
 	return days
 
 
+from log.api.distribution_rules import group_stops_into_visits, TERMINAL_VISIT_STATES
+
+
 def summarize_stops(stops: list[dict[str, Any]], collected_by_dn: dict[str, float]) -> dict[str, Any]:
-	planned = len(stops)
+	visits = group_stops_into_visits(stops)
+	planned = len(visits)
 	delivered = 0
 	failed = 0
 	completed = 0
 	remaining_amount = 0.0
-	for stop in stops:
-		status = stop.get("status") or "Nouveau"
-		if is_terminal(status):
+	for visit in visits:
+		status = visit.get("status") or "Nouveau"
+		if status in TERMINAL_VISIT_STATES:
 			completed += 1
 		if status in DELIVERED_STOP_STATES:
 			delivered += 1
 		if status in FAILED_STOP_STATES:
 			failed += 1
+	for stop in stops:
 		paid = flt(collected_by_dn.get(stop.get("deliveryNote")))
 		remaining_amount += max(flt(stop.get("grandTotal")) - paid, 0)
 	collected = round(sum(flt(collected_by_dn.get(stop.get("deliveryNote"))) for stop in stops), 2)

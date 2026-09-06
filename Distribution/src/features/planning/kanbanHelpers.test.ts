@@ -236,4 +236,11 @@ describe("notesToMoveOnDrag", () => {
   it("ignores the selection when dragging an unselected BL", () => {
     expect(notesToMoveOnDrag("DN-9", new Set(["DN-1", "DN-2"]), ["DN-1", "DN-2", "DN-9"])).toEqual(["DN-9"]);
   });
+
+  it("moves every BL of the same customer when no multi-selection", () => {
+    expect(notesToMoveOnDrag("DN-2", new Set(), ["DN-1", "DN-2", "DN-3"], ["DN-1", "DN-2"])).toEqual([
+      "DN-1",
+      "DN-2",
+    ]);
+  });
 });

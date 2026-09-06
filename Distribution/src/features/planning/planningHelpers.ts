@@ -18,6 +18,14 @@ export function canReprogramAssignment(status?: string) {
   return !LOCKED_STATUSES.includes(status || "")
 }
 
+export function hasAssignmentAlert(assignment: {
+  planningAlert?: string
+  requiresCustomerGeolocation?: boolean
+  splitVisitWarning?: string
+}) {
+  return Boolean(assignment.planningAlert || assignment.requiresCustomerGeolocation || assignment.splitVisitWarning)
+}
+
 export const ROUTE_LIFECYCLES: RouteLifecycle[] = [
   "Brouillon",
   "Publiée",

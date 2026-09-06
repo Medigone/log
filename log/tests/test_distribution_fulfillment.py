@@ -79,6 +79,111 @@ class TestDistributionFulfillment(unittest.TestCase):
 		self.assertEqual([(row["batch_no"], row["qty"]) for row in fragments], [("LOT-A", 2), ("LOT-B", 1)])
 		self.assertTrue(all(row["warehouse"] == "DEPOT-A" for row in fragments))
 
+	def test_missing_batch_is_allocated_from_warehouse_stock(self):
+		item = frappe._dict(
+			{
+				"item_code": "Article 1",
+				"parent": "DN-1",
+				"warehouse": "Magasins - MP",
+				"conversion_factor": 1,
+				"batch_no": None,
+			}
+		)
+		pool = {("Article 1", "Magasins - MP"): [{"batch_no": "92CCCF3", "qty": 108, "warehouse": "Magasins - MP"}]}
+		fake_db = Mock()
+		fake_db.get_value.return_value = (0, 1)
+		with patch.object(fulfillment.frappe, "db", fake_db):
+			fragments = fulfillment._tracking_fragments(item, 7, batch_pools=pool)
+
+		self.assertEqual(
+			[(row["batch_no"], row["qty"]) for row in fragments],
+			[("92CCCF3", 7)],
+		)
+		self.assertEqual(pool[("Article 1", "Magasins - MP")][0]["qty"], 101)
+
+	def test_batch_pool_is_consumed_across_delivery_lines(self):
+		pool: dict = {}
+		available = [{"batch_no": "LOT-A", "qty": 10, "warehouse": "DEPOT-A"}]
+		fake_db = Mock()
+		fake_db.get_value.return_value = (0, 1)
+		with (
+			patch.object(fulfillment.frappe, "db", fake_db),
+			patch.object(fulfillment, "_available_batch_rows", return_value=available),
+		):
+			first = fulfillment._tracking_fragments(
+				frappe._dict(
+					{
+						"item_code": "ITEM-BATCH",
+						"parent": "DN-1",
+						"warehouse": "DEPOT-A",
+						"conversion_factor": 1,
+						"batch_no": None,
+					}
+				),
+				8,
+				batch_pools=pool,
+			)
+			second = fulfillment._tracking_fragments(
+				frappe._dict(
+					{
+						"item_code": "ITEM-BATCH",
+						"parent": "DN-2",
+						"warehouse": "DEPOT-A",
+						"conversion_factor": 1,
+						"batch_no": None,
+					}
+				),
+				2,
+				batch_pools=pool,
+			)
+
+		self.assertEqual(first[0]["batch_no"], "LOT-A")
+		self.assertEqual(first[0]["qty"], 8)
+		self.assertEqual(second[0]["qty"], 2)
+		self.assertEqual(pool[("ITEM-BATCH", "DEPOT-A")][0]["qty"], 0)
+
+	def test_insufficient_batch_stock_throws(self):
+		item = frappe._dict(
+			{
+				"item_code": "ITEM-BATCH",
+				"parent": "DN-1",
+				"warehouse": "DEPOT-A",
+				"conversion_factor": 1,
+				"batch_no": None,
+			}
+		)
+		fake_db = Mock()
+		fake_db.get_value.return_value = (0, 1)
+		with (
+			patch.object(fulfillment.frappe, "db", fake_db),
+			patch.object(fulfillment, "_available_batch_rows", return_value=[{"batch_no": "LOT-A", "qty": 1, "warehouse": "DEPOT-A"}]),
+			patch.object(fulfillment, "_", side_effect=lambda message: message),
+			patch.object(fulfillment.frappe, "throw", side_effect=frappe.ValidationError),
+		):
+			with self.assertRaises(frappe.ValidationError):
+				fulfillment._tracking_fragments(item, 5, batch_pools={})
+
+	def test_explicit_batch_is_kept(self):
+		item = frappe._dict(
+			{
+				"item_code": "ITEM-BATCH",
+				"parent": "DN-1",
+				"warehouse": "DEPOT-A",
+				"conversion_factor": 1,
+				"batch_no": "LOT-EXPLICITE",
+			}
+		)
+		fake_db = Mock()
+		fake_db.get_value.return_value = (0, 1)
+		with (
+			patch.object(fulfillment.frappe, "db", fake_db),
+			patch.object(fulfillment, "_available_batch_rows") as available,
+		):
+			fragments = fulfillment._tracking_fragments(item, 3)
+
+		self.assertEqual(fragments[0]["batch_no"], "LOT-EXPLICITE")
+		available.assert_not_called()
+
 	def test_bundle_quantity_must_match_delivery_quantity(self):
 		item = frappe._dict(
 			{

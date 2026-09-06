@@ -49,7 +49,8 @@ import {
   readVerifiedNotes,
   writeVerifiedNotes,
 } from "@/features/driver/departureWorkflow";
-import { isStopCompleted, remainingStops, stopFormKey } from "@/features/driver/stopHelpers";
+import { isStopCompleted, stopFormKey } from "@/features/driver/stopHelpers";
+import { remainingVisits, routeVisits } from "@/features/driver/visitHelpers";
 import { formatDriverMoney, routeProgress } from "@/features/driver/driverMobile";
 import { formatTime } from "@/shared/format";
 import { cn } from "@/lib/utils";
@@ -97,7 +98,7 @@ function DepartureStepper({ step }: { step: 1 | 2 | 3 }) {
 }
 
 function DriverRouteStats({ route }: { route: DistributionRoute }) {
-  const progress = routeProgress(route.stops);
+  const progress = routeProgress(routeVisits(route));
   const end = formatTime(route.plannedEnd);
   const remaining =
     progress.remaining === 0
@@ -183,7 +184,7 @@ function RouteNowView({
   onTreat: (stop: RouteStop) => void;
 }) {
   const canTreat = routeData.lifecycle === "En cours";
-  const remaining = remainingStops(routeData.stops);
+  const remaining = remainingVisits(routeVisits(routeData));
 
   return (
     <>
@@ -226,7 +227,7 @@ function RouteNowView({
         selecting={selectingStop}
         onSelect={onTreat}
       />
-      <CompletedStopsTimeline stops={routeData.stops} />
+      <CompletedStopsTimeline stops={routeVisits(routeData)} />
     </>
   );
 }
@@ -321,7 +322,9 @@ export function DriverApp() {
         const result = await completeStopRef.current(operation.payload);
         customerLocationUpdated ||= result.customerLocationUpdated;
         confirmOperation(operation.requestId);
-        localStorage.removeItem(stopFormKey(operation.payload.routeId, operation.payload.deliveryNote));
+        localStorage.removeItem(
+          stopFormKey(operation.payload.routeId, operation.payload.visitKey || operation.payload.deliveryNote),
+        );
       } catch {
         setPendingCount(readPendingOperations().length);
         return;
@@ -339,7 +342,9 @@ export function DriverApp() {
   const discardPending = useCallback(() => {
     const pending = clearPendingOperations();
     for (const operation of pending) {
-      localStorage.removeItem(stopFormKey(operation.payload.routeId, operation.payload.deliveryNote));
+      localStorage.removeItem(
+        stopFormKey(operation.payload.routeId, operation.payload.visitKey || operation.payload.deliveryNote),
+      );
     }
     setPendingCount(0);
     setMessage("Opérations en attente ignorées.");
@@ -355,7 +360,7 @@ export function DriverApp() {
   }, [retryPending]);
 
   const nextStop = useMemo(
-    () => routeData?.stops.find((stop) => !isStopCompleted(stop)),
+    () => (routeData ? remainingVisits(routeVisits(routeData))[0] : undefined),
     [routeData],
   );
   const departureMode = showDetail && routeData?.lifecycle === "Publiée";

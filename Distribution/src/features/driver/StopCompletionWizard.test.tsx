@@ -129,7 +129,7 @@ describe("StopCompletionWizard", () => {
   it("lance le GPS à l’ouverture et enchaîne les étapes jusqu’à l’encaissement sans récap", async () => {
     const user = userEvent.setup();
     localStorage.setItem(
-      stopFormKey("LIV-1", "DN-8"),
+      stopFormKey("LIV-1", "CUST-8"),
       JSON.stringify({ requestId: "req-1", outcome: "delivered", evidence: validEvidence, paymentEnabled: false }),
     );
     const geo = mockGeolocation();
@@ -159,6 +159,7 @@ describe("StopCompletionWizard", () => {
     await user.click(screen.getByRole("button", { name: /valider l’arrêt/i }));
     expect(mocks.completeStop).toHaveBeenCalledWith(expect.objectContaining({
       deliveryNote: "DN-8",
+      deliveryNotes: ["DN-8"],
       outcome: "delivered",
       payment: undefined,
     }));
@@ -200,7 +201,7 @@ describe("StopCompletionWizard", () => {
   it("laisse Continuer actif sans signature ni photo, et n’affiche pas la signature comme manquante", async () => {
     const user = userEvent.setup();
     localStorage.setItem(
-      stopFormKey("LIV-1", "DN-8"),
+      stopFormKey("LIV-1", "CUST-8"),
       JSON.stringify({
         requestId: "req-sig",
         outcome: "delivered",
@@ -228,5 +229,33 @@ describe("StopCompletionWizard", () => {
     expect(screen.queryByText(/éléments manquants/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^signature$/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /valider l’arrêt/i })).toBeEnabled();
+  });
+
+  it("envoie tous les BL d’une visite groupée", async () => {
+    const user = userEvent.setup();
+    const visit: RouteStop = { ...stop, deliveryNotes: ["DN-8", "DN-9"] };
+    localStorage.setItem(
+      stopFormKey("LIV-1", "CUST-8"),
+      JSON.stringify({ requestId: "req-visit", outcome: "delivered", evidence: validEvidence, paymentEnabled: false }),
+    );
+    render(
+      <StopCompletionWizard
+        stop={visit}
+        routeId="LIV-1"
+        routeRevision={1}
+        onDone={vi.fn()}
+        onClose={vi.fn()}
+        onPending={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/2 BL/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /livré en totalité/i }));
+    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    await user.click(screen.getByRole("button", { name: /valider l’arrêt/i }));
+    expect(mocks.completeStop).toHaveBeenCalledWith(expect.objectContaining({
+      deliveryNote: "DN-8",
+      deliveryNotes: ["DN-8", "DN-9"],
+      visitKey: "CUST-8",
+    }));
   });
 });

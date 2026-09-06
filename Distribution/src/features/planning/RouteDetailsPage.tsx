@@ -40,6 +40,7 @@ import { DeleteDraftRouteDialog } from "@/features/planning/DeleteDraftRouteDial
 import { RouteStopsPanel } from "@/features/planning/RouteStopsPanel";
 import { canDeleteDraftRoute } from "@/features/planning/kanbanHelpers";
 import { RouteMap } from "@/features/planning/RouteMap";
+import { routeVisits } from "@/features/driver/visitHelpers";
 import { printRouteLabels } from "@/features/planning/qrPrinting";
 import { getStopVisualStyle, type StopVisualState } from "@/features/planning/stopStatus";
 import { cn } from "@/lib/utils";
@@ -320,7 +321,8 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
   const [publishFailure, setPublishFailure] = useState("");
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteFailure, setDeleteFailure] = useState("");
-  const missingGps = useMemo(() => route?.stops.filter((stop) => stop.requiresCustomerGeolocation) || [], [route]);
+  const visits = useMemo(() => (route ? routeVisits(route) : []), [route]);
+  const missingGps = useMemo(() => visits.filter((stop) => stop.requiresCustomerGeolocation), [visits]);
   const missingQr = useMemo(() => route?.stops.filter((stop) => !stop.qrCode) || [], [route]);
 
   if (isLoading) return <DetailSkeleton />;
@@ -424,11 +426,12 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
     setNotice("");
     try {
       const updated = await actions.reorderRouteStops(route.name, orderedDeliveryNotes, route.revision);
+      const acceptHint = route.lifecycle === "Publiée" ? " Le livreur devra accepter la nouvelle révision." : "";
       try {
         await actions.calculateRouteItinerary(updated.name, updated.revision);
-        setNotice("Ordre des arrêts enregistré et itinéraire recalculé.");
+        setNotice(`Ordre des arrêts enregistré et itinéraire recalculé.${acceptHint}`);
       } catch (routingError) {
-        setNotice("Ordre des arrêts enregistré. Le tracé routier devra être recalculé.");
+        setNotice(`Ordre des arrêts enregistré. Le tracé routier devra être recalculé.${acceptHint}`);
         setFailure(apiErrorMessage(routingError));
       }
       await mutate();
@@ -460,8 +463,8 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
     route.depot && route.stops.length && route.stops.every(stopHasRoutableLocation),
   );
   const itineraryLabel = itineraryActionLabel(route.routing.status);
-  const locatedCount = route.stops.filter(stopHasCoordinates).length;
-  const stopCounts = route.stops.reduce<Record<StopVisualState, number>>(
+  const locatedCount = visits.filter(stopHasCoordinates).length;
+  const stopCounts = visits.reduce<Record<StopVisualState, number>>(
     (counts, stop) => {
       counts[getStopVisualStyle(stop.status).state] += 1;
       return counts;
@@ -469,7 +472,7 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
     { delivered: 0, partial: 0, failed: 0, active: 0, cancelled: 0, pending: 0 },
   );
   const processedStops = stopCounts.delivered + stopCounts.partial + stopCounts.failed + stopCounts.cancelled;
-  const progressPercent = route.stops.length ? Math.round((processedStops / route.stops.length) * 100) : 0;
+  const progressPercent = visits.length ? Math.round((processedStops / visits.length) * 100) : 0;
 
   return (
     <div className="space-y-5">
@@ -542,7 +545,7 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
       {confirmingPublish && (
         <PublishConfirmationDialog
           routeName={route.name}
-          stopCount={route.stops.length}
+          stopCount={visits.length}
           missingGpsCount={missingGps.length}
           publishing={actions.saving}
           error={publishFailure}
@@ -700,7 +703,7 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
               role="progressbar"
               aria-label="Arrêts traités"
               aria-valuemin={0}
-              aria-valuemax={route.stops.length}
+              aria-valuemax={visits.length}
               aria-valuenow={processedStops}
               className="h-2 overflow-hidden rounded-full bg-slate-100"
             >
@@ -802,7 +805,7 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
               Aucun tracé routier à jour. Les marqueurs restent visibles sans ligne droite; utilisez « {itineraryLabel} ».
             </div>
           )}
-          <RouteMap stops={route.stops} depot={route.depot} routing={route.routing} />
+          <RouteMap stops={routeVisits(route)} depot={route.depot} routing={route.routing} />
           <p className="num mt-2 t-meta text-subtle">
             {route.routing.calculatedAt
               ? `Dernier calcul : ${route.routing.calculatedAt}`

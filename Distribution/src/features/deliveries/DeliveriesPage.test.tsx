@@ -53,8 +53,10 @@ vi.mock("@/shared/api/distribution", () => ({
 }));
 
 vi.mock("@/features/today/FleetMap", () => ({
-  FleetMap: ({ routes }: { routes: Array<{ name: string }> }) => (
-    <div>Carte flotte {routes.map((route) => route.name).join(" ")}</div>
+  FleetMap: ({ routes, focus }: { routes: Array<{ name: string }>; focus?: string }) => (
+    <div>
+      Carte flotte {(focus ? routes.filter((route) => route.name === focus) : routes).map((route) => route.name).join(" ")}
+    </div>
   ),
 }));
 
@@ -118,6 +120,21 @@ describe("DeliveriesPage", () => {
     expect(screen.getByText("Client C")).toBeInTheDocument();
     expect(screen.getByText("DN-3")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /ouvrir la tournée/i }).length).toBeGreaterThan(0);
+    expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
+  });
+
+  it("isole la carte sur la tournée cliquée puis réaffiche toutes les livraisons", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("button", { name: "LIV-1" }));
+    expect(screen.getByText("Carte flotte LIV-1")).toBeInTheDocument();
+    expect(screen.queryByText("Carte flotte LIV-1 LIV-2")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LIV-1" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: /réinitialiser/i }));
+    expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "LIV-1" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("distingue l’état vide des filtres", async () => {

@@ -57,10 +57,11 @@ def serialize_history_card(
 	customer_names: dict[str, str],
 	commune_names: dict[str, str],
 ) -> dict[str, Any]:
-	customers = [customer_names.get(row.get("customer") or "", row.get("customer")) for row in children]
+	resolved_names = [customer_names.get(row.get("customer") or "", row.get("customer")) for row in children]
 	communes = [commune_names.get(row.get("custom_commune") or "", row.get("custom_commune")) for row in children]
 	wilayas = [row.get("custom_wilaya") for row in children]
-	stop_count = int(route.get("nombre_bons_de_livraison") or len(children) or 0)
+	customer_ids = unique_labels([row.get("customer") for row in children])
+	stop_count = len(customer_ids) or int(route.get("nombre_bons_de_livraison") or len(children) or 0)
 	articles = flt(route.get("total_articles"))
 	if not articles:
 		articles = sum(flt(row.get("total_qty")) for row in children)
@@ -69,7 +70,7 @@ def serialize_history_card(
 		"date": date_str(route.get("date_liv")),
 		"lifecycle": route.get("etat_planification") or "Terminée",
 		"plannedStart": str(route.get("depart_prevu") or "") or None,
-		"customerLabel": customer_label(customers),
+		"customerLabel": customer_label(resolved_names),
 		"stopCount": stop_count,
 		"totalArticles": int(articles) if articles == int(articles) else articles,
 		"locationLabel": location_label(communes, wilayas),

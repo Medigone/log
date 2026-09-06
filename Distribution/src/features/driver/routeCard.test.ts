@@ -52,8 +52,8 @@ function route(overrides: Partial<DistributionRoute> = {}): DistributionRoute {
     stock: { status: "Chargé", loadedQuantity: 4, deliveredQuantity: 2, remainingQuantity: 2, returnedQuantity: 0, lines: [] },
     cash: { routeId: "LIV-1", routeLifecycle: "En cours", status: "Sans encaissement", declaredCash: 0, declaredCheques: 0, declaredTotal: 0, countedTotal: 0, validatedTotal: 0, payments: [] },
     stops: [
-      stop({ deliveryNote: "DN-1", customerName: "Client A", commune: "Hydra", wilaya: "Alger", status: "Livré", sequence: 1 }),
-      stop({ deliveryNote: "DN-2", customerName: "Épicerie Nord", commune: "El Biar", wilaya: "Alger", status: "Enlevé", sequence: 2 }),
+      stop({ deliveryNote: "DN-1", customer: "CUST-1", customerName: "Client A", commune: "Hydra", wilaya: "Alger", status: "Livré", sequence: 1 }),
+      stop({ deliveryNote: "DN-2", customer: "CUST-2", customerName: "Épicerie Nord", commune: "El Biar", wilaya: "Alger", status: "Enlevé", sequence: 2 }),
     ],
     ...overrides,
   };
@@ -78,5 +78,18 @@ describe("routeCard", () => {
     expect(card.totalArticles).toBe(12);
     expect(card.locationLabel).toBe("Hydra, El Biar · Alger");
     expect(card.lifecycle).toBe("En cours");
+  });
+
+  it("compte une visite par client, pas par BL", () => {
+    const card = routeCardFromRoute(
+      route({
+        stops: [
+          stop({ deliveryNote: "DN-1", customer: "C-A", customerName: "Client A", status: "Enlevé", sequence: 1 }),
+          stop({ deliveryNote: "DN-2", customer: "C-A", customerName: "Client A", status: "Enlevé", sequence: 2 }),
+        ],
+      }),
+    );
+    expect(card.stopCount).toBe(1);
+    expect(card.customerLabel).toBe("Client A");
   });
 });

@@ -385,7 +385,8 @@ export function PlanningPage() {
   const unplannedCount = unplanned.length;
   const lateAssignments = unplanned.filter((row) => row.requestedDate != null && row.requestedDate < today);
   const alertAssignments = rows.filter((row) => Boolean(row.planningAlert || row.requiresCustomerGeolocation));
-  const anomalyCount = new Set([...lateAssignments, ...alertAssignments].map((row) => row.deliveryNote)).size;
+  const splitAssignments = rows.filter((row) => Boolean(row.splitVisitWarning));
+  const anomalyCount = new Set([...lateAssignments, ...alertAssignments, ...splitAssignments].map((row) => row.deliveryNote)).size;
   const draftRoutes = routes.filter((route) => route.lifecycle === "Brouillon");
   const publishedRoutes = routes.filter((route) => route.lifecycle === "Publiée");
   const draftRouteCount = draftRoutes.length;
@@ -631,6 +632,7 @@ export function PlanningPage() {
         <PlanningAlertsSummary
           lateAssignments={lateAssignments}
           alertAssignments={alertAssignments}
+          splitAssignments={splitAssignments}
           onSelectLate={() => {
             setSelected(new Set(lateAssignments.map((row) => row.deliveryNote)));
             setLateOnly(true);

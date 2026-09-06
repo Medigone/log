@@ -28,7 +28,10 @@ export function BLCard({
 }) {
   const assignment = item.assignment;
   const late = !assignment.route && assignment.requestedDate != null && assignment.requestedDate < today;
-  const alert = assignment.planningAlert || (assignment.requiresCustomerGeolocation ? "GPS client manquant" : "");
+  const alert =
+    assignment.splitVisitWarning ||
+    assignment.planningAlert ||
+    (assignment.requiresCustomerGeolocation ? "GPS client manquant" : "");
 
   return (
     <Card

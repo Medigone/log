@@ -43,9 +43,10 @@ import {
   planningCollisionDetection,
   routeColumnId,
   routesForDriver,
+  clusterKanbanItemsByCustomer,
   type KanbanBLItem,
 } from "./kanbanHelpers";
-import { canReprogramAssignment, isoDateWithOffset, timePart, matchesSearch, PLANNING_STATUSES } from "./planningHelpers";
+import { canReprogramAssignment, hasAssignmentAlert, isoDateWithOffset, timePart, matchesSearch, PLANNING_STATUSES } from "./planningHelpers";
 
 interface PlanningKanbanProps {
   date: string;
@@ -133,7 +134,7 @@ export function PlanningKanban({
       if (statusFilter && assignment.planningStatus !== statusFilter) return false;
       if (wilayaFilter && assignment.wilaya !== wilayaFilter) return false;
       if (lateOnly && !isLateUnplanned(assignment, today)) return false;
-      if (gpsOnly && !(assignment.planningAlert || assignment.requiresCustomerGeolocation)) return false;
+      if (gpsOnly && !hasAssignmentAlert(assignment)) return false;
       return true;
     });
   }, [gpsOnly, lateOnly, localValue.items, search, statusFilter, today, wilayaFilter]);
@@ -162,10 +163,18 @@ export function PlanningKanban({
       if (commit.fromColumnId === commit.toColumnId && commit.toColumnId === BACKLOG_COLUMN_ID) return;
       const toColumnId = commit.toColumnId === BACKLOG_COLUMN_ID ? null : String(commit.toColumnId);
       const fromColumnId = commit.fromColumnId === BACKLOG_COLUMN_ID ? null : String(commit.fromColumnId);
+      const sourceItems = localValue.items.filter((item) => item.columnId === commit.fromColumnId);
+      const customer = commit.item.assignment.customer;
+      const groupIds = customer
+        ? sourceItems
+            .filter((item) => item.assignment.customer === customer)
+            .map((item) => String(item.id))
+        : [];
       const notes = notesToMoveOnDrag(
         commit.item.assignment.deliveryNote,
         selected,
-        backlogItems.map((item) => String(item.id)),
+        sourceItems.map((item) => String(item.id)),
+        groupIds,
       );
       if (notes.length > 1 && commit.toColumnId) {
         const targetColumn = String(commit.toColumnId);
@@ -183,7 +192,7 @@ export function PlanningKanban({
         onSelectedChange(next);
       }
     },
-    [backlogItems, onMoveItem, onSelectedChange, selected],
+    [localValue.items, onMoveItem, onSelectedChange, selected],
   );
 
   const toggleSelection = (deliveryNote: string) => {
@@ -549,7 +558,14 @@ function DriverRouteCard({
         </div>
         <CollapsibleContent>
           <div className="flex min-h-10 flex-col gap-1.5 p-0.5">
-            {routeItems.map((item, index) => (
+            {clusterKanbanItemsByCustomer(routeItems).map((cluster) => (
+              <div key={cluster.items[0].id} className="flex flex-col gap-1.5">
+                {cluster.items.length > 1 ? (
+                  <p className="px-1 text-[10.5px] font-medium text-muted-foreground">
+                    Même client · {cluster.items.length} BL
+                  </p>
+                ) : null}
+                {cluster.items.map((item, index) => (
               <KanbanItem key={item.id} id={item.id} asHandle={!locked} disabled={locked} className="p-0">
                 <BLCard
                   item={item}
@@ -564,6 +580,8 @@ function DriverRouteCard({
                   onUnassign={!locked ? () => onUnassign(item.assignment.deliveryNote, route.revision) : undefined}
                 />
               </KanbanItem>
+                ))}
+              </div>
             ))}
             {!locked && empty ? (
               <div className="flex min-h-8 items-center justify-center rounded-md border border-dashed text-[11px] text-muted-foreground">

@@ -83,6 +83,165 @@ def stop_status(*, remaining_quantity: float, delivered_quantity: float, outcome
 	return "Partiellement Livré"
 
 
+DELIVERED_VISIT_STATES = {"Livré", "Annulé"}
+FAILED_VISIT_STATES = {"Non Livré"}
+TERMINAL_VISIT_STATES = {"Livré", "Partiellement Livré", "Non Livré", "Annulé"}
+OPEN_VISIT_STATUSES = ("Nouveau", "Préparé", "Enlevé")
+
+
+def visit_key(customer: str | None) -> str:
+	return str(customer or "").strip()
+
+
+def collapse_delivery_notes_order(names: list[str], customers: dict[str, str]) -> list[str]:
+	"""Regroupe les BL d'un même client en conservant l'ordre de première apparition."""
+	grouped: dict[str, list[str]] = {}
+	order: list[str] = []
+	for name in names:
+		key = visit_key(customers.get(name)) or name
+		if key not in grouped:
+			grouped[key] = []
+			order.append(key)
+		grouped[key].append(name)
+	return [name for key in order for name in grouped[key]]
+
+
+def visit_status(statuses: list[str]) -> str:
+	normalized = [str(status or "").strip() or "Nouveau" for status in statuses]
+	if not normalized:
+		return "Nouveau"
+	if all(status in DELIVERED_VISIT_STATES for status in normalized):
+		return "Annulé" if all(status == "Annulé" for status in normalized) else "Livré"
+	if all(status in FAILED_VISIT_STATES for status in normalized):
+		return "Non Livré"
+	if all(status in TERMINAL_VISIT_STATES for status in normalized):
+		return "Partiellement Livré"
+	for status in OPEN_VISIT_STATUSES:
+		if status in normalized:
+			return status
+	if "Partiellement Livré" in normalized:
+		return "Partiellement Livré"
+	return normalized[0]
+
+
+def group_stops_into_visits(stops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	"""Regroupe les arrêts BL par client (une adresse par client)."""
+	grouped: dict[str, list[dict[str, Any]]] = {}
+	order: list[str] = []
+	for stop in stops:
+		key = visit_key(stop.get("customer")) or str(stop.get("deliveryNote") or "")
+		if key not in grouped:
+			grouped[key] = []
+			order.append(key)
+		grouped[key].append(stop)
+	visits: list[dict[str, Any]] = []
+	for sequence, key in enumerate(order, start=1):
+		members = grouped[key]
+		first = members[0]
+		delivery_notes = [str(stop.get("deliveryNote") or "") for stop in members if stop.get("deliveryNote")]
+		payments = _unique_visit_payments(members)
+		paid = sum(float(payment.get("amount") or 0) for payment in payments)
+		grand_total = sum(float(stop.get("grandTotal") or 0) for stop in members)
+		items = []
+		for stop in members:
+			for item in stop.get("items") or []:
+				items.append({**item, "deliveryNote": stop.get("deliveryNote")})
+		visits.append(
+			{
+				**{field: first.get(field) for field in (
+					"customer",
+					"customerName",
+					"commune",
+					"communeId",
+					"wilaya",
+					"address",
+					"phone",
+					"instructions",
+					"latitude",
+					"longitude",
+					"geolocationSource",
+					"customerGpsStatus",
+					"requiresCustomerGeolocation",
+					"routeId",
+					"planningStatus",
+					"requestedDate",
+					"plannedDate",
+				)},
+				"visitKey": key,
+				"sequence": sequence,
+				"deliveryNote": first.get("deliveryNote"),
+				"deliveryNotes": delivery_notes,
+				"salesOrder": first.get("salesOrder"),
+				"salesOrders": list(
+					dict.fromkeys(str(stop.get("salesOrder") or "") for stop in members if stop.get("salesOrder"))
+				),
+				"totalQuantity": sum(float(stop.get("totalQuantity") or 0) for stop in members),
+				"amountCollected": paid,
+				"amountToCollect": max(grand_total - paid, 0)
+				if grand_total
+				else sum(float(stop.get("amountToCollect") or 0) for stop in members),
+				"netTotal": sum(float(stop.get("netTotal") or 0) for stop in members),
+				"grandTotal": grand_total,
+				"taxes": [tax for stop in members for tax in (stop.get("taxes") or [])],
+				"payments": payments,
+				"salesInvoice": first.get("salesInvoice"),
+				"invoiceStatus": first.get("invoiceStatus"),
+				"status": visit_status([str(stop.get("status") or "") for stop in members]),
+				"packageCount": sum(int(stop.get("packageCount") or 0) for stop in members) or len(members),
+				"completedAt": next((stop.get("completedAt") for stop in reversed(members) if stop.get("completedAt")), None),
+				"failureReason": next((stop.get("failureReason") for stop in members if stop.get("failureReason")), None),
+				"items": items,
+				"stops": members,
+			}
+		)
+	return visits
+
+
+def _unique_visit_payments(stops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+	payments: list[dict[str, Any]] = []
+	seen: set[str] = set()
+	for stop in stops:
+		for payment in stop.get("payments") or []:
+			name = str(payment.get("name") or "")
+			marker = name or f"{payment.get('method')}-{payment.get('amount')}-{id(payment)}"
+			if marker in seen:
+				continue
+			seen.add(marker)
+			payments.append(payment)
+	return payments
+
+
+def promote_visit_order(
+	current_names: list[str],
+	statuses: dict[str, str],
+	delivery_note: str,
+	*,
+	customers: dict[str, str] | None = None,
+	terminal_states: set[str] | None = None,
+) -> list[str]:
+	"""Place la visite (tous les BL du client) en tête des arrêts encore ouverts."""
+	terminal = terminal_states or set(TERMINAL_VISIT_STATES)
+	completed = [name for name in current_names if (statuses.get(name) or "") in terminal]
+	remaining = [name for name in current_names if (statuses.get(name) or "") not in terminal]
+	key = visit_key((customers or {}).get(delivery_note))
+	if not key or not customers:
+		return completed + [delivery_note] + [name for name in remaining if name != delivery_note]
+	group = [name for name in remaining if visit_key(customers.get(name)) == key]
+	rest = [name for name in remaining if visit_key(customers.get(name)) != key]
+	return completed + group + rest
+
+
+def split_customer_warning(customer_name: str, other_routes: list[str]) -> str | None:
+	routes = [str(name).strip() for name in other_routes if str(name or "").strip()]
+	if not routes:
+		return None
+	label = ", ".join(routes)
+	name = str(customer_name or "").strip() or "ce client"
+	if len(routes) == 1:
+		return f"Le client {name} a déjà des bons sur {label} aujourd'hui."
+	return f"Le client {name} a déjà des bons sur {label} aujourd'hui."
+
+
 def public_tracking_payload(name: str, status: str, steps: list[dict[str, Any]], articles: list[dict[str, Any]]):
 	return {"name": name, "status": status, "steps": steps, "articles": articles}
 
@@ -163,6 +322,15 @@ def draft_route_delete_error(*, state: str | None, stop_count: int) -> str | Non
 	if stop_count:
 		return "Retirez tous les bons avant de supprimer la tournée."
 	return None
+
+
+def route_is_acknowledged(*, published_revision: int, acknowledged_revision: int) -> bool:
+	return bool(published_revision and acknowledged_revision == published_revision)
+
+
+def can_reorder_route_stops(*, state: str | None, acknowledged: bool) -> bool:
+	"""L'ordre officiel reste modifiable jusqu'à l'acceptation de la révision par le livreur."""
+	return (not acknowledged) and (state or "Brouillon") in {"Brouillon", "Publiée"}
 
 
 def change_reason_required(route_state: str | None) -> bool:

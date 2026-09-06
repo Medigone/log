@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { PlanningPage } from "@/features/planning/PlanningPage";
-import { reorderStops, sameStopOrder } from "@/features/planning/routeOrder";
+import { reorderStops, sameStopOrder, canReorderRouteStops } from "@/features/planning/routeOrder";
 import { LIST_PAGE_SIZE } from "@/components/ui/list-pagination";
 import { chooseOption } from "@/test/chooseOption";
 import type { DeliveryNoteAssignment, DistributionRoute, PlanningBoard, RouteStop } from "@/shared/types/distribution";
@@ -206,6 +206,14 @@ describe("PlanningPage", () => {
     expect(reorderStops(stops, 1, 0).map((stop) => [stop.deliveryNote, stop.sequence])).toEqual([["DN-2", 1], ["DN-1", 2]]);
     expect(sameStopOrder(stops, reorderStops(stops, 0, 0))).toBe(true);
     expect(sameStopOrder(stops, reorderStops(stops, 1, 0))).toBe(false);
+  });
+
+  it("autorise le réordonnancement jusqu’à l’acceptation du livreur", () => {
+    expect(canReorderRouteStops({ lifecycle: "Brouillon", acknowledged: false }, 2)).toBe(true);
+    expect(canReorderRouteStops({ lifecycle: "Publiée", acknowledged: false }, 2)).toBe(true);
+    expect(canReorderRouteStops({ lifecycle: "Publiée", acknowledged: true }, 2)).toBe(false);
+    expect(canReorderRouteStops({ lifecycle: "En cours", acknowledged: false }, 2)).toBe(false);
+    expect(canReorderRouteStops({ lifecycle: "Publiée", acknowledged: false }, 1)).toBe(false);
   });
 
   it("ouvre le panneau et affecte un BL à une nouvelle tournée", async () => {

@@ -1,4 +1,5 @@
 import type { DistributionRoute, DriverRouteCard, RouteStop } from "@/shared/types/distribution";
+import { routeVisits } from "@/features/driver/visitHelpers";
 
 export function uniqueLabels(values: Array<string | null | undefined>): string[] {
   const seen = new Set<string>();
@@ -45,7 +46,7 @@ export function routeCardFromRoute(route: DistributionRoute): DriverRouteCard {
     lifecycle: route.lifecycle,
     plannedStart: route.plannedStart,
     customerLabel: customerLabel(route.stops.map((stop) => stop.customerName)),
-    stopCount: route.stops.length,
+    stopCount: routeVisits(route).length,
     totalArticles,
     locationLabel: locationLabel(
       route.stops.map((stop) => stop.commune),

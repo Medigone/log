@@ -331,13 +331,23 @@ export function DeliveriesPage() {
                 <button
                   key={route.name}
                   type="button"
-                  className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-foreground"
+                  aria-pressed={selected === route.name}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-[11.5px]",
+                    selected === route.name ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
                   onClick={() => selectAndExpand(route.name)}
                 >
                   <span className="size-2 rounded-full" style={{ background: fleetColor(index) }} />
                   {route.name}
                 </button>
               ))}
+              {selected ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setSelected(""); setExpanded(""); }}>
+                  <RotateCcw data-icon="inline-start" />
+                  Réinitialiser
+                </Button>
+              ) : null}
             </div>
             {live ? (
               <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700">
@@ -348,7 +358,7 @@ export function DeliveriesPage() {
           </CardHeader>
           <CardContent className="px-0 pb-0">
             {filtered.length ? (
-              <FleetMap routes={filtered} />
+              <FleetMap routes={filtered} focus={selected || undefined} />
             ) : (
               <EmptyState
                 icon={Truck}

@@ -10,14 +10,9 @@ import {
 import { Sortable, SortableItem, SortableItemHandle } from "@/components/reui/sortable";
 import { Button } from "@/components/ui/button";
 import { orderedDeliveryNotes, sameStopOrder } from "@/features/planning/routeOrder";
-import {
-  flattenLocationGroups,
-  groupStopsByLocation,
-  locationGroupKey,
-  stopCommune,
-  stopWilaya,
-} from "@/features/planning/routeStopGroups";
+import { flattenLocationGroups, groupStopsByLocation, locationGroupKey, stopCommune, stopWilaya } from "@/features/planning/routeStopGroups";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
+import { collapseStopsByCustomer, uniqueVisitCount, visitKey } from "@/features/driver/visitHelpers";
 import { FOCUS_HIGHLIGHT_CLASS } from "@/shared/useFocusHighlight";
 import { TONES } from "@/shared/design/statusTone";
 import { cn } from "@/lib/utils";
@@ -89,6 +84,8 @@ export function RouteStopRail({
     scrollRowIntoContainer(container, row);
   }, [selected]);
 
+  const visitCount = uniqueVisitCount(items);
+
   if (!stops.length) return null;
 
   const moveSelection = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -108,7 +105,7 @@ export function RouteStopRail({
           <FrameTitle>Ordre de livraison</FrameTitle>
           <Badge variant="outline" size="sm">
             <Route />
-            {items.length} arrêt{items.length > 1 ? "s" : ""}
+            {visitCount} arrêt{visitCount > 1 ? "s" : ""}
           </Badge>
           {reorderable ? (
             <span className={cn("t-meta ml-auto text-subtle", responsive && "hidden lg:inline")}>Glissez</span>
@@ -144,9 +141,13 @@ export function RouteStopRail({
             onValueChange={setItems}
             getItemValue={(item) => item.deliveryNote}
             strategy="vertical"
-            className={cn("flex flex-col", responsive && "max-lg:flex-row")}
+            className={cn("flex flex-col", responsive && "max-lg:flex-row", reorderable && "is-reorderable")}
             onValueCommit={(next, meta) => {
-              if (!sameStopOrder(next, meta.previousValue)) void onCommit(orderedDeliveryNotes(next));
+              if (!reorderable) return;
+              const collapsed = collapseStopsByCustomer(next);
+              if (sameStopOrder(collapsed, meta.previousValue)) return;
+              setItems(flattenLocationGroups(groupStopsByLocation(collapsed)));
+              void onCommit(orderedDeliveryNotes(collapsed));
             }}
           >
             {items.flatMap((stop, index) => {
@@ -159,6 +160,12 @@ export function RouteStopRail({
               const groupKey = locationGroupKey(stop);
               const showWilayaHeader = multipleWilayas && (!previous || stopWilaya(previous) !== wilaya);
               const showCommuneHeader = multipleCommunes && (!previous || locationGroupKey(previous) !== groupKey);
+              const customerKey = visitKey(stop.customer, stop.deliveryNote);
+              const previousKey = previous ? visitKey(previous.customer, previous.deliveryNote) : "";
+              const siblingCount = items.filter(
+                (item) => visitKey(item.customer, item.deliveryNote) === customerKey,
+              ).length;
+              const showVisitHeader = siblingCount > 1 && customerKey !== previousKey;
               const nodes: ReactNode[] = [];
 
               if (showWilayaHeader) {
@@ -194,11 +201,28 @@ export function RouteStopRail({
                 );
               }
 
+              if (showVisitHeader) {
+                nodes.push(
+                  <div
+                    key={`visit-${customerKey}`}
+                    role="presentation"
+                    className={cn(
+                      "bg-muted/50 px-3 py-1",
+                      responsive && "max-lg:hidden",
+                    )}
+                  >
+                    <p className="text-[10.5px] font-medium text-muted-foreground">
+                      Même client · {siblingCount} BL
+                    </p>
+                  </div>,
+                );
+              }
+
               nodes.push(
                 <SortableItem
                   key={stop.deliveryNote}
                   value={stop.deliveryNote}
-                  disabled={disabled}
+                  disabled={disabled || !reorderable}
                   role="presentation"
                 >
                   <div
@@ -246,6 +270,7 @@ export function RouteStopRail({
                         )}
                       >
                         {stop.customerName}
+                        {siblingCount > 1 ? ` · ${siblingCount} BL` : ""}
                       </p>
                     </div>
                     {stop.requiresCustomerGeolocation ? (

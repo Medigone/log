@@ -5,7 +5,8 @@ import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { RemainingStopsList } from "@/features/driver/RemainingStopsList";
-import { isStopCompleted, remainingStops } from "@/features/driver/stopHelpers";
+import { isStopCompleted } from "@/features/driver/stopHelpers";
+import { remainingVisits, routeVisits, visitNotesLabel } from "@/features/driver/visitHelpers";
 import { routeProgress, stopVisualState, type StopVisualState } from "@/features/driver/driverMobile";
 import { cn } from "@/lib/utils";
 import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
@@ -51,9 +52,10 @@ export function RouteMapTab({
   onOpenStop: (stop: RouteStop) => void;
 }) {
   const [recenterToken, setRecenterToken] = useState(0);
-  const progress = routeProgress(route.stops);
-  const remaining = remainingStops(route.stops);
-  const located = route.stops.filter(
+  const visits = routeVisits(route);
+  const progress = routeProgress(visits);
+  const remaining = remainingVisits(visits);
+  const located = visits.filter(
     (stop): stop is RouteStop & { latitude: number; longitude: number } =>
       typeof stop.latitude === "number" && typeof stop.longitude === "number",
   );
@@ -87,11 +89,11 @@ export function RouteMapTab({
             <Polyline positions={routePoints} pathOptions={{ color: BRAND, weight: 5, opacity: 0.82 }} />
           )}
           {located.map((stop) => {
-            const index = route.stops.findIndex((item) => item.deliveryNote === stop.deliveryNote);
+            const index = visits.findIndex((item) => item.deliveryNote === stop.deliveryNote);
             const state = stopVisualState(stop, false);
             return (
               <Marker
-                key={stop.deliveryNote}
+                key={stop.visitKey || stop.deliveryNote}
                 position={[stop.latitude, stop.longitude]}
                 icon={pinIcon(state, index)}
                 eventHandlers={{
@@ -105,7 +107,7 @@ export function RouteMapTab({
                     {stop.sequence}. {stop.customerName}
                   </strong>
                   <br />
-                  {stop.deliveryNote}
+                  {visitNotesLabel(stop)}
                 </Popup>
               </Marker>
             );
@@ -133,9 +135,9 @@ export function RouteMapTab({
               Recentrer
             </Button>
           </Card>
-          {located.length < route.stops.length ? (
+          {located.length < visits.length ? (
             <p className="mt-2 t-meta text-muted-foreground">
-              {route.stops.length - located.length} arrêt(s) sans coordonnées client — non placés.
+              {visits.length - located.length} arrêt(s) sans coordonnées client — non placés.
             </p>
           ) : null}
         </div>

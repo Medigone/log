@@ -15,6 +15,7 @@
   "column_break_client",
   "livraison",
   "bon_livraison",
+  "lignes_bl",
   "section_break_uakz",
   "moyen_paiement",
   "montant",
@@ -220,6 +221,13 @@
    "fieldtype": "Link",
    "label": "Bon de livraison",
    "options": "Delivery Note"
+  },
+  {
+   "fieldname": "lignes_bl",
+   "fieldtype": "Table",
+   "label": "Bons de la visite",
+   "options": "Ligne Paiement BL",
+   "read_only": 1
   },
   {
    "fieldname": "request_id",

@@ -2,15 +2,18 @@ import unittest
 from datetime import datetime
 
 from log.api.distribution_rules import (
+	can_reorder_route_stops,
 	can_transition_route,
 	capacity_error,
 	capacity_warning,
 	change_reason_required,
 	classify_order_change,
+	collapse_delivery_notes_order,
 	complete_stop_gate_error,
 	completion_errors,
 	driver_owns_route,
 	draft_route_delete_error,
+	group_stops_into_visits,
 	has_assignment_conflict,
 	has_any_role,
 	is_repeated_request,
@@ -19,10 +22,15 @@ from log.api.distribution_rules import (
 	next_free_slot,
 	planning_status_for_route,
 	parse_gps_value,
+	promote_visit_order,
 	public_tracking_payload,
 	revision_matches,
+	route_is_acknowledged,
+	split_customer_warning,
 	start_without_load_error,
 	stop_status,
+	visit_key,
+	visit_status,
 )
 
 FAILURES = {"Client absent", "Autre"}
@@ -112,6 +120,16 @@ class TestDistributionRules(unittest.TestCase):
 		self.assertFalse(revision_matches(3, 2))
 		self.assertTrue(change_reason_required("Publiée"))
 		self.assertEqual(planning_status_for_route("En cours"), "En cours")
+
+	def test_reorder_allowed_until_driver_accepts(self):
+		self.assertTrue(can_reorder_route_stops(state="Brouillon", acknowledged=False))
+		self.assertTrue(can_reorder_route_stops(state="Publiée", acknowledged=False))
+		self.assertFalse(can_reorder_route_stops(state="Publiée", acknowledged=True))
+		self.assertFalse(can_reorder_route_stops(state="En cours", acknowledged=False))
+		self.assertFalse(can_reorder_route_stops(state="En cours", acknowledged=True))
+		self.assertFalse(route_is_acknowledged(published_revision=0, acknowledged_revision=0))
+		self.assertFalse(route_is_acknowledged(published_revision=4, acknowledged_revision=0))
+		self.assertTrue(route_is_acknowledged(published_revision=4, acknowledged_revision=4))
 
 	def test_draft_route_delete(self):
 		self.assertIsNone(draft_route_delete_error(state="Brouillon", stop_count=0))
@@ -259,6 +277,100 @@ class TestDistributionRules(unittest.TestCase):
 		self.assertIn("Chargez", complete_stop_gate_error(route_state="En cours", loaded=False, stop_status="Enlevé"))
 		self.assertIn("chargé", complete_stop_gate_error(route_state="En cours", loaded=True, stop_status="Préparé"))
 		self.assertIsNone(complete_stop_gate_error(route_state="En cours", loaded=True, stop_status="Enlevé"))
+
+
+class TestVisitGrouping(unittest.TestCase):
+	def test_visit_key_is_the_customer(self):
+		self.assertEqual(visit_key("CUST-1"), "CUST-1")
+		self.assertEqual(visit_key("  CUST-1  "), "CUST-1")
+		self.assertEqual(visit_key(None), "")
+
+	def test_collapse_keeps_first_customer_order_and_groups_notes(self):
+		self.assertEqual(
+			collapse_delivery_notes_order(
+				["A1", "B1", "A2", "C1"],
+				{"A1": "A", "A2": "A", "B1": "B", "C1": "C"},
+			),
+			["A1", "A2", "B1", "C1"],
+		)
+
+	def test_visit_status_aggregates_children(self):
+		self.assertEqual(visit_status(["Livré", "Livré"]), "Livré")
+		self.assertEqual(visit_status(["Non Livré", "Non Livré"]), "Non Livré")
+		self.assertEqual(visit_status(["Livré", "Non Livré"]), "Partiellement Livré")
+		self.assertEqual(visit_status(["Livré", "Enlevé"]), "Enlevé")
+		self.assertEqual(visit_status(["Préparé", "Enlevé"]), "Préparé")
+
+	def test_two_customers_make_two_visits(self):
+		visits = group_stops_into_visits(
+			[
+				{
+					"deliveryNote": "DN-1",
+					"customer": "C-A",
+					"customerName": "Alpha",
+					"status": "Enlevé",
+					"grandTotal": 100,
+					"amountToCollect": 100,
+					"payments": [],
+					"items": [{"name": "I-1", "itemName": "Huile"}],
+				},
+				{
+					"deliveryNote": "DN-2",
+					"customer": "C-A",
+					"customerName": "Alpha",
+					"status": "Enlevé",
+					"grandTotal": 50,
+					"amountToCollect": 50,
+					"payments": [{"name": "PAY-1", "amount": 20}],
+					"items": [{"name": "I-2", "itemName": "Lait"}],
+				},
+				{
+					"deliveryNote": "DN-3",
+					"customer": "C-B",
+					"customerName": "Beta",
+					"status": "Préparé",
+					"grandTotal": 80,
+					"amountToCollect": 80,
+					"payments": [],
+					"items": [],
+				},
+			]
+		)
+		self.assertEqual([visit["visitKey"] for visit in visits], ["C-A", "C-B"])
+		self.assertEqual(visits[0]["deliveryNotes"], ["DN-1", "DN-2"])
+		self.assertEqual(visits[0]["grandTotal"], 150)
+		self.assertEqual(visits[0]["amountCollected"], 20)
+		self.assertEqual(visits[0]["amountToCollect"], 130)
+		self.assertEqual(len(visits[0]["items"]), 2)
+		self.assertEqual(visits[0]["items"][1]["deliveryNote"], "DN-2")
+		self.assertEqual(visits[1]["deliveryNotes"], ["DN-3"])
+
+	def test_promote_visit_moves_the_whole_customer_group(self):
+		self.assertEqual(
+			promote_visit_order(
+				["A1", "B1", "A2", "C1"],
+				{"A1": "Livré", "B1": "Enlevé", "A2": "Enlevé", "C1": "Préparé"},
+				"A2",
+				customers={"A1": "A", "A2": "A", "B1": "B", "C1": "C"},
+				terminal_states={"Livré", "Partiellement Livré", "Non Livré", "Annulé"},
+			),
+			["A1", "A2", "B1", "C1"],
+		)
+
+	def test_promote_without_customers_keeps_single_note(self):
+		self.assertEqual(
+			promote_visit_order(
+				["A", "B", "C"],
+				{"A": "Livré", "B": "Enlevé", "C": "Enlevé"},
+				"C",
+				terminal_states={"Livré"},
+			),
+			["A", "C", "B"],
+		)
+
+	def test_split_customer_warning(self):
+		self.assertIsNone(split_customer_warning("Alpha", []))
+		self.assertIn("LIV-2", split_customer_warning("Alpha", ["LIV-2"]))
 
 
 if __name__ == "__main__":

@@ -90,14 +90,14 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
           )}
           {located.map((stop) => (
             <Marker
-              key={stop.deliveryNote}
+              key={stop.visitKey || stop.deliveryNote}
               position={[stop.latitude, stop.longitude]}
               icon={stopIcon(stop)}
             >
               <Popup>
                 <strong>{stop.sequence}. {stop.customerName}</strong>
                 <br />
-                {stop.deliveryNote}
+                {stop.deliveryNotes && stop.deliveryNotes.length > 1 ? `${stop.deliveryNotes.length} BL` : stop.deliveryNote}
                 <br />
                 <strong>{getStopVisualStyle(stop.status).label}</strong>
                 <br />

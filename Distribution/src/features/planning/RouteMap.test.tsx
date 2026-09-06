@@ -73,6 +73,14 @@ describe("RouteMap", () => {
     expect(screen.getByText("Livré")).toBeInTheDocument();
   });
 
+  it("affiche le nombre de BL d’une visite groupée", () => {
+    render(<RouteMap
+      stops={[{ ...stop, deliveryNotes: ["DN-1", "DN-2"] }]}
+      routing={{ status: "not_calculated", provider: "openrouteservice", profile: "driving-car", optimizationEnabled: false }}
+    />);
+    expect(screen.getByText(/2 BL/)).toBeInTheDocument();
+  });
+
   it("signale une position approximative quand le GPS vient de la commune", () => {
     render(<RouteMap
       stops={[{ ...stop, geolocationSource: "commune", requiresCustomerGeolocation: true, customerGpsStatus: "missing" }]}

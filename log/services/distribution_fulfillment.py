@@ -36,7 +36,88 @@ def _stock_entry_item(values: dict[str, Any]) -> dict[str, Any]:
 	return row
 
 
-def _tracking_fragments(item, qty: float) -> list[dict[str, Any]]:
+def _available_batch_rows(item_code: str, warehouse: str) -> list[dict[str, Any]]:
+	from erpnext.stock.doctype.serial_and_batch_bundle.serial_and_batch_bundle import get_auto_batch_nos
+
+	based_on = frappe.get_single_value("Stock Settings", "pick_serial_and_batch_based_on") or "FIFO"
+	rows = get_auto_batch_nos(
+		frappe._dict(
+			{
+				"item_code": item_code,
+				"warehouse": warehouse,
+				"based_on": based_on,
+			}
+		)
+	)
+	return [
+		{
+			"batch_no": row.batch_no,
+			"qty": flt(row.qty),
+			"warehouse": row.get("warehouse") or warehouse,
+		}
+		for row in rows
+		if row.get("batch_no") and flt(row.qty) > 0
+	]
+
+
+def _take_from_batch_pool(
+	pool: list[dict[str, Any]],
+	qty: float,
+	conversion_factor: float,
+) -> tuple[list[dict[str, Any]], float]:
+	need = qty * conversion_factor
+	remaining = need
+	fragments: list[dict[str, Any]] = []
+	for row in pool:
+		if remaining <= 0:
+			break
+		available = flt(row["qty"])
+		if available <= 0:
+			continue
+		take = min(available, remaining)
+		row["qty"] = available - take
+		fragments.append(
+			{
+				"qty": take / conversion_factor,
+				"batch_no": row["batch_no"],
+				"serial_no": None,
+				"warehouse": row["warehouse"],
+			}
+		)
+		remaining -= take
+	return fragments, remaining / conversion_factor
+
+
+def _fill_missing_batches(
+	item,
+	fragments: list[dict[str, Any]],
+	batch_pools: dict[tuple[str, str], list[dict[str, Any]]],
+	conversion_factor: float,
+) -> list[dict[str, Any]]:
+	unbatched = [fragment for fragment in fragments if not fragment.get("batch_no")]
+	if not unbatched:
+		return fragments
+	warehouse = item.warehouse
+	key = (item.item_code, warehouse)
+	if key not in batch_pools:
+		batch_pools[key] = _available_batch_rows(item.item_code, warehouse)
+	need = sum(flt(fragment["qty"]) for fragment in unbatched)
+	allocated, missing = _take_from_batch_pool(batch_pools[key], need, conversion_factor)
+	if missing > 0.000001:
+		frappe.throw(
+			_("Stock par lot insuffisant pour {0} dans {1} ({2} manquant(s) pour {3}).").format(
+				item.item_code, warehouse, missing, item.parent
+			)
+		)
+	return [fragment for fragment in fragments if fragment.get("batch_no")] + allocated
+
+
+def _tracking_fragments(
+	item,
+	qty: float,
+	*,
+	batch_pools: dict[tuple[str, str], list[dict[str, Any]]] | None = None,
+) -> list[dict[str, Any]]:
 	"""Retourne les quantités par lot/série, y compris depuis les bundles ERPNext v16."""
 	conversion_factor = flt(item.conversion_factor or 1)
 	bundle = item.get("serial_and_batch_bundle")
@@ -79,6 +160,8 @@ def _tracking_fragments(item, qty: float) -> list[dict[str, Any]]:
 	has_serial, has_batch = frappe.db.get_value(
 		"Item", item.item_code, ["has_serial_no", "has_batch_no"]
 	) or (0, 0)
+	if has_batch:
+		fragments = _fill_missing_batches(item, fragments, batch_pools if batch_pools is not None else {}, conversion_factor)
 	if has_serial and any(not fragment.get("serial_no") for fragment in fragments):
 		frappe.throw(_("Numéro de série manquant pour {0} dans {1}.").format(item.item_code, item.parent))
 	if has_batch and any(not fragment.get("batch_no") for fragment in fragments):
@@ -154,6 +237,7 @@ def load_route_stock(route, *, historical: bool = False):
 
 	transfer_rows: list[dict[str, Any]] = []
 	delivery_plans: list[tuple[Any, list[tuple[dict[str, Any], list[dict[str, Any]]]]]] = []
+	batch_pools: dict[tuple[str, str], list[dict[str, Any]]] = {}
 	company = None
 	for stop in route.bons_de_livraison or []:
 		dn = frappe.get_doc("Delivery Note", stop.bon_de_livraison)
@@ -171,7 +255,7 @@ def load_route_stock(route, *, historical: bool = False):
 				frappe.throw(_("Entrepôt source manquant pour {0} dans {1}.").format(item.item_code, dn.name))
 			if item.warehouse == vehicle_warehouse:
 				frappe.throw(_("Le bon {0} est déjà positionné dans l'entrepôt du véhicule.").format(dn.name))
-			fragments = _tracking_fragments(item, qty)
+			fragments = _tracking_fragments(item, qty, batch_pools=batch_pools)
 			base_values = _child_values(item)
 			item_plans.append((base_values, fragments))
 			for fragment in fragments:

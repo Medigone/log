@@ -4,7 +4,15 @@ import { Fragment, useEffect, useMemo } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { Link } from "react-router-dom";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
-import { fleetColor, vehiclePosition, type MapPoint } from "@/features/today/fleetProgress";
+import {
+  TRAVELED_PATH_COLOR,
+  fleetColor,
+  lastProcessedStop,
+  mapStops,
+  splitTraveledPath,
+  vehiclePosition,
+  type MapPoint,
+} from "@/features/today/fleetProgress";
 import type { ActivityLiveRoute, ActivityLiveStop, DistributionRoute, RouteStop } from "@/shared/types/distribution";
 
 const ALGIERS: MapPoint = [36.7525, 3.042];
@@ -37,11 +45,31 @@ function vehicleIcon(color: string, live: boolean) {
   });
 }
 
+const depotIcon = divIcon({
+  className: "distribution-map-depot",
+  html: '<span aria-label="Dépôt">⌂</span>',
+  iconSize: [34, 34],
+  iconAnchor: [17, 17],
+});
+
+function uniqueDepots(routes: FleetMapRoute[]) {
+  const seen = new Set<string>();
+  const depots: NonNullable<FleetMapRoute["depot"]>[] = [];
+  for (const route of routes) {
+    if (!route.depot) continue;
+    const key = route.depot.name || `${route.depot.latitude},${route.depot.longitude}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    depots.push(route.depot);
+  }
+  return depots;
+}
+
 function routePoints(route: FleetMapRoute): MapPoint[] {
   return route.routing?.geometry?.coordinates.map(([longitude, latitude]) => [latitude, longitude] as MapPoint) || [];
 }
 
-export type FleetMapRoute = Pick<ActivityLiveRoute, "name" | "lifecycle" | "stops"> & {
+export type FleetMapRoute = Pick<ActivityLiveRoute, "name" | "lifecycle" | "stops" | "visits"> & {
   driverName?: string | null;
   vehicleLabel?: string | null;
   depot?: ActivityLiveRoute["depot"];
@@ -50,22 +78,27 @@ export type FleetMapRoute = Pick<ActivityLiveRoute, "name" | "lifecycle" | "stop
 
 interface FleetMapProps {
   routes: FleetMapRoute[];
+  focus?: string;
 }
 
-export function FleetMap({ routes }: FleetMapProps) {
+export function FleetMap({ routes, focus }: FleetMapProps) {
+  const visible = useMemo(
+    () => (focus ? routes.filter((route) => route.name === focus) : routes),
+    [focus, routes],
+  );
   const bounds = useMemo(() => {
     const points: MapPoint[] = [];
-    for (const route of routes) {
+    for (const route of visible) {
       points.push(...routePoints(route));
       const vehicle = vehiclePosition(route);
       if (vehicle) points.push(vehicle);
       if (route.depot) points.push([route.depot.latitude, route.depot.longitude]);
-      for (const stop of route.stops) {
+      for (const stop of mapStops(route)) {
         if (stop.latitude != null && stop.longitude != null) points.push([stop.latitude, stop.longitude]);
       }
     }
     return points;
-  }, [routes]);
+  }, [visible]);
 
   return (
     <div className="h-[420px] overflow-hidden rounded-lg bg-surface-subtle">
@@ -78,25 +111,48 @@ export function FleetMap({ routes }: FleetMapProps) {
       >
         <FitFleetBounds points={bounds} />
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        {routes.map((route, index) => {
-          const color = fleetColor(index);
+        {uniqueDepots(visible).map((depot) => (
+          <Marker
+            key={depot.name || `${depot.latitude},${depot.longitude}`}
+            position={[depot.latitude, depot.longitude]}
+            icon={depotIcon}
+            zIndexOffset={500}
+          >
+            <Popup>
+              <strong>Dépôt · {depot.label}</strong>
+              <br />
+              {depot.address || "Adresse non renseignée"}
+            </Popup>
+          </Marker>
+        ))}
+        {visible.map((route) => {
+          const color = fleetColor(Math.max(0, routes.findIndex((item) => item.name === route.name)));
           const line = routePoints(route);
+          const lastProcessed = lastProcessedStop(route);
+          const lastPoint =
+            lastProcessed?.latitude != null && lastProcessed.longitude != null
+              ? ([lastProcessed.latitude, lastProcessed.longitude] as MapPoint)
+              : null;
+          const { traveled, remaining } = splitTraveledPath(line, lastPoint, route.lifecycle === "Terminée");
           const vehicle = vehiclePosition(route);
-          const progressStops = route.stops.filter(
+          const progressStops = mapStops(route).filter(
             (stop): stop is ActivityLiveStop & { latitude: number; longitude: number } =>
               typeof stop.latitude === "number" && typeof stop.longitude === "number",
           );
           return (
             <Fragment key={route.name}>
-              {line.length > 1 && (
-                <Polyline positions={line} pathOptions={{ color, weight: 5, opacity: 0.78 }} />
+              {remaining.length > 1 && (
+                <Polyline positions={remaining} pathOptions={{ color, weight: 5, opacity: 0.78 }} />
+              )}
+              {traveled.length > 1 && (
+                <Polyline positions={traveled} pathOptions={{ color: TRAVELED_PATH_COLOR, weight: 5, opacity: 0.9 }} />
               )}
               {progressStops.map((stop) => (
-                <Marker key={stop.deliveryNote} position={[stop.latitude, stop.longitude]} icon={stopIcon(stop, color)}>
+                <Marker key={stop.deliveryNotes?.join(",") || stop.deliveryNote} position={[stop.latitude, stop.longitude]} icon={stopIcon(stop, color)}>
                   <Popup>
                     <strong>{stop.sequence}. {stop.customerName}</strong>
                     <br />
-                    {stop.deliveryNote}
+                    {stop.deliveryNotes && stop.deliveryNotes.length > 1 ? `${stop.deliveryNotes.length} BL` : stop.deliveryNote}
                     <br />
                     {getStopVisualStyle(stop.status).label}
                     <br />

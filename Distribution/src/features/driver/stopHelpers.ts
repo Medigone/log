@@ -57,7 +57,11 @@ export function directionUrl(stop: Pick<RouteStop, "latitude" | "longitude" | "a
 }
 
 export function stopAddress(stop: Pick<RouteStop, "address" | "commune" | "wilaya">) {
-  return stop.address || [stop.commune, stop.wilaya].filter(Boolean).join(", ") || "Adresse non renseignée";
+  return stop.address || stopPlaceLabel(stop) || "Adresse non renseignée";
+}
+
+export function stopPlaceLabel(stop: Pick<RouteStop, "commune" | "wilaya">) {
+  return [...new Set([stop.commune, stop.wilaya].map((value) => value?.trim()).filter(Boolean))].join(" · ");
 }
 
 export async function compressImage(file: File): Promise<string> {

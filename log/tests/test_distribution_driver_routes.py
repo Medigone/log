@@ -60,11 +60,20 @@ class TestDriverRouteBoard(unittest.TestCase):
 		self.assertEqual(card["totalArticles"], 12)
 		self.assertEqual(card["locationLabel"], "Hydra, El Biar · Alger")
 
+	def test_history_card_counts_unique_customers_as_stops(self):
+		card = routes.serialize_history_card(
+			_route(nombre_bons_de_livraison=2),
+			[_child(customer="CUST-1", qty=3), _child(customer="CUST-1", qty=4)],
+			{"CUST-1": "Client A"},
+			{"COM-1": "Hydra"},
+		)
+		self.assertEqual(card["stopCount"], 1)
+
 	def test_history_card_falls_back_to_child_quantities(self):
 		card = routes.serialize_history_card(
 			_route(total_articles=0, nombre_bons_de_livraison=0),
-			[_child(qty=3), _child(qty=4)],
-			{"CUST-1": "Client A"},
+			[_child(qty=3), _child(customer="CUST-2", qty=4)],
+			{"CUST-1": "Client A", "CUST-2": "Client B"},
 			{"COM-1": "Hydra"},
 		)
 		self.assertEqual(card["stopCount"], 2)

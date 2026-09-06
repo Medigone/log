@@ -129,8 +129,8 @@ const publishedRoute = makeRoute({
   stock: { status: "À charger", loadedQuantity: 0, deliveredQuantity: 0, remainingQuantity: 0, returnedQuantity: 0, lines: [] },
   cash: { routeId: "LIV-1", routeLifecycle: "Publiée", status: "Sans encaissement", declaredCash: 0, declaredCheques: 0, declaredTotal: 0, countedTotal: 0, validatedTotal: 0, payments: [] },
   stops: [
-    stop({ deliveryNote: "DN-1", customerName: "Client A", status: "Préparé", sequence: 1 }),
-    stop({ deliveryNote: "DN-2", customerName: "Client B", status: "Préparé", sequence: 2 }),
+    stop({ deliveryNote: "DN-1", customer: "CUST-1", customerName: "Client A", status: "Préparé", sequence: 1 }),
+    stop({ deliveryNote: "DN-2", customer: "CUST-2", customerName: "Client B", status: "Préparé", sequence: 2 }),
   ],
 });
 

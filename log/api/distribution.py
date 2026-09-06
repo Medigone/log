@@ -13,6 +13,7 @@ from frappe import _
 from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, today
 
 from log.api.distribution_rules import (
+	can_reorder_route_stops,
 	can_transition_route,
 	capacity_error,
 	capacity_warning,
@@ -30,8 +31,14 @@ from log.api.distribution_rules import (
 	planning_status_for_route,
 	parse_gps_value,
 	revision_matches,
+	route_is_acknowledged,
+	split_customer_warning,
 	start_without_load_error,
 	stop_status,
+	visit_key,
+	group_stops_into_visits,
+	collapse_delivery_notes_order,
+	promote_visit_order,
 )
 from log.services.geocoding import (
 	GeocodingError,
@@ -193,24 +200,43 @@ def _customer_details(customer: str | None) -> dict[str, Any]:
 
 
 def _paid_amount(delivery_note: str) -> float:
-	return flt(
-		frappe.db.sql(
-			"SELECT COALESCE(SUM(montant), 0) FROM `tabPaiement Client` WHERE bon_livraison = %s",
-			(delivery_note,),
-		)[0][0]
-	)
+	return sum(payment["amount"] for payment in _payment_summary(delivery_note)[1])
 
 
 def _payment_summary(delivery_note: str) -> tuple[float, list[dict[str, Any]]]:
-	rows = frappe.get_all(
-		"Paiement Client",
-		filters={"bon_livraison": delivery_note},
-		fields=[
-			"name", "date", "moyen_paiement", "montant", "date_encaissement",
-			"statut_controle", "facture_source", "payment_entry", "numero_cheque",
-		],
-		order_by="date asc, creation asc",
+	fields = [
+		"name", "date", "moyen_paiement", "montant", "date_encaissement",
+		"statut_controle", "facture_source", "payment_entry", "numero_cheque",
+	]
+	rows = list(
+		frappe.get_all(
+			"Paiement Client",
+			filters={"bon_livraison": delivery_note},
+			fields=fields,
+			order_by="date asc, creation asc",
+		)
 	)
+	seen = {row.get("name") for row in rows}
+	db = getattr(frappe, "db", None)
+	if db and hasattr(db, "has_table") and db.has_table("Ligne Paiement BL"):
+		parents = [
+			name
+			for name in frappe.get_all(
+				"Ligne Paiement BL",
+				filters={"bon_de_livraison": delivery_note},
+				pluck="parent",
+			)
+			if name and name not in seen
+		]
+		if parents:
+			rows.extend(
+				frappe.get_all(
+					"Paiement Client",
+					filters={"name": ["in", parents]},
+					fields=fields,
+					order_by="date asc, creation asc",
+				)
+			)
 	payments = [
 		{
 			"name": row.get("name"),
@@ -275,17 +301,21 @@ def _record_assignment_history(
 	).insert(ignore_permissions=True)
 
 
-def _bump_route_revision(route, reason: str | None = None):
-	was_published = _route_state(route) == "Publiée"
+def _advance_route_revision(route):
 	route.revision = max(cint(route.revision), 1) + 1
 	route.revision_acceptee = 0
 	route.accepte_par = None
 	route.date_acceptation = None
+	_invalidate_route_routing(route)
+
+
+def _bump_route_revision(route, reason: str | None = None):
+	was_published = _route_state(route) == "Publiée"
+	_advance_route_revision(route)
 	if was_published:
 		route.etat_planification = "Brouillon"
 		route.a_revalider = 1
 		route.motif_reouverture = reason
-	_invalidate_route_routing(route)
 
 
 def _invalidate_route_routing(route):
@@ -562,17 +592,133 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 	return _apply_commune_coordinates(payload, geocode_if_missing=False)
 
 
+def _route_customers(doc) -> dict[str, str]:
+	customers: dict[str, str] = {}
+	for row in doc.bons_de_livraison or []:
+		if not row.bon_de_livraison:
+			continue
+		customers[row.bon_de_livraison] = row.customer or frappe.db.get_value(
+			"Delivery Note", row.bon_de_livraison, "customer"
+		)
+	return customers
+
+
+def _collapse_route_visits(doc):
+	names = [row.bon_de_livraison for row in (doc.bons_de_livraison or []) if row.bon_de_livraison]
+	ordered = collapse_delivery_notes_order(names, _route_customers(doc))
+	if ordered != names:
+		_apply_stop_order(doc, ordered)
+
+
+def _ordered_stops_for_route(doc) -> list[dict[str, Any]]:
+	raw: list[dict[str, Any]] = []
+	for sequence, row in enumerate(doc.bons_de_livraison or [], start=1):
+		if not row.bon_de_livraison or not frappe.db.exists("Delivery Note", row.bon_de_livraison):
+			continue
+		raw.append(_stop_from_dn(frappe.get_doc("Delivery Note", row.bon_de_livraison), sequence))
+	customers = {stop["deliveryNote"]: stop.get("customer") or "" for stop in raw}
+	order = collapse_delivery_notes_order([stop["deliveryNote"] for stop in raw], customers)
+	by_name = {stop["deliveryNote"]: stop for stop in raw}
+	return [{**by_name[name], "sequence": index} for index, name in enumerate(order, start=1)]
+
+
+def _unique_collected_amount(stops: list[dict[str, Any]]) -> float:
+	seen: set[str] = set()
+	total = 0.0
+	for stop in stops:
+		for payment in stop.get("payments") or []:
+			name = str(payment.get("name") or "")
+			if name and name in seen:
+				continue
+			if name:
+				seen.add(name)
+			total += flt(payment.get("amount"))
+	return total
+
+
+def _split_customer_alerts(doc, stops: list[dict[str, Any]]) -> list[str]:
+	date = doc.get("date_liv")
+	customers = [stop.get("customer") for stop in stops if stop.get("customer")]
+	if not date or not customers or not doc.name:
+		return []
+	db = getattr(frappe, "db", None)
+	if not db or not hasattr(db, "sql"):
+		return []
+	placeholders = ", ".join(["%s"] * len(set(customers)))
+	unique_customers = list(dict.fromkeys(customers))
+	rows = db.sql(
+		f"""
+		SELECT child.customer, l.name
+		FROM `tabLivraison Bon de Livraison` child
+		JOIN `tabLivraison` l ON l.name = child.parent
+		WHERE l.name != %s
+		  AND l.date_liv = %s
+		  AND l.etat_planification IN ({", ".join(["%s"] * len(ACTIVE_ROUTE_STATES))})
+		  AND l.docstatus < 2
+		  AND child.customer IN ({placeholders})
+		GROUP BY child.customer, l.name
+		""",
+		(doc.name, date, *ACTIVE_ROUTE_STATES, *unique_customers),
+	)
+	others: dict[str, list[str]] = {}
+	for customer, route_name in rows:
+		others.setdefault(customer, []).append(route_name)
+	alerts = []
+	seen: set[str] = set()
+	for stop in stops:
+		customer = stop.get("customer")
+		if not customer or customer in seen:
+			continue
+		seen.add(customer)
+		warning = split_customer_warning(stop.get("customerName") or customer, others.get(customer) or [])
+		if warning:
+			alerts.append(_(warning))
+	return alerts
+
+
+def _annotate_split_customer_assignments(assignments: list[dict[str, Any]]):
+	by_key: dict[tuple[str, str | None], set[str]] = {}
+	for row in assignments:
+		customer = row.get("customer")
+		route = row.get("route")
+		if not customer or not route:
+			continue
+		key = (customer, row.get("plannedDate") or row.get("requestedDate"))
+		by_key.setdefault(key, set()).add(route)
+	for row in assignments:
+		customer = row.get("customer")
+		route = row.get("route")
+		if not customer or not route:
+			continue
+		key = (customer, row.get("plannedDate") or row.get("requestedDate"))
+		others = [name for name in by_key.get(key, set()) if name != route]
+		warning = split_customer_warning(row.get("customerName") or customer, others)
+		if warning:
+			row["splitVisitWarning"] = warning
+
+
 def _route_state(doc) -> str:
 	return doc.get("etat_planification") or "Brouillon"
 
 
 def _gps_collection_warning(stops: list[dict[str, Any]]) -> str | None:
-	missing = [stop for stop in stops if stop.get("requiresCustomerGeolocation")]
+	seen: set[str] = set()
+	missing = 0
+	for stop in stops:
+		if not stop.get("requiresCustomerGeolocation"):
+			continue
+		key = visit_key(stop.get("customer")) or str(stop.get("deliveryNote") or "")
+		if not key:
+			key = f"stop-{missing}"
+		if key in seen:
+			continue
+		seen.add(key)
+		missing += 1
 	if not missing:
 		return None
 	return _(
 		"{0} client(s) sans GPS : le livreur collectera la position ; l'itinéraire utilise le centre de la commune."
-	).format(len(missing))
+	).format(missing)
 
 
 def _serialize_route(doc) -> dict[str, Any]:
@@ -590,12 +736,10 @@ def _serialize_route(doc) -> dict[str, Any]:
 		if vehicle:
 			capacity = vehicle.capacite_max_articles
 			vehicle_label = " · ".join(filter(None, [vehicle.nom, vehicle.immatriculation])) or doc.vehicule
-	stops = []
-	for sequence, row in enumerate(doc.bons_de_livraison or [], start=1):
-		if not row.bon_de_livraison or not frappe.db.exists("Delivery Note", row.bon_de_livraison):
-			continue
-		stops.append(_stop_from_dn(frappe.get_doc("Delivery Note", row.bon_de_livraison), sequence))
+	stops = _ordered_stops_for_route(doc)
+	visits = group_stops_into_visits(stops)
 	gps_warning = _gps_collection_warning(stops)
+	collected = _unique_collected_amount(stops)
 	return {
 		"name": doc.name,
 		"date": str(doc.date_liv) if doc.date_liv else "",
@@ -605,9 +749,9 @@ def _serialize_route(doc) -> dict[str, Any]:
 		"revision": max(cint(doc.get("revision")), 1),
 		"publishedRevision": cint(doc.get("revision_publiee")),
 		"acknowledgedRevision": cint(doc.get("revision_acceptee")),
-		"acknowledged": bool(
-			cint(doc.get("revision_publiee"))
-			and cint(doc.get("revision_acceptee")) == cint(doc.get("revision_publiee"))
+		"acknowledged": route_is_acknowledged(
+			published_revision=cint(doc.get("revision_publiee")),
+			acknowledged_revision=cint(doc.get("revision_acceptee")),
 		),
 		"acknowledgedBy": doc.get("accepte_par"),
 		"acknowledgedAt": str(doc.get("date_acceptation") or "") or None,
@@ -620,11 +764,12 @@ def _serialize_route(doc) -> dict[str, Any]:
 		"vehicleCapacity": cint(capacity) if capacity not in (None, "", 0) else None,
 		"totalQuantity": sum(stop["totalQuantity"] for stop in stops),
 		"totalArticles": cint(doc.get("total_articles")),
-		"totalCollected": sum(stop["amountCollected"] for stop in stops),
-		"totalAmount": sum(stop["amountToCollect"] for stop in stops),
+		"totalCollected": collected,
+		"totalAmount": max(sum(flt(stop.get("grandTotal")) for stop in stops) - collected, 0),
 		"stops": stops,
+		"visits": visits,
 		"depot": _serialized_depot(doc),
-		"routing": _serialized_routing(doc, len(stops)),
+		"routing": _serialized_routing(doc, len(visits)),
 		"stock": route_stock_summary(doc),
 		"cash": reconciliation(doc),
 		"publishedAt": str(doc.get("date_publication") or "") or None,
@@ -634,6 +779,7 @@ def _serialize_route(doc) -> dict[str, Any]:
 			*_schedule_conflicts(doc),
 			*([capacity_warning(capacity)] if capacity_warning(capacity) else []),
 			*([gps_warning] if gps_warning else []),
+			*_split_customer_alerts(doc, stops),
 		],
 	}
 
@@ -868,6 +1014,7 @@ def get_planning_board(date_from=None, date_to=None, filters=None, date=None):
 		for stop in route["stops"]
 	]
 	assignments.extend({**stop, "route": None, "driver": None, "vehicle": None, "routeLifecycle": None, "plannedStart": None, "plannedEnd": None, "routeRevision": 0} for stop in unassigned)
+	_annotate_split_customer_assignments(assignments)
 	for row in assignments:
 		row["planningStatus"] = planning_display_status(row)
 
@@ -928,26 +1075,28 @@ def _routing_route(route_id: str, expected_revision=None):
 
 def _routing_points(doc) -> tuple[dict[str, Any], list[dict[str, Any]], list[list[float]]]:
 	depot = get_depot_snapshot(doc.get("depot"))
-	stops = _serialize_route(doc)["stops"]
-	if not stops:
+	serialized = _serialize_route(doc)
+	visits = serialized.get("visits") or group_stops_into_visits(serialized["stops"])
+	if not visits:
 		raise RoutingConfigurationError(_("La tournée ne contient aucun arrêt."))
 	resolved: list[dict[str, Any]] = []
 	missing: list[str] = []
-	for stop in stops:
+	for visit in visits:
 		try:
-			_apply_commune_coordinates(stop, geocode_if_missing=True)
+			_apply_commune_coordinates(visit, geocode_if_missing=True)
 		except GeocodingError as error:
 			raise RoutingConfigurationError(str(error))
-		if not _optional_geo_coordinates(stop.get("latitude"), stop.get("longitude")):
-			missing.append(f"{stop['customerName']} ({stop['deliveryNote']})")
+		if not _optional_geo_coordinates(visit.get("latitude"), visit.get("longitude")):
+			label = ", ".join(visit.get("deliveryNotes") or [visit.get("deliveryNote")])
+			missing.append(f"{visit.get('customerName') or visit.get('customer')} ({label})")
 			continue
-		resolved.append(stop)
+		resolved.append(visit)
 	if missing:
 		raise RoutingConfigurationError(
 			_("Aucune coordonnée exploitable (GPS client ou commune) pour : {0}.").format(", ".join(missing))
 		)
 	coordinates = [[depot["longitude"], depot["latitude"]]]
-	coordinates.extend([[stop["longitude"], stop["latitude"]] for stop in resolved])
+	coordinates.extend([[visit["longitude"], visit["latitude"]] for visit in resolved])
 	coordinates.append([depot["longitude"], depot["latitude"]])
 	return depot, resolved, coordinates
 
@@ -997,7 +1146,7 @@ def propose_route_optimization(route_id, expected_revision=None):
 	if _route_state(doc) != "Brouillon":
 		frappe.throw(_("Seule une tournée en brouillon peut être optimisée."))
 	try:
-		depot, stops, current_coordinates = _routing_points(doc)
+		depot, visits, current_coordinates = _routing_points(doc)
 		settings = get_routing_settings(include_secret=True)
 		if not settings.optimization_enabled:
 			raise RoutingConfigurationError(_("L'optimisation du routage est désactivée dans Paramètres Livraison."))
@@ -1005,34 +1154,39 @@ def propose_route_optimization(route_id, expected_revision=None):
 		current = client.directions(current_coordinates)
 		jobs = [
 			{
-				"deliveryNote": stop["deliveryNote"],
-				"location": [stop["longitude"], stop["latitude"]],
+				"deliveryNote": visit["deliveryNote"],
+				"deliveryNotes": visit.get("deliveryNotes") or [visit["deliveryNote"]],
+				"location": [visit["longitude"], visit["latitude"]],
 			}
-			for stop in stops
+			for visit in visits
 		]
 		optimized = client.optimize([depot["longitude"], depot["latitude"]], jobs)
-		by_name = {job["deliveryNote"]: job["location"] for job in jobs}
+		by_name = {job["deliveryNote"]: job for job in jobs}
+		optimized_notes = []
 		optimized_coordinates = [[depot["longitude"], depot["latitude"]]]
-		optimized_coordinates.extend(by_name[name] for name in optimized["orderedDeliveryNotes"])
+		for name in optimized["orderedDeliveryNotes"]:
+			job = by_name[name]
+			optimized_notes.extend(job["deliveryNotes"])
+			optimized_coordinates.append(job["location"])
 		optimized_coordinates.append([depot["longitude"], depot["latitude"]])
 		optimized_route = client.directions(optimized_coordinates)
 	except (RoutingConfigurationError, RoutingProviderError) as error:
 		return _routing_error(error)
 	current_durations = route_duration_summary(
 		current["durationSeconds"],
-		len(stops),
+		len(visits),
 		settings.stop_duration_minutes,
 	)
 	optimized_durations = route_duration_summary(
 		optimized_route["durationSeconds"],
-		len(stops),
+		len(visits),
 		settings.stop_duration_minutes,
 	)
 	return {
 		"routeId": doc.name,
 		"revision": cint(doc.revision),
-		"currentOrder": [stop["deliveryNote"] for stop in stops],
-		"optimizedOrder": optimized["orderedDeliveryNotes"],
+		"currentOrder": [name for visit in visits for name in (visit.get("deliveryNotes") or [visit["deliveryNote"]])],
+		"optimizedOrder": optimized_notes,
 		"current": {
 			"distanceMeters": current["distanceMeters"],
 			**current_durations,
@@ -1069,6 +1223,7 @@ def apply_route_optimization(route_id, ordered_delivery_notes, expected_revision
 		ordered,
 		mismatch_message=_("La liste des arrêts a changé. Recalculez la proposition."),
 	)
+	_collapse_route_visits(doc)
 	_bump_route_revision(doc)
 	doc.save(ignore_permissions=True)
 	return _serialize_route(doc)
@@ -1097,19 +1252,23 @@ def _apply_stop_order(doc, ordered_names: list[str], mismatch_message: str | Non
 		row.idx = index
 
 
-def _next_remaining_order(current_names: list[str], statuses: dict[str, str], delivery_note: str) -> list[str]:
+def _next_remaining_order(current_names: list[str], statuses: dict[str, str], delivery_note: str, customers: dict[str, str] | None = None) -> list[str]:
 	if delivery_note not in current_names:
 		frappe.throw(_("Ce bon de livraison n'appartient pas à la tournée."), frappe.PermissionError)
 	if (statuses.get(delivery_note) or "") in TERMINAL_STOP_STATES:
 		frappe.throw(_("Cet arrêt est déjà clôturé."))
-	completed = [name for name in current_names if (statuses.get(name) or "") in TERMINAL_STOP_STATES]
-	remaining = [name for name in current_names if (statuses.get(name) or "") not in TERMINAL_STOP_STATES]
-	return completed + [delivery_note] + [name for name in remaining if name != delivery_note]
+	return promote_visit_order(
+		current_names,
+		statuses,
+		delivery_note,
+		customers=customers,
+		terminal_states=TERMINAL_STOP_STATES,
+	)
 
 
 @frappe.whitelist()
 def reorder_route_stops(route_id, ordered_delivery_notes, expected_revision=None):
-	"""Réécrit l'ordre officiel des arrêts d'une tournée brouillon (jugement du planificateur)."""
+	"""Réécrit l'ordre officiel des arrêts tant que le livreur n'a pas accepté la révision."""
 	_require(PLANNING_ROLES)
 	_require_schema()
 	ordered = _parse_delivery_note_order(
@@ -1118,10 +1277,18 @@ def reorder_route_stops(route_id, ordered_delivery_notes, expected_revision=None
 	)
 	_lock_route(str(route_id or ""))
 	doc = _routing_route(route_id, expected_revision)
-	if _route_state(doc) != "Brouillon":
-		frappe.throw(_("Seule une tournée en brouillon peut être réordonnée."))
+	acknowledged = route_is_acknowledged(
+		published_revision=cint(doc.get("revision_publiee")),
+		acknowledged_revision=cint(doc.get("revision_acceptee")),
+	)
+	if not can_reorder_route_stops(state=_route_state(doc), acknowledged=acknowledged):
+		frappe.throw(_("L'ordre des arrêts ne peut plus être modifié une fois la révision acceptée par le livreur."))
 	_apply_stop_order(doc, ordered)
-	_bump_route_revision(doc)
+	_collapse_route_visits(doc)
+	keep_published = _route_state(doc) == "Publiée"
+	_advance_route_revision(doc)
+	if keep_published:
+		doc.revision_publiee = cint(doc.revision)
 	doc.save(ignore_permissions=True)
 	return _serialize_route(doc)
 
@@ -1189,6 +1356,7 @@ def save_route(route):
 		)
 
 	warning = _validate_capacity(doc, for_publication=False)
+	_collapse_route_visits(doc)
 	doc.save(ignore_permissions=True)
 	current_names = {row.bon_de_livraison for row in doc.bons_de_livraison if row.bon_de_livraison}
 	for delivery_note in previous_names - current_names:
@@ -1281,6 +1449,7 @@ def _append_delivery_note(route, dn, position: int | None = None):
 		rows.remove(row)
 		rows.insert(max(0, min(cint(position) - 1, len(rows))), row)
 		route.set("bons_de_livraison", rows)
+	_collapse_route_visits(route)
 	for index, item in enumerate(route.bons_de_livraison, start=1):
 		item.idx = index
 
@@ -2053,35 +2222,40 @@ def _apply_payment_to_driver_cash(payment_doc, route):
 	mark_route_pending_cash_control(route)
 
 
-def _new_payment(data: dict[str, Any], route, doc, request_id: str):
+def _new_payment(data: dict[str, Any], route, docs, request_id: str):
 	payment = data.get("payment")
 	if not payment:
 		return None
+	primary = docs[0]
 	existing = frappe.db.get_value("Paiement Client", {"request_id": request_id}, "name")
 	if existing:
 		_apply_payment_to_driver_cash(frappe.get_doc("Paiement Client", existing), route)
 		return existing
 	cheque_url = None
 	if payment["method"] == "cheque":
-		cheque_url = _attach_image(doc.name, "custom_photo_livraison", payment["chequePhotoData"], f"cheque_{request_id}.jpg")
+		cheque_url = _attach_image(primary.name, "custom_photo_livraison", payment["chequePhotoData"], f"cheque_{request_id}.jpg")
 	payment_doc = frappe.get_doc(
 		{
 			"doctype": "Paiement Client",
 			"date": today(),
 			"id_beneficiaire": frappe.session.user,
-			"client": doc.customer,
+			"client": primary.customer,
 			"livraison": route.name,
-			"bon_livraison": doc.name,
+			"bon_livraison": primary.name,
 			"moyen_paiement": "Espèce" if payment["method"] == "cash" else "Chèque",
 			"montant": flt(payment["amount"]),
 			"photo_cheque": cheque_url,
 			"date_encaissement": payment.get("collectionDate"),
 			"numero_cheque": payment.get("chequeNumber"),
 			"statut_controle": "Déclaré",
-			"facture_source": doc.get("custom_sales_invoice"),
+			"facture_source": primary.get("custom_sales_invoice"),
 			"request_id": request_id,
 		}
-	).insert(ignore_permissions=True)
+	)
+	if payment_doc.meta.has_field("lignes_bl"):
+		for doc in docs:
+			payment_doc.append("lignes_bl", {"bon_de_livraison": doc.name})
+	payment_doc.insert(ignore_permissions=True)
 	_apply_payment_to_driver_cash(payment_doc, route)
 	return payment_doc.name
 
@@ -2137,13 +2311,102 @@ def select_next_delivery_stop(route_id, delivery_note, expected_revision=None):
 		else []
 	)
 	statuses = {row.name: str(row.custom_statut or "") for row in status_rows}
-	ordered = _next_remaining_order(current_names, statuses, delivery_note)
+	ordered = _next_remaining_order(current_names, statuses, delivery_note, _route_customers(doc))
 	if ordered == current_names:
 		return _serialize_route(doc)
 	_apply_stop_order(doc, ordered)
 	_invalidate_route_routing(doc)
 	doc.save(ignore_permissions=True)
 	return _serialize_route(doc)
+
+
+READONLY_STOP_STATES = {"Livré", "Partiellement Livré"}
+
+
+def _requested_delivery_notes(data: dict[str, Any]) -> list[str]:
+	notes = data.get("deliveryNotes")
+	if isinstance(notes, str):
+		try:
+			notes = json.loads(notes)
+		except json.JSONDecodeError:
+			notes = [notes]
+	if not isinstance(notes, list) or not notes:
+		notes = [data.get("deliveryNote")]
+	return [str(name or "").strip() for name in notes if str(name or "").strip()]
+
+
+def _visit_documents(route, data: dict[str, Any]):
+	route_notes = [row.bon_de_livraison for row in route.bons_de_livraison or [] if row.bon_de_livraison]
+	requested = _requested_delivery_notes(data)
+	if not requested:
+		frappe.throw(_("Bon de livraison introuvable."))
+	unknown = [name for name in requested if name not in set(route_notes)]
+	if unknown:
+		frappe.throw(_("Ce bon de livraison n'appartient pas à la tournée."), frappe.PermissionError)
+	primary = requested[0]
+	customer = frappe.db.get_value("Delivery Note", primary, "customer")
+	customers = _route_customers(route)
+	visit_notes = [name for name in route_notes if visit_key(customers.get(name)) == visit_key(customer)]
+	docs = []
+	for name in visit_notes:
+		_lock_delivery_note(name)
+		docs.append(frappe.get_doc("Delivery Note", name))
+	open_docs = [
+		doc
+		for doc in docs
+		if doc.docstatus != 1 and str(doc.get("custom_statut") or "") not in READONLY_STOP_STATES
+	]
+	return docs, open_docs
+
+
+def _items_payload_for_doc(data: dict[str, Any], doc) -> dict[str, Any]:
+	mine = {item.name for item in doc.items or []}
+	filtered = []
+	for row in data.get("items") or []:
+		name = str(row.get("itemName") or "")
+		note = str(row.get("deliveryNote") or "").strip()
+		if note and note != doc.name:
+			continue
+		if name in mine:
+			filtered.append(row)
+	return {**data, "items": filtered}
+
+
+def _outcome_for_doc(data: dict[str, Any], doc) -> str:
+	outcome = data.get("outcome")
+	if outcome != "partial":
+		return outcome
+	remaining = sum(max(flt(item.qty) - flt(item.get("custom_quantite_livree")), 0) for item in doc.items or [])
+	delivered = sum(flt(item.get("custom_quantite_livree")) for item in doc.items or [])
+	if remaining <= 0:
+		return "delivered"
+	if delivered <= 0:
+		return "failed"
+	return "partial"
+
+
+def _stamp_visit_evidence(docs, evidence: dict[str, Any], request_id: str, data: dict[str, Any]):
+	primary = docs[0]
+	photo_url = None
+	signature_url = None
+	if evidence.get("photoData"):
+		photo_url = _attach_image(primary.name, "custom_photo_livraison", evidence["photoData"], f"livraison_{request_id}.jpg")
+	if evidence.get("signatureData"):
+		signature_url = _attach_image(primary.name, "custom_signature_livraison", evidence["signatureData"], f"signature_{request_id}.png")
+	gps = f"{float(evidence['latitude']):.8f},{float(evidence['longitude']):.8f}"
+	signer = str(evidence.get("signerName") or "").strip()
+	comment = evidence.get("comment") or data.get("failureComment")
+	for doc in docs:
+		doc.custom_gps = gps
+		if doc.meta.has_field("custom_gps_accuracy_m"):
+			doc.custom_gps_accuracy_m = flt(evidence.get("accuracy"))
+		doc.custom_commentaire_livreur = comment
+		if photo_url:
+			doc.custom_photo_livraison = photo_url
+		if signature_url:
+			doc.custom_signature_livraison = signature_url
+			doc.custom_nom_signataire = signer
+		doc.custom_last_delivery_request_id = request_id
 
 
 @frappe.whitelist()
@@ -2159,59 +2422,60 @@ def complete_delivery_stop(payload):
 	_assert_driver_route(route)
 	if data.get("routeRevision") not in (None, "") and cint(data.get("routeRevision")) != cint(route.revision):
 		frappe.throw(_("La tournée a été révisée. Actualisez-la avant de valider cet arrêt."))
-	delivery_note = data.get("deliveryNote")
-	if delivery_note not in {row.bon_de_livraison for row in route.bons_de_livraison}:
-		frappe.throw(_("Ce bon de livraison n'appartient pas à la tournée."), frappe.PermissionError)
-	_lock_delivery_note(delivery_note)
-	doc = frappe.get_doc("Delivery Note", delivery_note)
+	docs, open_docs = _visit_documents(route, data)
+	if not open_docs:
+		frappe.throw(_("Ce bon livré est en lecture seule."))
+	primary = open_docs[0]
 	gate = complete_stop_gate_error(
 		route_state=_route_state(route),
 		loaded=_route_is_loaded(route),
-		stop_status=str(doc.get("custom_statut") or ""),
+		stop_status=str(primary.get("custom_statut") or ""),
 	)
 	if gate:
 		frappe.throw(_(gate))
-	if is_repeated_request(doc.get("custom_last_delivery_request_id"), request_id):
+	if any(is_repeated_request(doc.get("custom_last_delivery_request_id"), request_id) for doc in docs):
 		return {
 			"success": True,
 			"idempotent": True,
-			"customerLocationUpdated": _customer_location_was_captured_by(doc),
+			"customerLocationUpdated": _customer_location_was_captured_by(primary),
 			"route": _serialize_route(frappe.get_doc("Livraison", route.name)),
 		}
-	if doc.docstatus == 1 or doc.get("custom_statut") in {"Livré", "Partiellement Livré"}:
-		frappe.throw(_("Ce bon livré est en lecture seule."))
+	for doc in open_docs:
+		gate = complete_stop_gate_error(
+			route_state=_route_state(route),
+			loaded=_route_is_loaded(route),
+			stop_status=str(doc.get("custom_statut") or ""),
+		)
+		if gate:
+			frappe.throw(_(gate))
 
-	if doc.customer:
-		_lock_customer(doc.customer)
+	if primary.customer:
+		_lock_customer(primary.customer)
 	customer_latitude, customer_longitude = parse_gps_value(
-		frappe.db.get_value("Customer", doc.customer, "custom_gps") if doc.customer else None
+		frappe.db.get_value("Customer", primary.customer, "custom_gps") if primary.customer else None
 	)
 	requires_customer_geolocation = customer_latitude is None or customer_longitude is None
-	_validate_completion(data, doc, requires_customer_geolocation=requires_customer_geolocation)
-	_apply_items(doc, data)
+	_validate_completion(data, primary, requires_customer_geolocation=requires_customer_geolocation)
 	evidence = data["evidence"]
-	doc.custom_gps = f"{float(evidence['latitude']):.8f},{float(evidence['longitude']):.8f}"
-	if doc.meta.has_field("custom_gps_accuracy_m"):
-		doc.custom_gps_accuracy_m = flt(evidence.get("accuracy"))
-	doc.custom_commentaire_livreur = evidence.get("comment") or data.get("failureComment")
-	if evidence.get("photoData"):
-		doc.custom_photo_livraison = _attach_image(doc.name, "custom_photo_livraison", evidence["photoData"], f"livraison_{request_id}.jpg")
-	if evidence.get("signatureData"):
-		doc.custom_signature_livraison = _attach_image(doc.name, "custom_signature_livraison", evidence["signatureData"], f"signature_{request_id}.png")
-		doc.custom_nom_signataire = str(evidence.get("signerName")).strip()
-	doc.custom_last_delivery_request_id = request_id
+	_stamp_visit_evidence(open_docs, evidence, request_id, data)
 	from log.services.distribution_fulfillment import finalize_delivery_document
 
-	accounting = finalize_delivery_document(route, doc, data["outcome"])
-	if accounting.get("salesInvoice"):
-		doc.custom_sales_invoice = accounting["salesInvoice"]
+	accounting_rows = []
+	for doc in open_docs:
+		_apply_items(doc, _items_payload_for_doc(data, doc))
+		note_outcome = _outcome_for_doc(data, doc)
+		accounting = finalize_delivery_document(route, doc, note_outcome)
+		if accounting.get("salesInvoice"):
+			doc.custom_sales_invoice = accounting["salesInvoice"]
+		accounting_rows.append(accounting)
 	customer_location_updated = _capture_missing_customer_location(
-		doc,
+		primary,
 		evidence,
 		outcome=data["outcome"],
 	) if requires_customer_geolocation else False
-	payment_name = _new_payment(data, route, doc, request_id)
+	payment_name = _new_payment(data, route, open_docs, request_id)
 	_refresh_route_lifecycle(route)
+	accounting = accounting_rows[0] if len(accounting_rows) == 1 else {"notes": accounting_rows}
 	return {
 		"success": True,
 		"idempotent": False,

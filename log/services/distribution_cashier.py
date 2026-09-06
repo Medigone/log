@@ -93,6 +93,7 @@ def serialize_payment(payment) -> dict[str, Any]:
 	return {
 		"name": payment.name,
 		"deliveryNote": payment.bon_livraison,
+		"deliveryNotes": payment_delivery_notes(payment),
 		"salesInvoice": payment.get("facture_source"),
 		"customer": payment.client,
 		"customerName": payment.nom_client,
@@ -199,6 +200,19 @@ def _submitted_invoice(name: str | None) -> str | None:
 	return invoice
 
 
+def payment_delivery_notes(payment) -> list[str]:
+	notes: list[str] = []
+	primary = str(payment.get("bon_livraison") or "").strip()
+	if primary:
+		notes.append(primary)
+	for row in payment.get("lignes_bl") or []:
+		name = row.get("bon_de_livraison") if isinstance(row, dict) else getattr(row, "bon_de_livraison", None)
+		name = str(name or "").strip()
+		if name and name not in notes:
+			notes.append(name)
+	return notes
+
+
 def _ensure_source_invoice(payment, route) -> str:
 	existing = _submitted_invoice(payment.get("facture_source"))
 	if existing:
@@ -220,6 +234,22 @@ def _ensure_source_invoice(payment, route) -> str:
 		)
 	payment.facture_source = existing
 	return existing
+
+
+def _ensure_visit_invoices(payment, route) -> str:
+	source = _ensure_source_invoice(payment, route)
+	from log.services.distribution_fulfillment import create_and_submit_invoice
+
+	for note in payment_delivery_notes(payment):
+		if note == payment.get("bon_livraison") and source:
+			continue
+		invoice = _submitted_invoice(frappe.db.get_value("Delivery Note", note, "custom_sales_invoice"))
+		if invoice:
+			continue
+		created, _status = create_and_submit_invoice(route, note)
+		if not _submitted_invoice(created):
+			frappe.throw(_("La facture du bon {0} doit être créée avant le contrôle de caisse.").format(note))
+	return source
 
 
 def _requested_allocations(payment, requested: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -350,7 +380,7 @@ def validate_reconciliation(route, payload: dict[str, Any], *, approved_by_respo
 			frappe.throw(_("Un écart de caisse doit être approuvé par un Responsable."))
 		if payment.moyen_paiement == "Chèque":
 			payment.numero_cheque = str(row.get("chequeNumber") or payment.numero_cheque or "").strip()
-		_ensure_source_invoice(payment, route)
+		_ensure_visit_invoices(payment, route)
 		allocations = _validate_allocations(payment, _requested_allocations(payment, row.get("allocations") or []))
 		entry_name = _create_payment_entry(payment, allocations)
 		payment.set("affectations", [])

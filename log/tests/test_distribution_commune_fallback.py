@@ -38,6 +38,16 @@ class TestGpsCollectionWarning(unittest.TestCase):
 			)
 		)
 
+	def test_same_customer_without_gps_counts_once(self):
+		with patch.object(distribution, "_", side_effect=lambda message: message):
+			warning = distribution._gps_collection_warning(
+				[
+					_stop(customer="C-A", deliveryNote="DN-1"),
+					_stop(customer="C-A", deliveryNote="DN-2"),
+				]
+			)
+		self.assertIn("1 client(s) sans GPS", warning)
+
 
 class TestApplyCommuneCoordinates(unittest.TestCase):
 	def test_keeps_customer_gps_and_alert_flag(self):

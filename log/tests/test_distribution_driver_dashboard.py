@@ -53,6 +53,18 @@ class TestDriverDashboard(unittest.TestCase):
 		self.assertEqual(stats["amountCollected"], 1200)
 		self.assertEqual(stats["amountToCollect"], 1300)
 
+	def test_summarize_stops_groups_the_same_customer(self):
+		stops = [
+			{"deliveryNote": "DN-1", "customer": "C-A", "status": "Enlevé", "grandTotal": 1000},
+			{"deliveryNote": "DN-2", "customer": "C-A", "status": "Enlevé", "grandTotal": 500},
+			{"deliveryNote": "DN-3", "customer": "C-B", "status": "Livré", "grandTotal": 200},
+		]
+		stats = dashboard.summarize_stops(stops, {"DN-1": 0, "DN-3": 200})
+		self.assertEqual(stats["plannedStops"], 2)
+		self.assertEqual(stats["completedStops"], 1)
+		self.assertEqual(stats["remainingStops"], 1)
+		self.assertEqual(stats["deliveredStops"], 1)
+
 	def test_cash_status_prefers_discrepancy_then_pending(self):
 		self.assertEqual(dashboard.cash_status_from_routes(["Validée", "Écart"]), "Écart")
 		self.assertEqual(dashboard.cash_status_from_routes(["À contrôler", "Validée"]), "À contrôler")

@@ -1,7 +1,8 @@
 import { ChevronRight, MapPin } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { RouteStop } from "@/shared/types/distribution";
-import { stopAddress } from "@/features/driver/stopHelpers";
+import { stopAddress, stopPlaceLabel } from "@/features/driver/stopHelpers";
+import { visitNotesLabel } from "@/features/driver/visitHelpers";
 import { formatDriverMoney, stopExpectedAmount } from "@/features/driver/driverMobile";
 import { cn } from "@/lib/utils";
 
@@ -34,7 +35,7 @@ export function RemainingStopsList({
       )}
       <ul className="flex flex-col gap-2">
         {stops.map((stop) => (
-          <li key={stop.deliveryNote}>
+          <li key={stop.visitKey || stop.deliveryNote}>
             <button
               type="button"
               disabled={!canTreat || selecting}
@@ -52,15 +53,17 @@ export function RemainingStopsList({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-semibold">{stop.customerName}</span>
                   {compact ? (
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{stopAddress(stop)}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {stopPlaceLabel(stop) || stopAddress(stop)}
+                    </span>
                   ) : (
                     <>
                       <span className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
                         <MapPin className="size-3.5 shrink-0" />
-                        {stopAddress(stop)}
+                        {stopPlaceLabel(stop) || stopAddress(stop)}
                       </span>
                       <span className="num mt-1 block text-xs text-muted-foreground">
-                        {stop.deliveryNote} · {formatDriverMoney(stop.amountToCollect || stopExpectedAmount(stop), true)}
+                        {visitNotesLabel(stop)} · {formatDriverMoney(stop.amountToCollect || stopExpectedAmount(stop), true)}
                       </span>
                     </>
                   )}

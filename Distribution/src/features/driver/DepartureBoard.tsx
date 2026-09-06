@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { allStopsVerified } from "@/features/driver/departureWorkflow";
+import { stopPlaceLabel } from "@/features/driver/stopHelpers";
 import { formatMoney, formatQuantity } from "@/shared/format";
 import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
 import { cn } from "@/lib/utils";
@@ -218,6 +219,7 @@ export function DepartureBoard({
               {remainingStops.map((stop) => {
                 const index = route.stops.findIndex((item) => item.deliveryNote === stop.deliveryNote);
                 const highlighted = highlightedNote === stop.deliveryNote;
+                const place = stopPlaceLabel(stop);
                 return (
                   <li
                     key={stop.deliveryNote}
@@ -246,6 +248,16 @@ export function DepartureBoard({
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold">{stop.customerName}</span>
+                        {place ? (
+                          <span
+                            className={cn(
+                              "mt-0.5 block truncate text-xs",
+                              highlighted ? "text-amber-800" : "text-muted-foreground",
+                            )}
+                          >
+                            {place}
+                          </span>
+                        ) : null}
                         <span
                           className={cn(
                             "num block text-xs",

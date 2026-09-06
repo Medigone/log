@@ -5,6 +5,7 @@ import {
   isLiveRoute,
   lateDeparture,
   routeStopCounts,
+  splitTraveledPath,
   stopProgress,
   vehiclePosition,
 } from "@/features/today/fleetProgress";
@@ -62,6 +63,32 @@ describe("fleetProgress", () => {
     expect(vehiclePosition(current)).toEqual([36.76, 3.05]);
   });
 
+  it("n’affiche pas le camion sur le premier client d’une tournée brouillon", () => {
+    const draft = route({
+      lifecycle: "Brouillon",
+      depot: { name: "DEPOT", label: "Dépôt Principal", latitude: 35.67, longitude: -0.66, isDefault: true },
+      stops: [stop({ deliveryNote: "DN-1", status: "Préparé", sequence: 1, latitude: 36.76, longitude: 3.05 })],
+    });
+    expect(vehiclePosition(draft)).toBeNull();
+  });
+
+  it("garde le camion au dépôt tant que la tournée n’est pas partie", () => {
+    const published = route({
+      lifecycle: "Publiée",
+      depot: { name: "DEPOT", label: "Dépôt Principal", latitude: 35.67, longitude: -0.66, isDefault: true },
+      stops: [stop({ deliveryNote: "DN-1", status: "Préparé", sequence: 1, latitude: 36.76, longitude: 3.05 })],
+    });
+    expect(vehiclePosition(published)).toEqual([35.67, -0.66]);
+  });
+
+  it("n’affiche plus le camion une fois la tournée terminée", () => {
+    const done = route({
+      lifecycle: "Terminée",
+      depot: { name: "DEPOT", label: "Dépôt Principal", latitude: 35.67, longitude: -0.66, isDefault: true },
+    });
+    expect(vehiclePosition(done)).toBeNull();
+  });
+
   it("remonte les échecs terrain comme alertes", () => {
     const alerts = collectDashboardAlerts(
       [route({
@@ -70,6 +97,19 @@ describe("fleetProgress", () => {
       [],
     );
     expect(alerts[0]).toMatchObject({ tone: "danger", title: "Échec · Client 9" });
+  });
+
+  it("découpe le tracé au dernier arrêt enregistré", () => {
+    const line: [number, number][] = [
+      [36.7, 3.0],
+      [36.71, 3.01],
+      [36.72, 3.02],
+      [36.73, 3.03],
+    ];
+    expect(splitTraveledPath(line, null).traveled).toEqual([]);
+    expect(splitTraveledPath(line, [36.72, 3.02]).traveled).toHaveLength(3);
+    expect(splitTraveledPath(line, [36.72, 3.02]).remaining[0]).toEqual([36.72, 3.02]);
+    expect(splitTraveledPath(line, [36.73, 3.03], true).remaining).toEqual([]);
   });
 
   it("compte les arrêts livrés et détecte un départ en retard", () => {
@@ -86,5 +126,15 @@ describe("fleetProgress", () => {
         new Date("2026-09-05T10:00:00"),
       ),
     ).toBe(false);
+  });
+
+  it("compte les visites quand la tournée les fournit", () => {
+    const current = route({
+      visits: [
+        stop({ deliveryNote: "DN-1", status: "Livré", sequence: 1, deliveryNotes: ["DN-1", "DN-2"] }),
+      ],
+    });
+    expect(stopProgress(current)).toEqual({ total: 1, done: 1, failed: 0, remaining: 0, percent: 100 });
+    expect(routeStopCounts([current])).toEqual({ total: 1, delivered: 1, failed: 0, pending: 0 });
   });
 });
