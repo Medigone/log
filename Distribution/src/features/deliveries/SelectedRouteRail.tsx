@@ -1,7 +1,18 @@
-import { ArrowRight } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Circle, X } from "lucide-react";
+import { Badge } from "@/components/reui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+  Timeline,
+  TimelineContent,
+  TimelineDate,
+  TimelineHeader,
+  TimelineIndicator,
+  TimelineItem,
+  TimelineSeparator,
+  TimelineTitle,
+} from "@/components/reui/timeline";
 import { cn } from "@/lib/utils";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { plural, stopProgress } from "@/features/today/fleetProgress";
@@ -10,12 +21,74 @@ import { formatTime } from "@/shared/format";
 import type { DistributionRoute } from "@/shared/types/distribution";
 import type { RouteEvent } from "@/features/deliveries/routeEvents";
 
-const EVENT_DOT = {
-  danger: "bg-destructive",
-  warning: "bg-amber-500",
-  ok: "bg-emerald-600",
-  neutral: "bg-muted-foreground/40",
+const EVENT_INDICATOR = {
+  danger: "bg-destructive text-white",
+  warning: "bg-amber-500 text-white",
+  ok: "bg-emerald-500 text-white",
+  neutral: "bg-muted-foreground text-white",
 } as const;
+
+const EVENT_ICON = {
+  danger: X,
+  warning: AlertTriangle,
+  ok: Check,
+  neutral: Circle,
+} as const;
+
+const EVENT_BADGE = {
+  danger: { variant: "destructive-light" as const, label: "échec" },
+  warning: { variant: "warning-light" as const, label: "partiel" },
+  ok: { variant: "success-light" as const, label: "ok" },
+  neutral: { variant: "secondary" as const, label: "info" },
+};
+
+function EventTimeline({ events }: { events: RouteEvent[] }) {
+  const items = [...events].sort((left, right) => (left.at ?? 0) - (right.at ?? 0));
+  if (!items.length) return null;
+
+  return (
+    <div className="flex w-full flex-col gap-2">
+      <p className="t-micro text-muted-foreground">Événements</p>
+      <Timeline defaultValue={items.length}>
+        {items.map((event, index) => {
+          const Icon = EVENT_ICON[event.tone];
+          const badge = EVENT_BADGE[event.tone];
+          return (
+            <TimelineItem
+              key={`${event.label}-${event.stamp ?? index}`}
+              step={index + 1}
+              className="group-data-[orientation=vertical]/timeline:ms-10"
+            >
+              <TimelineHeader>
+                <TimelineSeparator className="bg-input! group-data-[orientation=vertical]/timeline:-left-7 group-data-[orientation=vertical]/timeline:h-[calc(100%-1.5rem-0.25rem)] group-data-[orientation=vertical]/timeline:translate-y-6.5" />
+                <div className="flex min-w-0 items-center gap-2">
+                  <TimelineTitle className="truncate text-sm">{event.label}</TimelineTitle>
+                  <Badge variant={badge.variant} size="sm">
+                    {badge.label}
+                  </Badge>
+                  {event.time ? (
+                    <TimelineDate dateTime={event.stamp} className="mb-0 ml-auto shrink-0">
+                      {event.time}
+                    </TimelineDate>
+                  ) : null}
+                </div>
+                <TimelineIndicator
+                  className={cn(
+                    "flex size-6 items-center justify-center border-none group-data-[orientation=vertical]/timeline:-left-7",
+                    EVENT_INDICATOR[event.tone],
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                </TimelineIndicator>
+              </TimelineHeader>
+              {event.age && event.age !== "à l’instant" ? <TimelineContent>{event.age}</TimelineContent> : null}
+            </TimelineItem>
+          );
+        })}
+      </Timeline>
+    </div>
+  );
+}
 
 export function SelectedRouteRail({
   route,
@@ -92,20 +165,7 @@ export function SelectedRouteRail({
           </div>
         </div>
 
-        {events && events.length > 0 ? (
-          <div className="flex flex-col gap-2">
-            <p className="t-micro text-muted-foreground">Derniers événements</p>
-            {events.slice(0, 3).map((event, index) => (
-              <div key={`${event.label}-${index}`} className="flex items-start gap-2">
-                <span className={cn("mt-1 size-1.5 shrink-0 rounded-full", EVENT_DOT[event.tone])} />
-                <div className="min-w-0">
-                  <p className="truncate text-xs">{event.label}</p>
-                  {event.age ? <p className="num text-[10.5px] text-muted-foreground">{event.age}</p> : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
+        {events && events.length > 0 ? <EventTimeline events={events} /> : null}
 
         <div className="flex flex-col gap-2">
           <Button className="w-full" onClick={() => onOpenRoute(route.name)}>

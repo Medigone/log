@@ -73,9 +73,11 @@ export interface RouteStop {
   customer: string;
   customerName: string;
   commune?: string;
+  communeId?: string;
   wilaya?: string;
   latitude?: number;
   longitude?: number;
+  geolocationSource?: "customer" | "commune";
   customerGpsStatus: "known" | "missing";
   requiresCustomerGeolocation: boolean;
   totalQuantity: number;

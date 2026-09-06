@@ -33,6 +33,7 @@ export interface PortalContext {
   gpsAccuracy?: number | null
   gpsCapturedAt?: string | null
   mustChangePassword: boolean
+  today?: string
   balances: Balance[]
   inProgressOrders?: string[]
   unreadNotifications?: number

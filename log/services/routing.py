@@ -16,6 +16,8 @@ DEFAULT_BASE_URL = "https://api.openrouteservice.org"
 DEFAULT_PROFILE = "driving-car"
 DEFAULT_STOP_DURATION_MINUTES = 15
 REQUEST_TIMEOUT_SECONDS = 20
+# Centroïdes de commune et GPS approximatifs : le rayon ORS par défaut (350 m) est trop strict.
+SNAP_RADIUS_METERS = 5000
 
 
 class RoutingConfigurationError(Exception):
@@ -170,7 +172,12 @@ class OpenRouteServiceClient:
 			raise RoutingConfigurationError(_("Deux points au minimum sont necessaires pour calculer un itineraire."))
 		data = self._post(
 			f"/v2/directions/{self.settings.profile}/geojson",
-			{"coordinates": coordinates, "instructions": False, "preference": "fastest"},
+			{
+				"coordinates": coordinates,
+				"instructions": False,
+				"preference": "fastest",
+				"radiuses": [SNAP_RADIUS_METERS] * len(coordinates),
+			},
 			accept="application/geo+json",
 		)
 		features = data.get("features") or []

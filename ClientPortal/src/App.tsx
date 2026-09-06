@@ -63,12 +63,12 @@ function PortalRoutes() {
           <Route path="/products/:itemCode" element={<ProductPage />} />
           <Route path="/cart" element={<CartPage context={context} />} />
           <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+          <Route path="/orders/:orderId" element={<OrderDetailPage today={context.today} />} />
           <Route path="/deliveries" element={<DeliveriesPage />} />
           <Route path="/deliveries/:deliveryId" element={<DeliveryDetailPage />} />
           <Route path="/payments" element={<PaymentsPage context={context} />} />
           <Route path="/requests" element={<RequestsPage />} />
-          <Route path="/requests/new" element={<RequestFormPage />} />
+          <Route path="/requests/new" element={<RequestFormPage today={context.today} />} />
           <Route path="/requests/:requestId" element={<RequestDetailPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           <Route path="/account" element={<AccountPage context={context} onUpdated={mutate} />} />

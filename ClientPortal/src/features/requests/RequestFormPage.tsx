@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Spinner } from "@/components/ui/spinner"
 import { Textarea } from "@/components/ui/textarea"
 import { apiErrorMessage, useCatalogRequestActions } from "@/shared/api"
-import { todayIso } from "@/shared/format"
+import { calendarDay } from "@/shared/format"
 
 type LineDraft = {
   id: string
@@ -45,12 +45,13 @@ function readAsDataUrl(file: File) {
   })
 }
 
-export function RequestFormPage() {
+export function RequestFormPage({ today }: { today?: string } = {}) {
   const navigate = useNavigate()
   const [params] = useSearchParams()
   const prefill = (params.get("q") || "").trim()
   const actions = useCatalogRequestActions()
-  const [deliveryDate, setDeliveryDate] = useState(todayIso())
+  const minDeliveryDate = calendarDay(today)
+  const [deliveryDate, setDeliveryDate] = useState(minDeliveryDate)
   const [comment, setComment] = useState("")
   const [lines, setLines] = useState<LineDraft[]>(() => [newLine(prefill)])
   const [error, setError] = useState("")
@@ -130,7 +131,7 @@ export function RequestFormPage() {
                 <Input
                   id="request-delivery-date"
                   type="date"
-                  min={todayIso()}
+                  min={minDeliveryDate}
                   value={deliveryDate}
                   onChange={(event) => setDeliveryDate(event.target.value)}
                   required

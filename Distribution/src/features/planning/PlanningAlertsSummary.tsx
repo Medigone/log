@@ -73,7 +73,7 @@ export function PlanningAlertsSummary({
           tone="warning"
           title="Données client incomplètes"
           count={alertAssignments.length}
-          body="GPS client manquant : l’arrêt sera livré sans itinéraire calculé."
+          body="GPS client manquant : le livreur collectera la position ; l’itinéraire utilisera le centre de la commune."
           actionLabel="Filtrer ces BL"
           onAction={onFilterAlerts}
         />

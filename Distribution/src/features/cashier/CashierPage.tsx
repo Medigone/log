@@ -224,7 +224,7 @@ export function CashierPage() {
         <KpiTile
           label="Comptabilisé"
           value={formatMoney(kpis.validatedAmount, { precise: true })}
-          hint={`${plural(kpis.validatedCount, "tournée", "tournées")} · règlements ERPNext créés`}
+          hint={`${plural(kpis.validatedCount, "tournée", "tournées")} · règlements créés`}
           tone={kpis.validatedCount ? "success" : "neutral"}
           className={kpis.validatedCount ? TONES.success.surface : undefined}
         />

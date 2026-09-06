@@ -152,25 +152,10 @@ export function CashierRoutePage({ canResolveDiscrepancy = false }: { canResolve
     <>
       <PageHeader
         breadcrumb={
-          <div className="flex items-center justify-between gap-3">
-            <Button variant="outline" size="sm" onClick={() => navigate(listHref)}>
-              <ChevronLeft />
-              Toutes les tournées
-            </Button>
-            {index >= 0 && routes.length ? (
-              <div className="flex items-center gap-1">
-                <span className="num text-xs text-muted-foreground">
-                  {index + 1} / {routes.length}
-                </span>
-                <Button type="button" variant="ghost" size="icon-sm" aria-label="Tournée précédente" disabled={index <= 0} onClick={() => go(-1)}>
-                  <ChevronLeft />
-                </Button>
-                <Button type="button" variant="ghost" size="icon-sm" aria-label="Tournée suivante" disabled={index >= routes.length - 1} onClick={() => go(1)}>
-                  <ChevronRight />
-                </Button>
-              </div>
-            ) : null}
-          </div>
+          <Button variant="outline" size="sm" onClick={() => navigate(listHref)}>
+            <ChevronLeft />
+            Toutes les tournées
+          </Button>
         }
         title={<span className="num">{decodedId}</span>}
         meta={
@@ -192,6 +177,19 @@ export function CashierRoutePage({ canResolveDiscrepancy = false }: { canResolve
               <RefreshCw />
               Actualiser
             </Button>
+            {index >= 0 && routes.length ? (
+              <div className="flex items-center gap-1">
+                <span className="num text-xs text-muted-foreground">
+                  {index + 1} / {routes.length}
+                </span>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Tournée précédente" disabled={index <= 0} onClick={() => go(-1)}>
+                  <ChevronLeft />
+                </Button>
+                <Button type="button" variant="ghost" size="icon-sm" aria-label="Tournée suivante" disabled={index >= routes.length - 1} onClick={() => go(1)}>
+                  <ChevronRight />
+                </Button>
+              </div>
+            ) : null}
           </>
         }
       />

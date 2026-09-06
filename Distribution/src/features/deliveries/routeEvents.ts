@@ -1,9 +1,12 @@
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
+import { formatTime } from "@/shared/format";
 import type { DistributionRoute } from "@/shared/types/distribution";
 
 export interface RouteEvent {
   label: string;
   age?: string;
+  time?: string;
+  stamp?: string;
   at?: number;
   tone: "danger" | "warning" | "ok" | "neutral";
 }
@@ -26,10 +29,17 @@ export function formatEventAge(value: string, now = Date.now()) {
   return `il y a ${days} j`;
 }
 
-function withAge(event: Omit<RouteEvent, "age"> & { stamp?: string }): RouteEvent {
+function eventClock(stamp?: string) {
+  if (!stamp) return undefined;
+  const time = formatTime(stamp);
+  return time === "—" ? undefined : time;
+}
+
+function withAge(event: Omit<RouteEvent, "age" | "time"> & { stamp?: string }): RouteEvent {
   return {
     ...event,
     age: event.stamp ? formatEventAge(event.stamp) : undefined,
+    time: eventClock(event.stamp),
     at: parseStamp(event.stamp) ?? event.at,
   };
 }

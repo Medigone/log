@@ -1,22 +1,17 @@
 import { useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
   Banknote,
-  Box,
   CalendarDays,
   Check,
   Clock3,
-  ExternalLink,
   Gauge,
   LoaderCircle,
-  MapPin,
   Navigation,
-  PackageCheck,
   Pencil,
   Printer,
-  QrCode,
   RefreshCw,
   Route,
   Send,
@@ -37,21 +32,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/empty-state";
 import { KpiTile } from "@/components/ui/kpi-tile";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DeleteDraftRouteDialog } from "@/features/planning/DeleteDraftRouteDialog";
+import { RouteStopsPanel } from "@/features/planning/RouteStopsPanel";
 import { canDeleteDraftRoute } from "@/features/planning/kanbanHelpers";
 import { RouteMap } from "@/features/planning/RouteMap";
 import { printRouteLabels } from "@/features/planning/qrPrinting";
 import { getStopVisualStyle, type StopVisualState } from "@/features/planning/stopStatus";
+import { cn } from "@/lib/utils";
 import { apiErrorMessage, useDistributionMutations, useRouteDetails } from "@/shared/api/distribution";
 import { routeLifecycleTone, TONES, type StatusTone } from "@/shared/design/statusTone";
-import { formatDistance, formatMoney, formatShortDate, formatTime } from "@/shared/format";
-import { FOCUS_HIGHLIGHT_CLASS, useFocusHighlight } from "@/shared/useFocusHighlight";
-import { cn } from "@/lib/utils";
+import { formatDistance, formatMoney, formatTime } from "@/shared/format";
 import type { RouteOptimizationProposal, RouteStop } from "@/shared/types/distribution";
 
 function formatDuration(value?: number) {
@@ -66,12 +60,16 @@ function totalDuration(value: { durationSeconds?: number; totalDurationSeconds?:
   return value.totalDurationSeconds ?? value.durationSeconds;
 }
 
-function StopStatusIcon({ state }: { state: StopVisualState }) {
-  if (state === "delivered") return <Check className="size-3.5" aria-hidden="true" />;
-  if (state === "partial") return <AlertTriangle className="size-3.5" aria-hidden="true" />;
-  if (state === "failed" || state === "cancelled") return <X className="size-3.5" aria-hidden="true" />;
-  if (state === "active") return <Navigation className="size-3.5" aria-hidden="true" />;
-  return <Clock3 className="size-3.5" aria-hidden="true" />;
+function stopHasCoordinates(stop: Pick<RouteStop, "latitude" | "longitude">) {
+  return typeof stop.latitude === "number" && typeof stop.longitude === "number";
+}
+
+function stopHasRoutableLocation(stop: Pick<RouteStop, "latitude" | "longitude" | "commune">) {
+  return stopHasCoordinates(stop) || Boolean(stop.commune);
+}
+
+function itineraryActionLabel(status: "ready" | "stale" | "not_calculated") {
+  return status === "not_calculated" ? "Calculer l’itinéraire" : "Recalculer l’itinéraire";
 }
 
 /** Petite tuile chiffrée à l'intérieur d'une carte (stock, caisse). */
@@ -124,28 +122,6 @@ function DetailSkeleton() {
   );
 }
 
-function StopQr({ stop, onGenerate, generating }: { stop: RouteStop; onGenerate: () => void; generating: boolean }) {
-  if (!stop.qrCode) {
-    return (
-      <div className="grid min-h-40 place-items-center rounded-md border border-dashed border-amber-300 bg-amber-50 p-4 text-center">
-        <div>
-          <QrCode className="mx-auto size-8 text-amber-700" />
-          <p className="mt-2 text-sm font-semibold text-amber-950">QR manquant</p>
-          <Button size="sm" variant="outline" onClick={onGenerate} disabled={generating} className="mt-3 bg-white">
-            {generating ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}Générer
-          </Button>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="rounded-md border border-hairline bg-white p-3 text-center">
-      <img src={stop.qrCode} alt={`QR du BL ${stop.deliveryNote}`} className="mx-auto size-36 object-contain" />
-      <p className="num mt-2 t-meta text-muted-foreground">{Math.max(stop.packageCount || 1, 1)} étiquette(s)</p>
-    </div>
-  );
-}
-
 function PublishConfirmationDialog({
   routeName,
   stopCount,
@@ -181,8 +157,8 @@ function PublishConfirmationDialog({
             <div className="flex gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <p>
-                <strong className="font-semibold">{missingGpsCount} client(s) sans GPS.</strong> L’itinéraire ne pourra
-                pas être calculé et le livreur devra collecter leur position.
+                <strong className="font-semibold">{missingGpsCount} client(s) sans GPS.</strong> Le livreur devra
+                collecter leur position. L’itinéraire utilisera le centre de la commune en attendant.
               </p>
             </div>
           )}
@@ -207,17 +183,59 @@ function PublishConfirmationDialog({
   );
 }
 
+function stopPlaceLabel(stop: Pick<RouteStop, "commune" | "wilaya">) {
+  const parts = [stop.commune?.trim(), stop.wilaya?.trim()].filter(Boolean);
+  return [...new Set(parts)].join(" · ") || "Localisation non renseignée";
+}
+
+function OptimizationStopList({
+  order,
+  stopsByNote,
+  numberClassName,
+  locationClassName,
+}: {
+  order: string[];
+  stopsByNote: Map<string, RouteStop>;
+  numberClassName: string;
+  locationClassName: string;
+}) {
+  return (
+    <ol className="mt-3 space-y-2 text-sm">
+      {order.map((deliveryNote, index) => {
+        const stop = stopsByNote.get(deliveryNote);
+        return (
+          <li key={deliveryNote} className="flex gap-2">
+            <span className={cn("num w-5 shrink-0", numberClassName)}>{index + 1}.</span>
+            <div className="min-w-0">
+              <p className="truncate font-medium">{stop?.customerName || deliveryNote}</p>
+              <p className={cn("truncate text-[11px]", locationClassName)}>
+                {stop ? stopPlaceLabel(stop) : "Localisation non renseignée"}
+              </p>
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function OptimizationDialog({
   proposal,
+  stops,
   applying,
   onClose,
   onApply,
 }: {
   proposal: RouteOptimizationProposal;
+  stops: RouteStop[];
   applying: boolean;
   onClose: () => void;
   onApply: () => void;
 }) {
+  const stopsByNote = useMemo(
+    () => new Map(stops.map((stop) => [stop.deliveryNote, stop])),
+    [stops],
+  );
   const distanceGain = proposal.current.distanceMeters - proposal.optimized.distanceMeters;
   const durationGain = (totalDuration(proposal.current) || 0) - (totalDuration(proposal.optimized) || 0);
   const improved = distanceGain > 0 || durationGain > 0;
@@ -242,13 +260,12 @@ function OptimizationDialog({
                 Conduite {formatDuration(proposal.current.durationSeconds)} + arrêts{" "}
                 {formatDuration(proposal.current.stopDurationSeconds)}
               </p>
-              <ol className="mt-3 space-y-1 text-sm text-slate-600">
-                {proposal.currentOrder.map((name, index) => (
-                  <li key={name}>
-                    {index + 1}. {name}
-                  </li>
-                ))}
-              </ol>
+              <OptimizationStopList
+                order={proposal.currentOrder}
+                stopsByNote={stopsByNote}
+                numberClassName="text-muted-foreground"
+                locationClassName="text-muted-foreground"
+              />
             </article>
             <article className="rounded-lg border border-brand-200 bg-brand-50 p-4">
               <p className="t-micro text-brand-700">Ordre proposé</p>
@@ -260,13 +277,12 @@ function OptimizationDialog({
                 Conduite {formatDuration(proposal.optimized.durationSeconds)} + arrêts{" "}
                 {formatDuration(proposal.optimized.stopDurationSeconds)}
               </p>
-              <ol className="mt-3 space-y-1 text-sm text-brand-900">
-                {proposal.optimizedOrder.map((name, index) => (
-                  <li key={name}>
-                    {index + 1}. {name}
-                  </li>
-                ))}
-              </ol>
+              <OptimizationStopList
+                order={proposal.optimizedOrder}
+                stopsByNote={stopsByNote}
+                numberClassName="text-brand-700"
+                locationClassName="text-brand-700"
+              />
             </article>
           </div>
           <div
@@ -292,13 +308,10 @@ function OptimizationDialog({
 
 export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveAccounting?: boolean }) {
   const { routeId } = useParams();
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { data, error, isLoading, isValidating, mutate } = useRouteDetails(routeId);
   const actions = useDistributionMutations();
   const route = data?.message;
-  const focusNote = searchParams.get("dn") || "";
-  const highlight = useFocusHighlight(focusNote ? [focusNote] : [], Boolean(route && !isLoading));
   const [failure, setFailure] = useState("");
   const [notice, setNotice] = useState("");
   const [generatingQr, setGeneratingQr] = useState<string>();
@@ -406,6 +419,25 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
     }
   };
 
+  const persistStopOrder = async (orderedDeliveryNotes: string[]) => {
+    setFailure("");
+    setNotice("");
+    try {
+      const updated = await actions.reorderRouteStops(route.name, orderedDeliveryNotes, route.revision);
+      try {
+        await actions.calculateRouteItinerary(updated.name, updated.revision);
+        setNotice("Ordre des arrêts enregistré et itinéraire recalculé.");
+      } catch (routingError) {
+        setNotice("Ordre des arrêts enregistré. Le tracé routier devra être recalculé.");
+        setFailure(apiErrorMessage(routingError));
+      }
+      await mutate();
+    } catch (reorderError) {
+      setFailure(apiErrorMessage(reorderError));
+      await mutate();
+    }
+  };
+
   const retryInvoice = async (deliveryNote: string) => {
     setFailure("");
     setNotice("");
@@ -424,7 +456,11 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
     ...(missingGps.length ? [`${missingGps.length} client(s) sans GPS : position à collecter par le livreur.`] : []),
     ...(missingQr.length ? [`${missingQr.length} bon(s) sans QR imprimable.`] : []),
   ];
-  const canRoute = Boolean(route.depot && route.stops.length && !missingGps.length);
+  const canRoute = Boolean(
+    route.depot && route.stops.length && route.stops.every(stopHasRoutableLocation),
+  );
+  const itineraryLabel = itineraryActionLabel(route.routing.status);
+  const locatedCount = route.stops.filter(stopHasCoordinates).length;
   const stopCounts = route.stops.reduce<Record<StopVisualState, number>>(
     (counts, stop) => {
       counts[getStopVisualStyle(stop.status).state] += 1;
@@ -699,7 +735,7 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => void calculateItinerary()} disabled={!canRoute || actions.routing}>
               <RefreshCw className={actions.routing ? "animate-spin" : ""} />
-              Recalculer l’itinéraire
+              {itineraryLabel}
             </Button>
             {route.routing.optimizationEnabled && route.lifecycle === "Brouillon" && (
               <Button onClick={() => void optimize()} disabled={!canRoute || actions.routing}>
@@ -763,249 +799,37 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
           </div>
           {route.routing.status !== "ready" && (
             <div className="mb-3 rounded-md border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
-              Aucun tracé routier à jour. Les marqueurs restent visibles sans ligne droite; utilisez « Recalculer
-              l’itinéraire ».
+              Aucun tracé routier à jour. Les marqueurs restent visibles sans ligne droite; utilisez « {itineraryLabel} ».
             </div>
           )}
           <RouteMap stops={route.stops} depot={route.depot} routing={route.routing} />
           <p className="num mt-2 t-meta text-subtle">
             {route.routing.calculatedAt
               ? `Dernier calcul : ${route.routing.calculatedAt}`
-              : `${route.stops.length - missingGps.length}/${route.stops.length} arrêts localisés`}
+              : `${locatedCount}/${route.stops.length} arrêts localisés`}
           </p>
         </CardContent>
       </Card>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="t-section">Arrêts et bons de livraison</h2>
-          <p className="t-body text-muted-foreground">Vérifiez les quantités, l’adresse et le QR de chaque BL.</p>
-        </div>
-
-        {route.stops.map((stop) => {
-          const visual = getStopVisualStyle(stop.status);
-          const plannedQuantity = stop.items?.reduce((sum, item) => sum + item.quantity, 0) ?? stop.totalQuantity;
-          const deliveredQuantity = stop.items?.reduce((sum, item) => sum + item.deliveredQuantity, 0) ?? 0;
-          const address =
-            stop.address || [stop.commune, stop.wilaya].filter(Boolean).join(", ") || "Adresse non renseignée";
-
-          return (
-            <article
-              key={stop.deliveryNote}
-              data-focus-id={stop.deliveryNote}
-              aria-label={`Arrêt ${stop.sequence} · ${visual.label}`}
-              data-stop-state={visual.state}
-              className={cn(
-                "overflow-hidden rounded-lg border shadow-card transition-colors",
-                visual.cardClass,
-                highlight.has(stop.deliveryNote) && FOCUS_HIGHLIGHT_CLASS,
-              )}
-            >
-              <div className="grid gap-4 p-4 lg:grid-cols-[auto_minmax(0,1fr)_180px]">
-                <span
-                  className={`num grid size-9 place-items-center rounded-full text-sm font-semibold ${visual.sequenceClass}`}
-                >
-                  {visual.markerSymbol || stop.sequence}
-                </span>
-
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <h3 className="t-section text-foreground">{stop.customerName}</h3>
-                      <p className="text-sm font-medium text-brand-700">{stop.deliveryNote}</p>
-                      {stop.requiresCustomerGeolocation && (
-                        <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
-                          <MapPin className="size-3" />
-                          GPS client à collecter
-                        </p>
-                      )}
-                    </div>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${visual.badgeClass}`}
-                    >
-                      <StopStatusIcon state={visual.state} />
-                      {stop.status}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    <p className="text-slate-600">
-                      <MapPin className="mr-1 inline size-4" />
-                      {address}
-                    </p>
-                    <p className="text-slate-600">
-                      <PackageCheck className="mr-1 inline size-4" />
-                      <span className="num">
-                        {visual.processed
-                          ? `${deliveredQuantity}/${plannedQuantity} article(s) livré(s)`
-                          : `${plannedQuantity} article(s)`}{" "}
-                        · {Math.max(stop.packageCount || 1, 1)} paquet(s)
-                      </span>
-                    </p>
-                  </div>
-
-                  {stop.latitude != null && stop.longitude != null && (
-                    <a
-                      target="_blank"
-                      rel="noreferrer"
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`}
-                      className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:underline"
-                    >
-                      Ouvrir la navigation
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  )}
-
-                  <section
-                    aria-label={`Paiement de l'arrêt ${stop.sequence}`}
-                    className="mt-4 overflow-hidden rounded-md border border-hairline bg-white"
-                  >
-                    <div className="grid grid-cols-3 divide-x divide-hairline bg-surface-subtle">
-                      <div className="p-3">
-                        <p className="t-micro text-muted-foreground">Montant BL</p>
-                        <p className="num mt-1 text-sm font-semibold">
-                          {formatMoney(stop.amountCollected + stop.amountToCollect)}
-                        </p>
-                      </div>
-                      <div className="p-3">
-                        <p className="t-micro text-emerald-700">Encaissé</p>
-                        <p className="num mt-1 text-sm font-semibold text-emerald-800">
-                          {formatMoney(stop.amountCollected)}
-                        </p>
-                      </div>
-                      <div className="p-3">
-                        <p className="t-micro text-muted-foreground">Restant</p>
-                        <p className="num mt-1 text-sm font-semibold">{formatMoney(stop.amountToCollect)}</p>
-                      </div>
-                    </div>
-                    {stop.payments.length > 0 ? (
-                      <div className="divide-y divide-hairline">
-                        {stop.payments.map((payment) => (
-                          <div
-                            key={payment.name}
-                            className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm"
-                          >
-                            <span className="inline-flex items-center gap-2 font-medium text-slate-700">
-                              <span className="grid size-7 place-items-center rounded-full bg-emerald-100 text-emerald-700">
-                                <Check className="size-4" />
-                              </span>
-                              {payment.method}
-                              {payment.chequeNumber ? ` · ${payment.chequeNumber}` : ""}
-                            </span>
-                            <span className="text-right">
-                              <strong className="num font-semibold text-emerald-800">
-                                {formatMoney(payment.amount)}
-                              </strong>
-                              <span className="ml-2 t-meta text-subtle">
-                                {payment.status}
-                                {payment.paymentEntry ? ` · ${payment.paymentEntry}` : ""}
-                              </span>
-                              <span className="num block t-meta text-subtle">
-                                {payment.collectionDate
-                                  ? `encaissement ${formatShortDate(payment.collectionDate)}`
-                                  : formatShortDate(payment.date)}
-                              </span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="px-3 py-2.5 t-meta text-muted-foreground">Aucun paiement saisi pour cet arrêt.</p>
-                    )}
-                  </section>
-
-                  <section className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    <p className="rounded-md bg-surface-subtle p-3">
-                      <span className="block t-micro text-muted-foreground">Facture</span>
-                      <strong className="font-medium">{stop.salesInvoice || "Non créée"}</strong>
-                      <span
-                        className={`mt-1 block t-meta ${stop.invoiceStatus === "Erreur" ? "text-red-700" : "text-muted-foreground"}`}
-                      >
-                        {stop.invoiceStatus}
-                      </span>
-                      {canResolveAccounting && stop.invoiceStatus === "Erreur" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={actions.accounting}
-                          onClick={() => void retryInvoice(stop.deliveryNote)}
-                          className="mt-2"
-                        >
-                          <RefreshCw className={actions.accounting ? "animate-spin" : ""} />
-                          Relancer
-                        </Button>
-                      )}
-                    </p>
-                    <p className="rounded-md bg-surface-subtle p-3">
-                      <span className="block t-micro text-muted-foreground">Paiement comptable</span>
-                      <strong className="font-medium">
-                        {stop.payments.find((payment) => payment.paymentEntry)?.paymentEntry || "En attente caisse"}
-                      </strong>
-                    </p>
-                  </section>
-
-                  <div className="mt-4 overflow-hidden rounded-md border border-hairline">
-                    <table className="w-full border-separate border-spacing-0" aria-label={`Articles du BL ${stop.deliveryNote}`}>
-                      <thead>
-                        <tr>
-                          <th scope="col" className="t-micro border-b border-hairline bg-surface-subtle px-3 py-2 text-left text-muted-foreground">
-                            Article
-                          </th>
-                          <th scope="col" className="t-micro w-20 border-b border-hairline bg-surface-subtle px-3 py-2 text-right text-muted-foreground">
-                            Prévu
-                          </th>
-                          <th scope="col" className="t-micro w-20 border-b border-hairline bg-surface-subtle px-3 py-2 text-right text-muted-foreground">
-                            Restant
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {stop.items?.map((item) => (
-                          <tr key={item.name}>
-                            <td className="truncate border-b border-hairline px-3 py-2 text-sm">
-                              <strong className="font-medium">{item.itemCode}</strong>
-                              <span className="ml-1 text-muted-foreground">{item.itemName}</span>
-                            </td>
-                            <td className="num border-b border-hairline px-3 py-2 text-right text-sm">{item.quantity}</td>
-                            <td className="num border-b border-hairline px-3 py-2 text-right text-sm font-semibold">
-                              {item.remainingQuantity}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <StopQr
-                    stop={stop}
-                    generating={generatingQr === stop.deliveryNote}
-                    onGenerate={() => void generateQr(stop.deliveryNote)}
-                  />
-                  {stop.qrCode && (
-                    <Button variant="outline" size="sm" onClick={() => printRouteLabels(route, [stop])} className="w-full">
-                      <Printer />
-                      Imprimer ce QR
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </article>
-          );
-        })}
-
-        {!route.stops.length && (
-          <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
-            <EmptyState
-              icon={Box}
-              title="Aucun arrêt"
-              description="Revenez au planning pour affecter des BL."
-            />
-          </div>
-        )}
-      </section>
-      {proposal && <OptimizationDialog proposal={proposal} applying={actions.routing} onClose={() => setProposal(undefined)} onApply={() => void applyOptimization()} />}
+      <RouteStopsPanel
+        route={route}
+        routing={actions.routing}
+        accounting={actions.accounting}
+        canResolveAccounting={canResolveAccounting}
+        generatingQr={generatingQr}
+        onCommitOrder={persistStopOrder}
+        onGenerateQr={(deliveryNote) => void generateQr(deliveryNote)}
+        onRetryInvoice={(deliveryNote) => void retryInvoice(deliveryNote)}
+      />
+      {proposal && (
+        <OptimizationDialog
+          proposal={proposal}
+          stops={route.stops}
+          applying={actions.routing}
+          onClose={() => setProposal(undefined)}
+          onApply={() => void applyOptimization()}
+        />
+      )}
     </div>
   );
 }

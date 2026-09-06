@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight, ChevronLeft, ChevronRight, RotateCcw, Route, Search, Truck } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { PageHeader } from "@/components/ui/page-header";
@@ -366,7 +366,7 @@ export function DeliveriesPage() {
 
         <SelectedRouteRail
           route={selectedRoute}
-          events={selectedRoute ? routeEvents(selectedRoute).slice(0, 3) : undefined}
+          events={selectedRoute ? routeEvents(selectedRoute) : undefined}
           onOpenRoute={openRoute}
           onCall={
             callHref
@@ -379,12 +379,12 @@ export function DeliveriesPage() {
       </section>
 
       <Card className="overflow-hidden py-0">
-        <CardHeader className="flex-row flex-wrap items-center gap-2 py-2.5">
+        <CardHeader className="py-2.5">
           <CardTitle>Tournées</CardTitle>
-          <span className="num rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{filtered.length}</span>
-          <p className="ml-auto t-body text-muted-foreground">Cliquez une ligne pour voir les arrêts.</p>
+          <CardDescription>Cliquez une ligne pour voir les arrêts.</CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
+          <p className="border-t px-4 py-2 num text-xs text-muted-foreground">Total : {filtered.length}</p>
           <DataTable
             className="rounded-none border-0 border-t"
             label="Tournées du jour"

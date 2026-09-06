@@ -182,3 +182,8 @@ export function todayIso() {
   const offset = now.getTimezoneOffset() * 60_000
   return new Date(now.getTime() - offset).toISOString().slice(0, 10)
 }
+
+export function calendarDay(value?: string | null) {
+  const day = String(value || "").slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : todayIso()
+}

@@ -22,7 +22,7 @@ const SECTION_LABELS: Record<string, string> = {
   livreurs: "Livreurs",
   vehicules: "Véhicules",
   stock: "Stock véhicules",
-  cashier: "Caisse",
+  cashier: "Caisse Tournées",
   caisses: "Caisses livreurs",
 }
 

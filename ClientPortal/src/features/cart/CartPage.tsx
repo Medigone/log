@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { apiErrorMessage, useOrderActions } from "@/shared/api"
-import { formatMoney, todayIso } from "@/shared/format"
+import { calendarDay, formatMoney } from "@/shared/format"
 import { assertAccurateGps, locate } from "@/shared/geolocation"
 import type { CartLine, GpsPosition, OrderPreview, PortalContext } from "@/shared/types"
 
@@ -21,7 +21,8 @@ export function CartPage({ context }: { context: PortalContext }) {
   const cart = useCart()
   const navigate = useNavigate()
   const actions = useOrderActions()
-  const [deliveryDate, setDeliveryDate] = useState(todayIso())
+  const minDeliveryDate = calendarDay(context.today)
+  const [deliveryDate, setDeliveryDate] = useState(minDeliveryDate)
   const [preview, setPreview] = useState<OrderPreview | null>(null)
   const [gps, setGps] = useState<GpsPosition | null>(null)
   const [error, setError] = useState("")
@@ -168,7 +169,7 @@ export function CartPage({ context }: { context: PortalContext }) {
               <Input
                 id="delivery-date"
                 type="date"
-                min={todayIso()}
+                min={minDeliveryDate}
                 value={deliveryDate}
                 onChange={(event) => setDeliveryDate(event.target.value)}
               />

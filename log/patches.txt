@@ -36,3 +36,4 @@ log.patches.v1_0.ensure_draft_pick_lists_for_open_orders
 log.patches.v1_0.extend_flow_api_key_length
 log.patches.v1_0.clear_truncated_flow_model_api_keys
 log.patches.v1_0.remove_flow_customizations
+log.patches.v1_0.set_africa_algiers_timezone

@@ -149,6 +149,63 @@ class TestDistributionPaymentSummary(unittest.TestCase):
 		refresh.assert_called_once_with(route)
 		route.save.assert_called_once_with(ignore_permissions=True)
 
+	def test_try_complete_route_closes_stale_billing_exception(self):
+		route = SimpleNamespace(
+			name="LIV-1",
+			statut_chargement="Retourné",
+			statut_caisse="Validée",
+			etat_planification="Contrôle caisse",
+			bons_de_livraison=[SimpleNamespace(bon_de_livraison="DN-1")],
+			date_fin=None,
+			save=Mock(),
+		)
+		route.get = lambda key, default=None: getattr(route, key, default)
+		db = Mock()
+		db.count.side_effect = [1, 0]
+
+		def fake_get_value(doctype, name, field=None):
+			if field == "custom_statut_facturation":
+				return "Créée"
+			if field == "custom_sales_invoice":
+				return "SINV-1"
+			return None
+
+		db.get_value.side_effect = fake_get_value
+		with (
+			patch.object(distribution, "frappe", SimpleNamespace(db=db)),
+			patch.object(distribution, "_refresh_document_timestamp"),
+			patch.object(distribution, "now_datetime", return_value="2026-09-06 23:50:00"),
+			patch("log.services.distribution_fulfillment.resolve_billing_exceptions") as resolve,
+		):
+			distribution._try_complete_route(route)
+		resolve.assert_called_once_with("DN-1", "SINV-1")
+		self.assertEqual(route.etat_planification, "Terminée")
+		self.assertEqual(route.date_fin, "2026-09-06 23:50:00")
+		route.save.assert_called_once_with(ignore_permissions=True)
+
+	def test_try_complete_route_keeps_control_when_invoice_failed(self):
+		route = SimpleNamespace(
+			name="LIV-1",
+			statut_chargement="Retourné",
+			statut_caisse="Validée",
+			etat_planification="Contrôle caisse",
+			bons_de_livraison=[SimpleNamespace(bon_de_livraison="DN-1")],
+			date_fin=None,
+			save=Mock(),
+		)
+		route.get = lambda key, default=None: getattr(route, key, default)
+		db = Mock()
+		db.count.return_value = 1
+		db.get_value.return_value = "Erreur"
+		with (
+			patch.object(distribution, "frappe", SimpleNamespace(db=db)),
+			patch("log.services.distribution_fulfillment.resolve_billing_exceptions") as resolve,
+		):
+			distribution._try_complete_route(route)
+		resolve.assert_not_called()
+		self.assertEqual(route.etat_planification, "Contrôle caisse")
+		route.save.assert_not_called()
+
 	def test_paiement_hook_updates_totals_without_saving_route(self):
 		livraison = SimpleNamespace(
 			nombre_bons_de_livraison=1,
@@ -196,6 +253,23 @@ class TestDistributionPaymentSummary(unittest.TestCase):
 			taxes=[frappe._dict(description="TVA 19%", rate=19, tax_amount=190.4)],
 		)
 		self.assertEqual(distribution._serialize_note_amounts(doc)["grandTotal"], 1190)
+
+	def test_stop_completed_at_falls_back_to_posting_datetime(self):
+		self.assertEqual(
+			distribution._stop_completed_at(frappe._dict(custom_date_livraison="2026-09-06 10:11:00")),
+			"2026-09-06 10:11:00",
+		)
+		self.assertEqual(
+			distribution._stop_completed_at(
+				frappe._dict(
+					custom_statut="Livré",
+					posting_date="2026-09-06",
+					posting_time="10:11:22",
+				)
+			),
+			"2026-09-06 10:11:22",
+		)
+		self.assertIsNone(distribution._stop_completed_at(frappe._dict(custom_statut="Enlevé", posting_date="2026-09-06", posting_time="08:00:00")))
 
 
 if __name__ == "__main__":

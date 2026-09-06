@@ -261,6 +261,12 @@ export function useDistributionMutations() {
   const applyOptimization = useFrappePostCall<FrappeMessage<DistributionRoute>>(
     "log.api.distribution.apply_route_optimization",
   );
+  const reorderStops = useFrappePostCall<FrappeMessage<DistributionRoute>>(
+    "log.api.distribution.reorder_route_stops",
+  );
+  const selectNextStop = useFrappePostCall<FrappeMessage<DistributionRoute>>(
+    "log.api.distribution.select_next_delivery_stop",
+  );
   const declareReturn = useFrappePostCall<FrappeMessage<DistributionRoute>>(
     "log.api.distribution.declare_route_return",
   );
@@ -314,6 +320,18 @@ export function useDistributionMutations() {
         ordered_delivery_notes: orderedDeliveryNotes,
         expected_revision: expectedRevision,
       })).message,
+    reorderRouteStops: async (routeId: string, orderedDeliveryNotes: string[], expectedRevision: number) =>
+      (await reorderStops.call({
+        route_id: routeId,
+        ordered_delivery_notes: orderedDeliveryNotes,
+        expected_revision: expectedRevision,
+      })).message,
+    selectNextDeliveryStop: async (routeId: string, deliveryNote: string, expectedRevision: number) =>
+      (await selectNextStop.call({
+        route_id: routeId,
+        delivery_note: deliveryNote,
+        expected_revision: expectedRevision,
+      })).message,
     startRoute: async (routeId: string, expectedRevision?: number) => (await start.call({ route_id: routeId, expected_revision: expectedRevision, request_id: crypto.randomUUID() })).message,
     loadRoute: async (routeId: string, expectedRevision: number, verifiedDeliveryNotes: string[]) =>
       (await load.call({
@@ -341,7 +359,9 @@ export function useDistributionMutations() {
     cashier: validateCash.loading || resolveCash.loading,
     driverCash: adjustCash.loading,
     accounting: retryInvoice.loading,
-    routing: calculateItinerary.loading || proposeOptimization.loading || applyOptimization.loading,
+    routing: calculateItinerary.loading || proposeOptimization.loading || applyOptimization.loading
+      || reorderStops.loading,
+    selectingStop: selectNextStop.loading,
   };
 }
 

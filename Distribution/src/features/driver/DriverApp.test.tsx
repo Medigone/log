@@ -109,6 +109,7 @@ const mocks = vi.hoisted(() => ({
   loadRoute: vi.fn(),
   acknowledgeRoute: vi.fn(),
   declareRouteReturn: vi.fn(),
+  selectNextDeliveryStop: vi.fn().mockResolvedValue({}),
   current: null as DistributionRoute | null,
   fetchedRoute: null as DistributionRoute | null,
   history: [] as Array<{
@@ -220,8 +221,10 @@ vi.mock("@/shared/api/distribution", () => ({
     loadRoute: mocks.loadRoute,
     acknowledgeRoute: mocks.acknowledgeRoute,
     declareRouteReturn: mocks.declareRouteReturn,
+    selectNextDeliveryStop: mocks.selectNextDeliveryStop,
     saving: false,
     fulfillment: false,
+    selectingStop: false,
   }),
 }));
 
@@ -254,6 +257,7 @@ describe("DriverApp", () => {
     ];
     mocks.loadRoute.mockReset();
     mocks.startRoute.mockReset();
+    mocks.selectNextDeliveryStop.mockReset().mockResolvedValue({});
     Object.defineProperty(navigator, "geolocation", {
       configurable: true,
       value: { getCurrentPosition: vi.fn() },
@@ -273,33 +277,33 @@ describe("DriverApp", () => {
     expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
   });
 
-  it("ouvre la tournée sur le prochain arrêt au tap d’une carte", async () => {
+  it("ouvre la tournée sur la liste des restants, sans imposer le prochain arrêt", async () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await openListedRoute(user);
 
-    expect(screen.getByText(/arrêt en cours/i)).toBeInTheDocument();
+    expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
     expect(screen.getByText(/1 arrêt restant/i)).toBeInTheDocument();
     expect(screen.getByText(/^encaissé$/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /épicerie nord/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /traiter cet arrêt/i })).toBeEnabled();
-    expect(screen.getAllByRole("link", { name: /navigation vers épicerie nord/i }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: /appeler épicerie nord/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /à livrer/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /livrer épicerie nord/i })).toBeEnabled();
+    expect(screen.getByText(/client a/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /traiter cet arrêt/i })).not.toBeInTheDocument();
   });
 
   it("revient à la liste via le bouton retour ou un second tap sur Tournée", async () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await openListedRoute(user);
-    expect(screen.getByText(/arrêt en cours/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /à livrer/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /retour aux tournées/i }));
-    expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /à livrer/i })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /programmées/i })).toBeInTheDocument();
 
     await openListedRoute(user);
     await user.click(screen.getByRole("button", { name: /^tournée$/i }));
-    expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /à livrer/i })).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /programmées/i })).toBeInTheDocument();
   });
 
@@ -309,16 +313,18 @@ describe("DriverApp", () => {
     await user.click(screen.getByRole("button", { name: /^carte$/i }));
     expect(screen.getAllByText(/1 \/ 2/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /recentrer/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /épicerie nord/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /traiter cet arrêt/i })).toBeInTheDocument();
+    expect(screen.getByText(/choisissez le prochain client/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /livrer épicerie nord/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /traiter cet arrêt/i })).not.toBeInTheDocument();
   });
 
-  it("ouvre l’assistant au tap sur Traiter", async () => {
+  it("ouvre l’assistant après le choix d’un arrêt restant", async () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await openListedRoute(user);
-    await user.click(screen.getByRole("button", { name: /traiter cet arrêt/i }));
-    expect(screen.getByText(/résultat de l’arrêt/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /livrer épicerie nord/i }));
+    expect(mocks.selectNextDeliveryStop).toHaveBeenCalledWith("LIV-1", "DN-8", 3);
+    expect(await screen.findByText(/résultat de l’arrêt/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /livré en totalité/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /continuer/i })).not.toBeInTheDocument();
   });
@@ -417,7 +423,8 @@ describe("DriverApp", () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await scanDeliveryNote(user, "DN-8");
-    expect(screen.getByText(/résultat de l’arrêt/i)).toBeInTheDocument();
+    expect(mocks.selectNextDeliveryStop).toHaveBeenCalledWith("LIV-1", "DN-8", 3);
+    expect(await screen.findByText(/résultat de l’arrêt/i)).toBeInTheDocument();
   });
 
   it("n’ouvre pas l’assistant au scan d’un BL déjà livré", async () => {

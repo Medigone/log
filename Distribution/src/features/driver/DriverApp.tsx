@@ -42,13 +42,14 @@ import { DriverTabBar, type DriverTab } from "@/features/driver/DriverTabBar";
 import { RouteMapTab } from "@/features/driver/RouteMapTab";
 import { RouteProgressBar } from "@/features/driver/RouteProgressBar";
 import { StopCompletionWizard } from "@/features/driver/StopCompletionWizard";
-import { StopTimeline } from "@/features/driver/StopTimeline";
+import { CompletedStopsTimeline } from "@/features/driver/StopTimeline";
+import { RemainingStopsList } from "@/features/driver/RemainingStopsList";
 import {
   proposeScanAction,
   readVerifiedNotes,
   writeVerifiedNotes,
 } from "@/features/driver/departureWorkflow";
-import { isStopCompleted, stopFormKey } from "@/features/driver/stopHelpers";
+import { isStopCompleted, remainingStops, stopFormKey } from "@/features/driver/stopHelpers";
 import { formatDriverMoney, routeProgress } from "@/features/driver/driverMobile";
 import { formatTime } from "@/shared/format";
 import { cn } from "@/lib/utils";
@@ -170,17 +171,19 @@ function RouteNowView({
   routeData,
   nextStop,
   fulfillment,
+  selectingStop,
   onDeclareReturn,
   onTreat,
 }: {
   routeData: DistributionRoute;
   nextStop?: RouteStop;
   fulfillment: boolean;
+  selectingStop?: boolean;
   onDeclareReturn: () => void;
   onTreat: (stop: RouteStop) => void;
 }) {
   const canTreat = routeData.lifecycle === "En cours";
-  const remaining = routeData.stops.filter((stop) => !isStopCompleted(stop)).length;
+  const remaining = remainingStops(routeData.stops);
 
   return (
     <>
@@ -209,7 +212,7 @@ function RouteNowView({
         </section>
       )}
 
-      {remaining === 0 && routeData.stops.length > 0 && !nextStop ? (
+      {remaining.length === 0 && routeData.stops.length > 0 && !nextStop ? (
         <Card density="touch" className="p-6 text-center">
           <Check className="mx-auto size-9 text-emerald-600" />
           <h2 className="mt-3 t-section">Tournée traitée</h2>
@@ -217,7 +220,13 @@ function RouteNowView({
         </Card>
       ) : null}
 
-      <StopTimeline stops={routeData.stops} routeId={routeData.name} canTreat={canTreat} onOpenStop={onTreat} />
+      <RemainingStopsList
+        stops={remaining}
+        canTreat={canTreat}
+        selecting={selectingStop}
+        onSelect={onTreat}
+      />
+      <CompletedStopsTimeline stops={routeData.stops} />
     </>
   );
 }
@@ -372,6 +381,17 @@ export function DriverApp() {
     [routeData],
   );
 
+  const chooseStop = async (stop: RouteStop) => {
+    if (!routeData || routeData.lifecycle !== "En cours" || isStopCompleted(stop)) return;
+    try {
+      await actions.selectNextDeliveryStop(routeData.name, stop.deliveryNote, routeData.revision);
+      await refresh();
+    } catch (selectError) {
+      setMessage(apiErrorMessage(selectError));
+    }
+    setSelectedStop(stop);
+  };
+
   const start = async () => {
     if (!routeData) return;
     try {
@@ -417,7 +437,7 @@ export function DriverApp() {
     if (proposal.kind === "load") setConfirmKind("load");
     else if (proposal.kind === "start") setConfirmKind("start");
     else setConfirmKind(null);
-    if (proposal.kind === "treat" && proposal.stop) setSelectedStop(proposal.stop);
+    if (proposal.kind === "treat" && proposal.stop) void chooseStop(proposal.stop);
     else setSelectedStop(undefined);
   };
   const declareReturn = async () => {
@@ -625,8 +645,9 @@ export function DriverApp() {
             routeData={routeData}
             nextStop={nextStop}
             fulfillment={actions.fulfillment}
+            selectingStop={actions.selectingStop}
             onDeclareReturn={() => void declareReturn()}
-            onTreat={setSelectedStop}
+            onTreat={(stop) => void chooseStop(stop)}
           />
         )}
 
@@ -636,7 +657,7 @@ export function DriverApp() {
               route={routeData}
               canTreat={routeData.lifecycle === "En cours"}
               onOpenStop={(stop) => {
-                if (routeData.lifecycle === "En cours" && !isStopCompleted(stop)) setSelectedStop(stop);
+                if (routeData.lifecycle === "En cours" && !isStopCompleted(stop)) void chooseStop(stop);
               }}
             />
           </div>

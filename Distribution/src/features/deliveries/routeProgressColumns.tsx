@@ -120,9 +120,13 @@ export function routeProgressColumns({
         const event = lastEvent(route);
         if (!event) return <span className="text-muted-foreground/50">—</span>;
         return (
-          <div className="min-w-0">
+          <div className="flex min-w-0 items-baseline justify-between gap-2">
             <p className={cn("truncate text-xs", EVENT_TEXT[event.tone])}>{event.label}</p>
-            {event.age ? <p className="num whitespace-nowrap text-[10.5px] text-muted-foreground">{event.age}</p> : null}
+            {event.time ? (
+              <p className="num shrink-0 text-[10.5px] text-muted-foreground">{event.time}</p>
+            ) : event.age ? (
+              <p className="num shrink-0 text-[10.5px] text-muted-foreground">{event.age}</p>
+            ) : null}
           </div>
         );
       },

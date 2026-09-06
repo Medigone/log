@@ -369,6 +369,30 @@ def _apply_delivered_quantities_for_submit(doc):
 	doc.calculate_taxes_and_totals()
 
 
+def resolve_billing_exceptions(delivery_note: str, invoice: str | None = None) -> None:
+	"""Ferme les exceptions de facturation une fois la facture réellement créée."""
+	resolution = _("Facture créée : {0}").format(invoice) if invoice else _("Facture créée")
+	for exception in frappe.get_all(
+		"Exception Distribution",
+		filters={
+			"bon_de_livraison": delivery_note,
+			"type_exception": "Facturation",
+			"statut": ["in", ["Ouverte", "En traitement"]],
+		},
+		pluck="name",
+	):
+		frappe.db.set_value(
+			"Exception Distribution",
+			exception,
+			{
+				"statut": "Résolue",
+				"resolution": resolution,
+				"resolue_par": frappe.session.user,
+				"date_resolution": now_datetime(),
+			},
+		)
+
+
 def _create_distribution_exception(route, delivery_note: str, exception_type: str, description: str):
 	existing = frappe.db.exists(
 		"Exception Distribution",
@@ -415,6 +439,7 @@ def create_and_submit_invoice(route, delivery_note: str) -> tuple[str | None, st
 			{"custom_sales_invoice": existing, "custom_statut_facturation": "Créée"},
 			update_modified=False,
 		)
+		resolve_billing_exceptions(delivery_note, existing)
 		return existing, "created"
 
 	frappe.db.savepoint("distribution_invoice")
@@ -441,6 +466,7 @@ def create_and_submit_invoice(route, delivery_note: str) -> tuple[str | None, st
 			{"facture_source": invoice.name},
 			update_modified=False,
 		)
+		resolve_billing_exceptions(delivery_note, invoice.name)
 		return invoice.name, "created"
 	except Exception:
 		message = frappe.get_traceback()
@@ -461,6 +487,14 @@ def create_and_submit_invoice(route, delivery_note: str) -> tuple[str | None, st
 		return None, "error"
 
 
+def _stamp_delivery_completion(doc) -> None:
+	now = now_datetime()
+	if doc.meta.has_field("custom_date_livraison") and not doc.get("custom_date_livraison"):
+		doc.custom_date_livraison = now
+	if doc.meta.has_field("custom_user_livraison") and not doc.get("custom_user_livraison"):
+		doc.custom_user_livraison = frappe.session.user
+
+
 def finalize_delivery_document(route, doc, outcome: str) -> dict[str, Any]:
 	"""Soumet le BL aux quantités livrées. Le reliquat reste sur la commande native."""
 	delivered_by_original = {
@@ -471,6 +505,7 @@ def finalize_delivery_document(route, doc, outcome: str) -> dict[str, Any]:
 		doc.custom_statut_planification = "En attente retour"
 		if doc.meta.has_field("custom_statut_facturation"):
 			doc.custom_statut_facturation = "Sans objet"
+		_stamp_delivery_completion(doc)
 		_save_distribution_doc(doc)
 		return {"deliveryNote": doc.name, "invoiceStatus": "not_applicable"}
 
@@ -483,6 +518,7 @@ def finalize_delivery_document(route, doc, outcome: str) -> dict[str, Any]:
 	doc.set_posting_time = 1
 	doc.posting_date = today()
 	doc.posting_time = nowtime()
+	_stamp_delivery_completion(doc)
 	_submit_distribution_doc(doc)
 
 	for line in route.get("lignes_chargement") or []:

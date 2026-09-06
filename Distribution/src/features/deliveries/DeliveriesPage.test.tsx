@@ -82,6 +82,7 @@ describe("DeliveriesPage", () => {
     expect(screen.getByRole("button", { name: /échecs/i })).toHaveTextContent("1");
     expect(screen.getAllByText(/camion a/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
+    expect(screen.getByText("Total : 2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1 à traiter/i })).toBeInTheDocument();
     expect(screen.getByText("Sélectionnez une tournée dans le tableau.")).toBeInTheDocument();
   });

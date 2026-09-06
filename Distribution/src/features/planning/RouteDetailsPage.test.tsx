@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useSearchParams } from "react-router-dom";
 import { RouteDetailsPage } from "@/features/planning/RouteDetailsPage";
-import type { DistributionRoute } from "@/shared/types/distribution";
+import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
 
 const mocks = vi.hoisted(() => ({
   publishRoute: vi.fn().mockResolvedValue({}),
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   calculateRouteItinerary: vi.fn().mockResolvedValue({}),
   proposeRouteOptimization: vi.fn(),
   applyRouteOptimization: vi.fn(),
+  reorderRouteStops: vi.fn(),
   deleteDraftRoute: vi.fn().mockResolvedValue({ success: true, routeId: "LIV-TEST-1" }),
   mutate: vi.fn().mockResolvedValue(undefined),
 }));
@@ -83,19 +84,82 @@ vi.mock("@/shared/api/distribution", () => ({
     calculateRouteItinerary: mocks.calculateRouteItinerary,
     proposeRouteOptimization: mocks.proposeRouteOptimization,
     applyRouteOptimization: mocks.applyRouteOptimization,
+    reorderRouteStops: mocks.reorderRouteStops,
     deleteDraftRoute: mocks.deleteDraftRoute,
     saving: false,
     routing: false,
+    accounting: false,
   }),
 }));
 vi.mock("@/features/planning/RouteMap", () => ({ RouteMap: () => <div>Carte GPS OSM</div> }));
 
-function renderDetails() {
+vi.mock("@/components/reui/sortable", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/reui/sortable")>();
+  return {
+    ...actual,
+    Sortable: (props: any) => (
+      <>
+        <actual.Sortable {...props} />
+        {props.value.length > 1 ? (
+          <button
+            type="button"
+            onClick={() => {
+              const previousValue = props.value;
+              props.onValueCommit?.([...previousValue].reverse(), {
+                previousValue,
+                activeIndex: 0,
+                overIndex: previousValue.length - 1,
+                event: {},
+              });
+            }}
+          >
+            Simuler le réordonnancement
+          </button>
+        ) : null}
+      </>
+    ),
+  };
+});
+
+function extraStop(overrides: Partial<RouteStop> = {}): RouteStop {
+  return {
+    ...route.stops[0],
+    deliveryNote: "DN-TEST-2",
+    customerName: "Client Bis",
+    sequence: 2,
+    items: [
+      {
+        name: "ROW-2",
+        itemCode: "ART-2",
+        itemName: "Article Bis",
+        quantity: 1,
+        deliveredQuantity: 0,
+        remainingQuantity: 1,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function SearchProbe() {
+  const [params] = useSearchParams();
+  return <span data-testid="search-params">{params.toString()}</span>;
+}
+
+function renderDetails(entry = "/planning/routes/LIV-TEST-1") {
   return render(
-    <MemoryRouter initialEntries={["/planning/routes/LIV-TEST-1"]}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/planning" element={<div>Planning</div>} />
-        <Route path="/planning/routes/:routeId" element={<RouteDetailsPage />} />
+        <Route
+          path="/planning/routes/:routeId"
+          element={
+            <>
+              <SearchProbe />
+              <RouteDetailsPage />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   );
@@ -108,6 +172,7 @@ describe("RouteDetailsPage", () => {
     mocks.calculateRouteItinerary.mockClear();
     mocks.proposeRouteOptimization.mockClear();
     mocks.applyRouteOptimization.mockClear();
+    mocks.reorderRouteStops.mockClear();
     mocks.deleteDraftRoute.mockClear();
     mocks.mutate.mockClear();
   });
@@ -150,7 +215,10 @@ describe("RouteDetailsPage", () => {
     renderDetails();
 
     await user.click(screen.getByRole("button", { name: /optimiser l’ordre/i }));
-    expect(await screen.findByRole("dialog", { name: /comparer l’ordre/i })).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: /comparer l’ordre/i });
+    expect(within(dialog).getAllByText("Client Test")).toHaveLength(2);
+    expect(within(dialog).getAllByText("Oran")).toHaveLength(2);
+    expect(within(dialog).queryByText("DN-TEST-1")).not.toBeInTheDocument();
     expect(mocks.applyRouteOptimization).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: /appliquer cet ordre/i }));
@@ -170,10 +238,60 @@ describe("RouteDetailsPage", () => {
     expect(within(dialog).getByRole("alert")).toHaveTextContent("Publication refusée");
   });
 
-  it("autorise la publication avec confirmation mais bloque le routage sans GPS client", async () => {
+  it("autorise la publication et le routage avec GPS client manquant si la commune est connue", async () => {
     const user = userEvent.setup();
     route.stops[0].customerGpsStatus = "missing";
     route.stops[0].requiresCustomerGeolocation = true;
+    route.stops[0].geolocationSource = "commune";
+    route.stops[0].latitude = 35.69;
+    route.stops[0].longitude = -0.63;
+
+    renderDetails();
+
+    expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
+    expect(screen.getByText(/position à collecter par le livreur/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recalculer l’itinéraire/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /optimiser l’ordre/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /publier la tournée/i }));
+    const dialog = screen.getByRole("dialog", { name: /publier la tournée/i });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/1 client\(s\) sans GPS/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/centre de la commune/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /confirmer et publier/i }));
+    expect(mocks.publishRoute).toHaveBeenCalledWith("LIV-TEST-1", 2);
+
+    route.stops[0].customerGpsStatus = "known";
+    route.stops[0].requiresCustomerGeolocation = false;
+    route.stops[0].geolocationSource = "customer";
+    route.stops[0].latitude = 35.7;
+    route.stops[0].longitude = -0.6;
+  });
+
+  it("autorise le routage si la commune est connue même sans coords encore en cache", () => {
+    route.stops[0].customerGpsStatus = "missing";
+    route.stops[0].requiresCustomerGeolocation = true;
+    route.stops[0].geolocationSource = undefined;
+    route.stops[0].commune = "Oran";
+    route.stops[0].latitude = undefined;
+    route.stops[0].longitude = undefined;
+
+    renderDetails();
+
+    expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /recalculer l’itinéraire/i })).toBeEnabled();
+
+    route.stops[0].customerGpsStatus = "known";
+    route.stops[0].requiresCustomerGeolocation = false;
+    route.stops[0].geolocationSource = "customer";
+    route.stops[0].latitude = 35.7;
+    route.stops[0].longitude = -0.6;
+  });
+
+  it("bloque le routage seulement s’il n’y a ni GPS client ni commune", () => {
+    route.stops[0].customerGpsStatus = "missing";
+    route.stops[0].requiresCustomerGeolocation = true;
+    route.stops[0].geolocationSource = undefined;
+    route.stops[0].commune = undefined;
     route.stops[0].latitude = undefined;
     route.stops[0].longitude = undefined;
 
@@ -182,17 +300,31 @@ describe("RouteDetailsPage", () => {
     expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /recalculer l’itinéraire/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /optimiser l’ordre/i })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /publier la tournée/i }));
-    const dialog = screen.getByRole("dialog", { name: /publier la tournée/i });
-    expect(dialog).toBeInTheDocument();
-    expect(within(dialog).getByText(/1 client\(s\) sans GPS/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /confirmer et publier/i }));
-    expect(mocks.publishRoute).toHaveBeenCalledWith("LIV-TEST-1", 2);
 
     route.stops[0].customerGpsStatus = "known";
     route.stops[0].requiresCustomerGeolocation = false;
+    route.stops[0].geolocationSource = "customer";
+    route.stops[0].commune = "Oran";
     route.stops[0].latitude = 35.7;
     route.stops[0].longitude = -0.6;
+  });
+
+  it("affiche Calculer l’itinéraire tant qu’aucun tracé n’existe", () => {
+    const previous = route.routing;
+    route.routing = {
+      status: "not_calculated",
+      provider: "openrouteservice",
+      profile: "driving-car",
+      optimizationEnabled: true,
+    };
+    try {
+      renderDetails();
+      expect(screen.getByRole("button", { name: /calculer l’itinéraire/i })).toBeEnabled();
+      expect(screen.queryByRole("button", { name: /recalculer l’itinéraire/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/utilisez « Calculer l’itinéraire »/i)).toBeInTheDocument();
+    } finally {
+      route.routing = previous;
+    }
   });
 
   it("met clairement en évidence un arrêt livré et la progression de la tournée", () => {
@@ -214,7 +346,9 @@ describe("RouteDetailsPage", () => {
     expect(screen.getByRole("progressbar", { name: "Arrêts traités" })).toHaveAttribute("aria-valuenow", "1");
     const stopCard = screen.getByRole("article", { name: "Arrêt 1 · Livré" });
     expect(stopCard).toHaveAttribute("data-stop-state", "delivered");
-    expect(screen.getByText(/2\/2 article\(s\) livré\(s\)/)).toBeInTheDocument();
+    expect(within(stopCard).getByText("2/2")).toBeInTheDocument();
+    expect(screen.getByText("Ordre de livraison")).toBeInTheDocument();
+    expect(screen.queryAllByLabelText(/Déplacer /)).toHaveLength(0);
     expect(screen.getByText("Mise à jour automatique")).toBeInTheDocument();
     expect(within(stopCard).getByText("Espèce")).toBeInTheDocument();
     expect(within(stopCard).getAllByText("500 DZD")).toHaveLength(2);
@@ -246,6 +380,103 @@ describe("RouteDetailsPage", () => {
       await user.click(within(dialog).getByRole("button", { name: /^supprimer$/i }));
       expect(mocks.deleteDraftRoute).toHaveBeenCalledWith("LIV-TEST-1", 2);
       expect(await screen.findByText("Planning")).toBeInTheDocument();
+    } finally {
+      route.stops = originalStops;
+    }
+  });
+
+  it("propose une liste réordonnable seulement sur une tournée brouillon à plusieurs arrêts", () => {
+    const originalStops = route.stops;
+    route.stops = [...route.stops, extraStop()];
+    try {
+      renderDetails();
+      expect(screen.getByText("Ordre de livraison")).toBeInTheDocument();
+      expect(screen.getAllByLabelText(/Déplacer /)).toHaveLength(2);
+      expect(screen.queryByText(/l’itinéraire gps est une suggestion/i)).not.toBeInTheDocument();
+      expect(screen.getAllByRole("table")).toHaveLength(1);
+      expect(screen.getAllByText("Client Bis")).toHaveLength(1);
+      expect(screen.getByText("ART-1")).toBeInTheDocument();
+      expect(screen.queryByText("ART-2")).not.toBeInTheDocument();
+    } finally {
+      route.stops = originalStops;
+    }
+  });
+
+  it("sélectionne un arrêt au clic et met à jour ?stop=", async () => {
+    const user = userEvent.setup();
+    const originalStops = route.stops;
+    route.stops = [...route.stops, extraStop()];
+    try {
+      renderDetails();
+      await user.click(screen.getByRole("option", { name: /client bis/i }));
+      expect(screen.getByTestId("search-params")).toHaveTextContent("stop=DN-TEST-2");
+      expect(screen.getByRole("heading", { name: "Client Bis" })).toBeInTheDocument();
+      expect(screen.getByText("ART-2")).toBeInTheDocument();
+      expect(screen.queryByText("ART-1")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("table")).toHaveLength(1);
+    } finally {
+      route.stops = originalStops;
+    }
+  });
+
+  it("sélectionne l’arrêt visé par ?focus= au montage", async () => {
+    const originalStops = route.stops;
+    route.stops = [...route.stops, extraStop()];
+    try {
+      renderDetails("/planning/routes/LIV-TEST-1?focus=DN-TEST-2");
+      expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Client Bis");
+      expect(screen.getByRole("heading", { name: "Client Bis" })).toBeInTheDocument();
+      expect(screen.getByText("ART-2")).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByTestId("search-params")).toHaveTextContent("stop=DN-TEST-2");
+      });
+    } finally {
+      route.stops = originalStops;
+    }
+  });
+
+  it("regroupe visuellement les arrêts par commune sans changer les numéros de séquence", () => {
+    const originalStops = route.stops;
+    route.stops = [
+      { ...route.stops[0], commune: "Oran", wilaya: "Oran" },
+      extraStop({ commune: "Bir El Djir", wilaya: "Oran", customerName: "Client Bir El Djir" }),
+      extraStop({
+        deliveryNote: "DN-TEST-3",
+        customerName: "Client Oran 2",
+        sequence: 3,
+        commune: "Oran",
+        wilaya: "Oran",
+      }),
+    ];
+    try {
+      renderDetails();
+      const options = screen.getAllByRole("option");
+      expect(options.map((option) => option.textContent)).toEqual([
+        expect.stringContaining("Client Test"),
+        expect.stringContaining("Client Oran 2"),
+        expect.stringContaining("Client Bir El Djir"),
+      ]);
+      expect(options[0]).toHaveTextContent("1");
+      expect(options[1]).toHaveTextContent("3");
+      expect(options[2]).toHaveTextContent("2");
+      expect(screen.getByText("Bir El Djir")).toBeInTheDocument();
+    } finally {
+      route.stops = originalStops;
+    }
+  });
+
+  it("enregistre l’ordre une seule fois après un réordonnancement", async () => {
+    const originalStops = route.stops;
+    route.stops = [...route.stops, extraStop()];
+    mocks.reorderRouteStops.mockResolvedValue({ ...route, revision: 3 });
+    try {
+      const user = userEvent.setup();
+      renderDetails();
+      await user.click(screen.getByRole("button", { name: "Simuler le réordonnancement" }));
+      await waitFor(() => {
+        expect(mocks.reorderRouteStops).toHaveBeenCalledTimes(1);
+      });
+      expect(mocks.reorderRouteStops).toHaveBeenCalledWith("LIV-TEST-1", ["DN-TEST-2", "DN-TEST-1"], 2);
     } finally {
       route.stops = originalStops;
     }

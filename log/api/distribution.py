@@ -33,6 +33,11 @@ from log.api.distribution_rules import (
 	start_without_load_error,
 	stop_status,
 )
+from log.services.geocoding import (
+	GeocodingError,
+	get_commune_coordinates,
+	_optional_coordinates as _optional_geo_coordinates,
+)
 from log.services.routing import (
 	OpenRouteServiceClient,
 	RoutingConfigurationError,
@@ -448,6 +453,43 @@ def _serialize_note_amounts(doc) -> dict[str, Any]:
 	}
 
 
+def _stop_completed_at(doc) -> str | None:
+	value = doc.get("custom_date_livraison")
+	if value:
+		return str(value)
+	status = doc.get("custom_statut")
+	if status not in {"Livré", "Partiellement Livré", "Non Livré"}:
+		return None
+	posting_date = doc.get("posting_date")
+	posting_time = doc.get("posting_time")
+	if posting_date and posting_time:
+		return f"{posting_date} {posting_time}"
+	return None
+
+
+def _apply_commune_coordinates(stop: dict[str, Any], *, geocode_if_missing: bool = False) -> dict[str, Any]:
+	"""Complète lat/lng depuis la commune si le GPS client manque. Ne masque pas l'alerte GPS."""
+	if _optional_geo_coordinates(stop.get("latitude"), stop.get("longitude")):
+		if not stop.get("geolocationSource"):
+			stop["geolocationSource"] = "customer"
+		return stop
+	commune_id = stop.get("communeId")
+	if not commune_id:
+		return stop
+	try:
+		coords = get_commune_coordinates(commune_id, geocode_if_missing=geocode_if_missing)
+	except GeocodingError:
+		if geocode_if_missing:
+			raise
+		coords = None
+	if not coords:
+		return stop
+	stop["latitude"] = coords["latitude"]
+	stop["longitude"] = coords["longitude"]
+	stop["geolocationSource"] = "commune"
+	return stop
+
+
 def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 	details = _customer_details(doc.customer)
 	commune_id = doc.get("custom_commune")
@@ -470,18 +512,20 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 			}
 		)
 	remaining_quantity = sum(item["remainingQuantity"] for item in items)
-	return {
+	payload = {
 		"deliveryNote": doc.name,
 		"salesOrder": _sales_order_for_dn(doc),
 		"customer": doc.customer,
 		"customerName": details.get("customerName") or doc.customer_name or doc.customer,
 		"commune": commune_label or commune_id,
+		"communeId": commune_id,
 		"wilaya": doc.get("custom_wilaya"),
 		"address": doc.get("shipping_address") or details.get("address"),
 		"phone": details.get("phone") or doc.get("contact_mobile"),
 		"instructions": doc.get("instructions"),
 		"latitude": details.get("latitude"),
 		"longitude": details.get("longitude"),
+		"geolocationSource": "customer" if details.get("latitude") is not None and details.get("longitude") is not None else None,
 		"customerGpsStatus": details.get("customerGpsStatus") or "missing",
 		"requiresCustomerGeolocation": bool(details.get("requiresCustomerGeolocation", True)),
 		"totalQuantity": remaining_quantity,
@@ -503,7 +547,7 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 		"qrCode": doc.get("custom_qr_image"),
 		"packageCount": max(cint(doc.get("custom_nombre_colis")), 1),
 		"postingDate": str(doc.posting_date) if doc.posting_date else None,
-		"completedAt": str(doc.get("custom_date_livraison") or "") or None,
+		"completedAt": _stop_completed_at(doc),
 		"sequence": sequence,
 		"items": items,
 		"failureReason": next(
@@ -515,6 +559,7 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 			None,
 		),
 	}
+	return _apply_commune_coordinates(payload, geocode_if_missing=False)
 
 
 def _route_state(doc) -> str:
@@ -526,7 +571,7 @@ def _gps_collection_warning(stops: list[dict[str, Any]]) -> str | None:
 	if not missing:
 		return None
 	return _(
-		"{0} client(s) sans GPS : publication manuelle autorisée, itinéraire et optimisation indisponibles."
+		"{0} client(s) sans GPS : le livreur collectera la position ; l'itinéraire utilise le centre de la commune."
 	).format(len(missing))
 
 
@@ -886,19 +931,25 @@ def _routing_points(doc) -> tuple[dict[str, Any], list[dict[str, Any]], list[lis
 	stops = _serialize_route(doc)["stops"]
 	if not stops:
 		raise RoutingConfigurationError(_("La tournée ne contient aucun arrêt."))
-	missing = [
-		f"{stop['customerName']} ({stop['deliveryNote']})"
-		for stop in stops
-		if stop.get("requiresCustomerGeolocation")
-	]
+	resolved: list[dict[str, Any]] = []
+	missing: list[str] = []
+	for stop in stops:
+		try:
+			_apply_commune_coordinates(stop, geocode_if_missing=True)
+		except GeocodingError as error:
+			raise RoutingConfigurationError(str(error))
+		if not _optional_geo_coordinates(stop.get("latitude"), stop.get("longitude")):
+			missing.append(f"{stop['customerName']} ({stop['deliveryNote']})")
+			continue
+		resolved.append(stop)
 	if missing:
 		raise RoutingConfigurationError(
-			_("Coordonnées GPS client à collecter pour : {0}.").format(", ".join(missing))
+			_("Aucune coordonnée exploitable (GPS client ou commune) pour : {0}.").format(", ".join(missing))
 		)
 	coordinates = [[depot["longitude"], depot["latitude"]]]
-	coordinates.extend([[stop["longitude"], stop["latitude"]] for stop in stops])
+	coordinates.extend([[stop["longitude"], stop["latitude"]] for stop in resolved])
 	coordinates.append([depot["longitude"], depot["latitude"]])
-	return depot, stops, coordinates
+	return depot, resolved, coordinates
 
 
 def _routing_error(error: Exception):
@@ -998,16 +1049,10 @@ def apply_route_optimization(route_id, ordered_delivery_notes, expected_revision
 	"""Applique atomiquement une proposition confirmée et invalide l'ancien tracé."""
 	_require(PLANNING_ROLES)
 	_require_routing_schema()
-	if isinstance(ordered_delivery_notes, str):
-		try:
-			ordered_delivery_notes = json.loads(ordered_delivery_notes)
-		except json.JSONDecodeError:
-			frappe.throw(_("L'ordre optimisé est invalide."))
-	if not isinstance(ordered_delivery_notes, list):
-		frappe.throw(_("L'ordre optimisé est invalide."))
-	ordered = [str(name or "").strip() for name in ordered_delivery_notes]
-	if not ordered or any(not name for name in ordered) or len(ordered) != len(set(ordered)):
-		frappe.throw(_("L'ordre optimisé contient un doublon ou un bon invalide."))
+	ordered = _parse_delivery_note_order(
+		ordered_delivery_notes,
+		_("L'ordre optimisé est invalide."),
+	)
 
 	_lock_route(str(route_id or ""))
 	doc = _routing_route(route_id, expected_revision)
@@ -1019,12 +1064,63 @@ def apply_route_optimization(route_id, ordered_delivery_notes, expected_revision
 		return _routing_error(error)
 	if not settings.optimization_enabled:
 		frappe.throw(_("L'optimisation du routage est désactivée dans Paramètres Livraison."))
+	_apply_stop_order(
+		doc,
+		ordered,
+		mismatch_message=_("La liste des arrêts a changé. Recalculez la proposition."),
+	)
+	_bump_route_revision(doc)
+	doc.save(ignore_permissions=True)
+	return _serialize_route(doc)
+
+
+def _parse_delivery_note_order(ordered_delivery_notes, invalid_message: str) -> list[str]:
+	if isinstance(ordered_delivery_notes, str):
+		try:
+			ordered_delivery_notes = json.loads(ordered_delivery_notes)
+		except json.JSONDecodeError:
+			frappe.throw(invalid_message)
+	if not isinstance(ordered_delivery_notes, list):
+		frappe.throw(invalid_message)
+	ordered = [str(name or "").strip() for name in ordered_delivery_notes]
+	if not ordered or any(not name for name in ordered) or len(ordered) != len(set(ordered)):
+		frappe.throw(invalid_message)
+	return ordered
+
+
+def _apply_stop_order(doc, ordered_names: list[str], mismatch_message: str | None = None):
 	rows_by_name = {row.bon_de_livraison: row for row in doc.bons_de_livraison or []}
-	if len(rows_by_name) != len(doc.bons_de_livraison or []) or set(ordered) != set(rows_by_name):
-		frappe.throw(_("La liste des arrêts a changé. Recalculez la proposition."))
-	doc.set("bons_de_livraison", [rows_by_name[name] for name in ordered])
+	if len(rows_by_name) != len(doc.bons_de_livraison or []) or set(ordered_names) != set(rows_by_name):
+		frappe.throw(mismatch_message or _("La liste des arrêts a changé. Actualisez la tournée."))
+	doc.set("bons_de_livraison", [rows_by_name[name] for name in ordered_names])
 	for index, row in enumerate(doc.bons_de_livraison, start=1):
 		row.idx = index
+
+
+def _next_remaining_order(current_names: list[str], statuses: dict[str, str], delivery_note: str) -> list[str]:
+	if delivery_note not in current_names:
+		frappe.throw(_("Ce bon de livraison n'appartient pas à la tournée."), frappe.PermissionError)
+	if (statuses.get(delivery_note) or "") in TERMINAL_STOP_STATES:
+		frappe.throw(_("Cet arrêt est déjà clôturé."))
+	completed = [name for name in current_names if (statuses.get(name) or "") in TERMINAL_STOP_STATES]
+	remaining = [name for name in current_names if (statuses.get(name) or "") not in TERMINAL_STOP_STATES]
+	return completed + [delivery_note] + [name for name in remaining if name != delivery_note]
+
+
+@frappe.whitelist()
+def reorder_route_stops(route_id, ordered_delivery_notes, expected_revision=None):
+	"""Réécrit l'ordre officiel des arrêts d'une tournée brouillon (jugement du planificateur)."""
+	_require(PLANNING_ROLES)
+	_require_schema()
+	ordered = _parse_delivery_note_order(
+		ordered_delivery_notes,
+		_("L'ordre des arrêts contient un doublon ou un bon invalide."),
+	)
+	_lock_route(str(route_id or ""))
+	doc = _routing_route(route_id, expected_revision)
+	if _route_state(doc) != "Brouillon":
+		frappe.throw(_("Seule une tournée en brouillon peut être réordonnée."))
+	_apply_stop_order(doc, ordered)
 	_bump_route_revision(doc)
 	doc.save(ignore_permissions=True)
 	return _serialize_route(doc)
@@ -2015,6 +2111,42 @@ def _refresh_route_lifecycle(route):
 
 
 @frappe.whitelist()
+def select_next_delivery_stop(route_id, delivery_note, expected_revision=None):
+	"""Place un arrêt restant en tête de file sans figer la révision acceptée."""
+	_require(DRIVER_ROLES)
+	_require_schema()
+	delivery_note = str(delivery_note or "").strip()
+	route_id = str(route_id or "").strip()
+	if not route_id or not frappe.db.exists("Livraison", route_id):
+		frappe.throw(_("Tournée introuvable."))
+	_lock_route(route_id)
+	doc = frappe.get_doc("Livraison", route_id)
+	_assert_driver_route(doc)
+	if _route_state(doc) != "En cours":
+		frappe.throw(_("La tournée doit être en cours pour choisir le prochain arrêt."))
+	if expected_revision not in (None, "") and cint(expected_revision) != cint(doc.revision):
+		frappe.throw(_("La tournée a été révisée. Actualisez-la avant de changer l'ordre."))
+	current_names = [row.bon_de_livraison for row in doc.bons_de_livraison or [] if row.bon_de_livraison]
+	status_rows = (
+		frappe.get_all(
+			"Delivery Note",
+			filters={"name": ["in", current_names]},
+			fields=["name", "custom_statut"],
+		)
+		if current_names
+		else []
+	)
+	statuses = {row.name: str(row.custom_statut or "") for row in status_rows}
+	ordered = _next_remaining_order(current_names, statuses, delivery_note)
+	if ordered == current_names:
+		return _serialize_route(doc)
+	_apply_stop_order(doc, ordered)
+	_invalidate_route_routing(doc)
+	doc.save(ignore_permissions=True)
+	return _serialize_route(doc)
+
+
+@frappe.whitelist()
 def complete_delivery_stop(payload):
 	_require(DRIVER_ROLES)
 	_require_schema()
@@ -2096,9 +2228,15 @@ def _try_complete_route(route):
 	payment_count = frappe.db.count("Paiement Client", {"livraison": route.name, "statut_controle": ["!=", "Annulé"]})
 	if payment_count and route.get("statut_caisse") != "Validée":
 		return
+	from log.services.distribution_fulfillment import resolve_billing_exceptions
+
 	for row in route.bons_de_livraison or []:
 		if frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_statut_facturation") == "Erreur":
 			return
+		resolve_billing_exceptions(
+			row.bon_de_livraison,
+			frappe.db.get_value("Delivery Note", row.bon_de_livraison, "custom_sales_invoice"),
+		)
 	open_exceptions = frappe.db.count(
 		"Exception Distribution",
 		{"tournee": route.name, "statut": ["in", ["Ouverte", "En traitement"]]},
@@ -2339,16 +2477,6 @@ def retry_delivery_invoice(delivery_note):
 	from log.services.distribution_fulfillment import create_and_submit_invoice
 
 	invoice, invoice_status = create_and_submit_invoice(route, dn.name)
-	if invoice:
-		for exception in frappe.get_all(
-			"Exception Distribution",
-			filters={"bon_de_livraison": dn.name, "type_exception": "Facturation", "statut": ["in", ["Ouverte", "En traitement"]]},
-			pluck="name",
-		):
-			frappe.db.set_value(
-				"Exception Distribution", exception,
-				{"statut": "Résolue", "resolution": _("Facture créée : {0}").format(invoice), "resolue_par": frappe.session.user, "date_resolution": now_datetime()},
-			)
 	_try_complete_route(route)
 	return {"salesInvoice": invoice, "invoiceStatus": invoice_status, "route": _serialize_route(route)}
 

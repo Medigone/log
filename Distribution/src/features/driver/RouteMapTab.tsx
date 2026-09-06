@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { MapNextStopCard } from "@/features/driver/CurrentStopCard";
+import { RemainingStopsList } from "@/features/driver/RemainingStopsList";
+import { isStopCompleted, remainingStops } from "@/features/driver/stopHelpers";
 import { routeProgress, stopVisualState, type StopVisualState } from "@/features/driver/driverMobile";
 import { cn } from "@/lib/utils";
 import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
@@ -51,7 +52,7 @@ export function RouteMapTab({
 }) {
   const [recenterToken, setRecenterToken] = useState(0);
   const progress = routeProgress(route.stops);
-  const currentStop = route.stops[progress.currentIndex];
+  const remaining = remainingStops(route.stops);
   const located = route.stops.filter(
     (stop): stop is RouteStop & { latitude: number; longitude: number } =>
       typeof stop.latitude === "number" && typeof stop.longitude === "number",
@@ -87,9 +88,18 @@ export function RouteMapTab({
           )}
           {located.map((stop) => {
             const index = route.stops.findIndex((item) => item.deliveryNote === stop.deliveryNote);
-            const state = stopVisualState(stop, index === progress.currentIndex);
+            const state = stopVisualState(stop, false);
             return (
-              <Marker key={stop.deliveryNote} position={[stop.latitude, stop.longitude]} icon={pinIcon(state, index)}>
+              <Marker
+                key={stop.deliveryNote}
+                position={[stop.latitude, stop.longitude]}
+                icon={pinIcon(state, index)}
+                eventHandlers={{
+                  click: () => {
+                    if (canTreat && !isStopCompleted(stop)) onOpenStop(stop);
+                  },
+                }}
+              >
                 <Popup>
                   <strong>
                     {stop.sequence}. {stop.customerName}
@@ -132,14 +142,15 @@ export function RouteMapTab({
 
         <div className="pointer-events-auto mt-auto rounded-t-[22px] bg-background px-4 pt-3.5 shadow-[0_-8px_24px_-12px_rgba(9,9,11,0.3)]">
           <span className="mx-auto mb-3 block h-1 w-9 rounded-full bg-border" />
-          {currentStop ? (
-            <MapNextStopCard
-              stop={currentStop}
-              index={progress.currentIndex + 1}
-              routeId={route.name}
-              canTreat={canTreat}
-              onOpen={onOpenStop}
-            />
+          {remaining.length ? (
+            <div className="max-h-56 overflow-y-auto pb-1">
+              <RemainingStopsList
+                stops={remaining}
+                canTreat={canTreat}
+                compact
+                onSelect={onOpenStop}
+              />
+            </div>
           ) : (
             <p className="pb-3 text-center text-sm text-muted-foreground">Tous les arrêts sont traités.</p>
           )}

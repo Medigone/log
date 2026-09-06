@@ -134,6 +134,9 @@ class TestDistributionFulfillment(unittest.TestCase):
 		doc.name = "DN-1"
 		doc.items = [item]
 		doc.meta.has_field.return_value = True
+		doc.get.side_effect = lambda field, default=None: getattr(doc, field, default)
+		doc.custom_date_livraison = None
+		doc.custom_user_livraison = None
 		line = frappe._dict(delivery_note="DN-1", delivery_note_item="dni-1", loaded_qty=10, delivered_qty=0)
 		route = frappe._dict(lignes_chargement=[line])
 
@@ -144,6 +147,8 @@ class TestDistributionFulfillment(unittest.TestCase):
 			patch.object(fulfillment, "refresh_route_stock_totals"),
 			patch.object(fulfillment, "today", return_value="2026-08-25"),
 			patch.object(fulfillment, "nowtime", return_value="12:00:00"),
+			patch.object(fulfillment, "now_datetime", return_value="2026-08-25 12:00:00"),
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="livreur@example.com")),
 			patch.object(fulfillment.frappe, "copy_doc") as copy_doc,
 		):
 			result = fulfillment.finalize_delivery_document(route, doc, "partial")
@@ -153,6 +158,8 @@ class TestDistributionFulfillment(unittest.TestCase):
 		copy_doc.assert_not_called()
 		self.assertIsNone(result["residualDeliveryNote"])
 		self.assertEqual(doc.custom_statut, "Partiellement Livré")
+		self.assertEqual(doc.custom_date_livraison, "2026-08-25 12:00:00")
+		self.assertEqual(doc.custom_user_livraison, "livreur@example.com")
 		self.assertEqual(line.delivered_qty, 4)
 		self.assertFalse(hasattr(fulfillment, "_create_residual_delivery_note"))
 
@@ -161,12 +168,17 @@ class TestDistributionFulfillment(unittest.TestCase):
 		doc.name = "DN-FAIL"
 		doc.items = [_Row(name="dni-1", qty=10, custom_quantite_livree=0)]
 		doc.meta.has_field.return_value = True
+		doc.get.side_effect = lambda field, default=None: getattr(doc, field, default)
+		doc.custom_date_livraison = None
+		doc.custom_user_livraison = None
 		route = frappe._dict(lignes_chargement=[])
 
 		with (
 			patch.object(fulfillment, "_save_distribution_doc") as save,
 			patch.object(fulfillment, "_submit_distribution_doc") as submit,
 			patch.object(fulfillment, "_apply_delivered_quantities_for_submit") as apply_qty,
+			patch.object(fulfillment, "now_datetime", return_value="2026-08-25 12:05:00"),
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="livreur@example.com")),
 		):
 			result = fulfillment.finalize_delivery_document(route, doc, "failed")
 
@@ -174,6 +186,7 @@ class TestDistributionFulfillment(unittest.TestCase):
 		submit.assert_not_called()
 		apply_qty.assert_not_called()
 		self.assertEqual(doc.custom_statut, "Non Livré")
+		self.assertEqual(doc.custom_date_livraison, "2026-08-25 12:05:00")
 		self.assertEqual(result["invoiceStatus"], "not_applicable")
 
 	def test_sales_order_item_names_include_pick_list_rows_dropped_from_dn(self):
@@ -373,6 +386,7 @@ class TestDistributionFulfillment(unittest.TestCase):
 			patch.object(fulfillment.frappe.db, "savepoint"),
 			patch.object(fulfillment, "today", return_value="2026-08-28"),
 			patch.object(fulfillment, "nowtime", return_value="12:00:00"),
+			patch.object(fulfillment, "resolve_billing_exceptions"),
 			patch(
 				"erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice",
 				fake_make,
@@ -386,6 +400,40 @@ class TestDistributionFulfillment(unittest.TestCase):
 		self.assertEqual(status, "created")
 		invoice.insert.assert_called_once_with(ignore_permissions=True)
 		invoice.submit.assert_called_once()
+
+	def test_create_and_submit_invoice_closes_open_billing_exception(self):
+		with (
+			patch.object(fulfillment.frappe.db, "get_value", return_value="SINV-1"),
+			patch.object(fulfillment.frappe.db, "set_value"),
+			patch.object(fulfillment, "resolve_billing_exceptions") as resolve,
+		):
+			name, status = fulfillment.create_and_submit_invoice(frappe._dict(name="LIV-1"), "DN-1")
+		self.assertEqual((name, status), ("SINV-1", "created"))
+		resolve.assert_called_once_with("DN-1", "SINV-1")
+
+	def test_resolve_billing_exceptions_marks_open_rows_resolved(self):
+		def fake_get_all(doctype, *args, **kwargs):
+			if doctype == "Exception Distribution":
+				return ["EXC-1"]
+			return []
+
+		with (
+			patch.object(fulfillment.frappe, "get_all", side_effect=fake_get_all),
+			patch.object(fulfillment.frappe.db, "set_value") as set_value,
+			patch.object(fulfillment, "now_datetime", return_value="2026-09-06 23:50:00"),
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="caissier@example.com")),
+		):
+			fulfillment.resolve_billing_exceptions("DN-1", "SINV-1")
+		set_value.assert_called_once_with(
+			"Exception Distribution",
+			"EXC-1",
+			{
+				"statut": "Résolue",
+				"resolution": "Facture créée : SINV-1",
+				"resolue_par": "caissier@example.com",
+				"date_resolution": "2026-09-06 23:50:00",
+			},
+		)
 
 
 class TestReturnControlMetrics(unittest.TestCase):

@@ -63,7 +63,7 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
 
   return (
     <div>
-      <div className="h-80 overflow-hidden rounded-lg border border-hairline bg-surface-subtle">
+      <div className="relative isolate z-0 h-80 overflow-hidden rounded-lg border border-hairline bg-surface-subtle">
         <MapContainer
           center={center}
           zoom={markerPoints.length ? 11 : 7}
@@ -102,6 +102,12 @@ export function RouteMap({ stops, depot, routing }: RouteMapProps) {
                 <strong>{getStopVisualStyle(stop.status).label}</strong>
                 <br />
                 {formatMoney(stop.amountCollected)} encaissé(s) · {formatMoney(stop.amountToCollect)} restant
+                {stop.geolocationSource === "commune" ? (
+                  <>
+                    <br />
+                    Position approximative (commune)
+                  </>
+                ) : null}
               </Popup>
             </Marker>
           ))}

@@ -27,6 +27,14 @@ export function isStopCompleted(stop: Pick<RouteStop, "status">) {
   return COMPLETED_STOP_STATUSES.includes(stop.status);
 }
 
+export function remainingStops<T extends Pick<RouteStop, "status">>(stops: T[]) {
+  return stops.filter((stop) => !isStopCompleted(stop));
+}
+
+export function completedStops<T extends Pick<RouteStop, "status">>(stops: T[]) {
+  return stops.filter((stop) => isStopCompleted(stop));
+}
+
 export function stopFormKey(routeId: string, deliveryNote: string) {
   return `intrapro-distribution.stop-form.${routeId}.${deliveryNote}`;
 }

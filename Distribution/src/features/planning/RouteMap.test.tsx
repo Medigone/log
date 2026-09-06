@@ -72,4 +72,12 @@ describe("RouteMap", () => {
     expect(marker).toHaveAttribute("data-icon-html", expect.stringContaining("✓"));
     expect(screen.getByText("Livré")).toBeInTheDocument();
   });
+
+  it("signale une position approximative quand le GPS vient de la commune", () => {
+    render(<RouteMap
+      stops={[{ ...stop, geolocationSource: "commune", requiresCustomerGeolocation: true, customerGpsStatus: "missing" }]}
+      routing={{ status: "not_calculated", provider: "openrouteservice", profile: "driving-car", optimizationEnabled: false }}
+    />);
+    expect(screen.getByText(/position approximative \(commune\)/i)).toBeInTheDocument();
+  });
 });

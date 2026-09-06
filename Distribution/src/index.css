@@ -255,6 +255,12 @@
   }
 }
 
+/* Leaflet panes/controls use z-index 200–1000 and would sit above Dialog (z-50). */
+.leaflet-container {
+  isolation: isolate;
+  z-index: 0;
+}
+
 .distribution-map-marker,
 .distribution-map-depot {
   background: transparent;

@@ -246,7 +246,14 @@ def _grouped_order_lines(grouped: dict[str, float], valid: dict, attribution_by_
 def _validate_delivery_date(value: Any) -> str:
 	if not value:
 		frappe.throw(_("La date de livraison souhaitée est obligatoire."))
-	requested = getdate(value)
+	requested = _iso_date(value)
+	if requested is None:
+		try:
+			requested = getdate(value)
+		except Exception:
+			requested = None
+	if not requested:
+		frappe.throw(_("La date de livraison est invalide."))
 	if requested < getdate(today()):
 		frappe.throw(_("La date de livraison ne peut pas être antérieure à aujourd'hui."))
 	return cstr(requested)
@@ -972,6 +979,7 @@ def get_portal_context():
 		"currency": _currency(customer, company),
 		**_gps_context(customer),
 		"mustChangePassword": bool(cint(user.get(PASSWORD_CHANGE_FIELD))),
+		"today": today(),
 		"balances": _balance_rows(customer_name),
 		"inProgressOrders": _in_progress_order_ids(customer_name),
 		"unreadNotifications": _unread_notifications(customer_name, user.name),

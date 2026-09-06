@@ -1,4 +1,4 @@
-import { documentStatusTone, formatCampaignUntil, formatDocumentStatus, formatRelativeDateTime } from "@/shared/format"
+import { calendarDay, documentStatusTone, formatCampaignUntil, formatDocumentStatus, formatRelativeDateTime, todayIso } from "@/shared/format"
 
 describe("formatDocumentStatus", () => {
   it("translates ERPNext order statuses without billing language", () => {
@@ -70,5 +70,17 @@ describe("formatRelativeDateTime", () => {
   it("falls back for empty values", () => {
     expect(formatRelativeDateTime(null)).toBe("—")
     expect(formatRelativeDateTime("")).toBe("—")
+  })
+})
+
+describe("calendarDay", () => {
+  it("keeps an ISO calendar date", () => {
+    expect(calendarDay("2026-09-06")).toBe("2026-09-06")
+    expect(calendarDay("2026-09-06T00:00:00.000Z")).toBe("2026-09-06")
+  })
+
+  it("falls back to the local calendar day", () => {
+    expect(calendarDay(null)).toBe(todayIso())
+    expect(calendarDay("06/09/2026")).toBe(todayIso())
   })
 })

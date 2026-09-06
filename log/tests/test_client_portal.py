@@ -166,6 +166,14 @@ class TestClientPortalValidation(unittest.TestCase):
 		with patch.object(client_portal, "today", return_value="2026-08-28"), patch.object(client_portal, "_", lambda value: value), patch.object(client_portal.frappe, "throw", side_effect=_raise), self.assertRaises(frappe.ValidationError):
 			client_portal._validate_delivery_date("2026-08-27")
 
+	def test_today_delivery_date_is_accepted(self):
+		with patch.object(client_portal, "today", return_value="2026-09-06"):
+			self.assertEqual(client_portal._validate_delivery_date("2026-09-06"), "2026-09-06")
+
+	def test_delivery_date_uses_calendar_day_from_iso_datetime(self):
+		with patch.object(client_portal, "today", return_value="2026-09-06"):
+			self.assertEqual(client_portal._validate_delivery_date("2026-09-06T00:00:00.000Z"), "2026-09-06")
+
 	def test_catalog_lines_exclude_disabled_and_non_sales_items(self):
 		fake = SimpleNamespace(
 			get_all=Mock(return_value=[frappe._dict(name="ART-1", stock_uom="Unité")]),

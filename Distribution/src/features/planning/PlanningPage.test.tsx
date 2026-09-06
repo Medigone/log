@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { PlanningPage } from "@/features/planning/PlanningPage";
-import { reorderStops } from "@/features/planning/routeOrder";
+import { reorderStops, sameStopOrder } from "@/features/planning/routeOrder";
 import { LIST_PAGE_SIZE } from "@/components/ui/list-pagination";
 import { chooseOption } from "@/test/chooseOption";
 import type { DeliveryNoteAssignment, DistributionRoute, PlanningBoard, RouteStop } from "@/shared/types/distribution";
@@ -204,6 +204,8 @@ describe("PlanningPage", () => {
   it("réordonne les arrêts et recalcule les séquences", () => {
     const stops = [{ deliveryNote: "DN-1", sequence: 1 }, { deliveryNote: "DN-2", sequence: 2 }] as RouteStop[];
     expect(reorderStops(stops, 1, 0).map((stop) => [stop.deliveryNote, stop.sequence])).toEqual([["DN-2", 1], ["DN-1", 2]]);
+    expect(sameStopOrder(stops, reorderStops(stops, 0, 0))).toBe(true);
+    expect(sameStopOrder(stops, reorderStops(stops, 1, 0))).toBe(false);
   });
 
   it("ouvre le panneau et affecte un BL à une nouvelle tournée", async () => {

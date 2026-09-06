@@ -21,7 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { OrderOriginIcon } from "@/features/orders/OrderOriginIcon"
 import { apiErrorMessage, useOrder, useOrderActions } from "@/shared/api"
-import { formatDate, formatMoney, todayIso } from "@/shared/format"
+import { calendarDay, formatDate, formatMoney } from "@/shared/format"
 import { useListBackPath } from "@/shared/listNavigation"
 import type { OrderLine, OrderSummary } from "@/shared/types"
 
@@ -93,7 +93,7 @@ function LineQuantity({ line, order }: { line: OrderLine; order: OrderSummary })
   )
 }
 
-export function OrderDetailPage() {
+export function OrderDetailPage({ today }: { today?: string } = {}) {
   const { orderId } = useParams()
   const navigate = useNavigate()
   const backTo = useListBackPath("/orders")
@@ -303,7 +303,7 @@ export function OrderDetailPage() {
             <Input
               id="order-delivery-date"
               type="date"
-              min={todayIso()}
+              min={calendarDay(today)}
               value={deliveryDate}
               onChange={(event) => setDeliveryDate(event.target.value)}
             />

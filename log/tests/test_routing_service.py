@@ -48,6 +48,7 @@ class TestOpenRouteServiceClient(unittest.TestCase):
 		self.assertEqual(result["geometry"]["type"], "LineString")
 		request = post.call_args
 		self.assertEqual(request.kwargs["json"]["coordinates"][0], [-0.66, 35.67])
+		self.assertEqual(request.kwargs["json"]["radiuses"], [5000, 5000])
 		self.assertEqual(request.kwargs["headers"]["Authorization"], "secret-test-key")
 		self.assertEqual(request.kwargs["headers"]["Accept"], "application/geo+json")
 		self.assertEqual(request.kwargs["timeout"], 20)
