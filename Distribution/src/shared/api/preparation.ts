@@ -222,6 +222,21 @@ export function useRecentPickLists() {
   );
 }
 
+export type PickListQueueStats = {
+  drafts: number;
+  submitted: number;
+  remainingQty: number;
+  changed: number;
+};
+
+export function usePickListQueueStats() {
+  return useFrappeGetCall<FrappeMessage<PickListQueueStats>>(
+    "log.pick_list_ops.get_pick_list_queue_stats",
+    {},
+    "distribution-pick-list-queue-stats",
+  );
+}
+
 export function useSalesOrderPickDetail(name?: string) {
   return useFrappeGetCall<FrappeMessage<SalesOrderPickDetail>>(
     "log.pick_list_ops.get_sales_order_pick_detail",

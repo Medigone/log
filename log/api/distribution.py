@@ -502,6 +502,7 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 		"qrCode": doc.get("custom_qr_image"),
 		"packageCount": max(cint(doc.get("custom_nombre_colis")), 1),
 		"postingDate": str(doc.posting_date) if doc.posting_date else None,
+		"completedAt": str(doc.get("custom_date_livraison") or "") or None,
 		"sequence": sequence,
 		"items": items,
 	}
@@ -1991,13 +1992,12 @@ def _refresh_route_lifecycle(route):
 			dn = frappe.get_doc("Delivery Note", row.bon_de_livraison)
 			planning_status = "Terminé" if dn.docstatus == 1 else "En attente retour"
 			_set_delivery_note_assignment(dn, route, planning_status)
-		from log.services.distribution_fulfillment import complete_empty_route_return
+		from log.services.distribution_fulfillment import complete_empty_route_return, declare_route_return
 
 		if complete_empty_route_return(route, persist=False):
 			empty_return_closed = True
 		else:
-			route.etat_planification = "Retour dépôt"
-			route.statut_chargement = "Retour requis"
+			declare_route_return(route, persist=False)
 	# Nested DN/payment writes can bump Livraison.modified in the same request.
 	_refresh_document_timestamp(route)
 	route.save(ignore_permissions=True)
@@ -2167,6 +2167,26 @@ def get_return_routes(date_from=None, date_to=None):
 		)
 		if flt((route.get("stock") or {}).get("remainingQuantity")) > 0
 	]
+
+
+@frappe.whitelist()
+def get_return_metrics(days=30):
+	_require(PREPARATION_ROLES)
+	_require_schema()
+	from log.services.distribution_fulfillment import return_control_metrics
+
+	return return_control_metrics(days)
+
+
+@frappe.whitelist()
+def get_return_history(date_from=None, date_to=None):
+	_require(PREPARATION_ROLES)
+	_require_schema()
+	from log.services.distribution_fulfillment import list_return_history
+
+	start = getdate(date_from or add_days(today(), -30))
+	end = getdate(date_to or today())
+	return list_return_history(start, end)
 
 
 @frappe.whitelist()

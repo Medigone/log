@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 0; background: #fafafa; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #18181b; text-decoration: none; }
+  a:hover { color: #52525b; }
+  input, select { font-family: inherit; }
+  input:focus, select:focus { outline: none; }
+  @keyframes omPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+</style>
+</helmet>
+<div style="font-family: Geist, system-ui, -apple-system, sans-serif; color: #09090b; background: #fafafa; min-height: 100vh; font-size: 14px;">
+
+  <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 20px; background: #ffffff; border-bottom: 1px solid #e4e4e7; position: sticky; top: 0; z-index: 20;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+      <div style="width: 14px; height: 12px; border: 1.5px solid currentColor; border-radius: 2px; display: flex;"><div style="width: 5px; border-right: 1.5px solid currentColor;"></div></div>
+    </div>
+    <div style="width: 1px; height: 18px; background: #e4e4e7;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717a;">
+      <span>Exploitation</span><span style="color: #d4d4d8;">/</span><span style="color: #09090b; font-weight: 500;">Livraisons</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fafafa; color: #a1a1aa; font-size: 13px; min-width: 240px; cursor: pointer;" style-hover="background: #ffffff; border-color: #d4d4d8;">
+      <div style="width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%;"></div>
+      <span>Rechercher une tournée, un client, un BL…</span>
+      <div style="flex: 1;"></div>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 5px; border: 1px solid #e4e4e7; border-radius: 4px; background: #ffffff;">⌘K</span>
+    </div>
+    <div style="width: 28px; height: 28px; border-radius: 50%; background: #18181b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">MB</div>
+  </div>
+
+  <div style="padding: 22px 20px 56px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa;">Suivi opérationnel</div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.02em;">Livraisons</span>
+          <sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+            <span style="display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; font-size: 11.5px; font-weight: 600; white-space: nowrap;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #16a34a; animation: omPulse 1.8s ease-in-out infinite;"></span>Live · {{ refreshLabel }}
+            </span>
+          </sc-if>
+          <sc-if value="{{ hasIncidents }}" hint-placeholder-val="{{ true }}">
+            <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; background: #fef2f2; color: #b91c1c; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #fecaca; white-space: nowrap;" style-hover="background: #fee2e2;" onClick="{{ toggleAlerts }}">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>{{ incidentCount }} à traiter
+            </span>
+          </sc-if>
+        </div>
+        <div style="font-size: 13px; color: #71717a;">Avancement des tournées du {{ dayLabel }} · dernier événement terrain {{ lastEventLabel }}.</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 7px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Contrôle de caisse</div>
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 6px; background: #18181b; color: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;">Ouvrir le planning <span style="opacity: 0.6;">→</span></div>
+      </div>
+    </div>
+
+    <sc-if value="{{ showAlerts }}" hint-placeholder-val="{{ false }}">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <div style="border: 1px solid #fecaca; background: #fffafa; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #7f1d1d;">Arrêts en échec</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c;">{{ failedCount }}</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">{{ failedSummary }}</div>
+          <div style="font-size: 12px; font-weight: 500; color: #b91c1c; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ focusFailed }}">Voir ces arrêts →</div>
+        </div>
+        <div style="border: 1px solid #fde68a; background: #fffdf7; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #78350f;">Départ en retard</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fffbeb; color: #a16207;">{{ lateCount }}</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">{{ lateSummary }}</div>
+          <div style="font-size: 12px; font-weight: 500; color: #a16207; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ focusLate }}">Voir ces tournées →</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 2px;">
+        <div style="width: 28px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 8px 0 0 8px; font-size: 13px; color: #52525b; cursor: pointer; background: #ffffff;" style-hover="background: #f4f4f5;" onClick="{{ prevDay }}">‹</div>
+        <div style="height: 30px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #e4e4e7; border-bottom: 1px solid #e4e4e7; background: #ffffff;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap;">{{ dayLabel }}</span>
+          <span style="font-size: 11.5px; color: #a1a1aa; white-space: nowrap;">{{ dayRelative }}</span>
+        </div>
+        <div style="width: 28px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 0 8px 8px 0; font-size: 13px; color: #52525b; cursor: pointer; background: #ffffff;" style-hover="background: #f4f4f5;" onClick="{{ nextDay }}">›</div>
+      </div>
+      <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; font-weight: 500; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;" onClick="{{ goToday }}">Aujourd’hui</div>
+      <div style="width: 1px; height: 20px; background: #e4e4e7;"></div>
+      <input type="text" placeholder="Tournée, client, BL…" value="{{ query }}" onChange="{{ onQuery }}" style="height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 13px; width: 220px; color: #09090b;" style-focus="border-color: #a1a1aa;" />
+      <sc-for list="{{ lifeChips }}" as="ch" hint-placeholder-count="4">
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid {{ ch.border }}; background: {{ ch.bg }}; color: {{ ch.color }};" onClick="{{ ch.toggle }}">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: {{ ch.dot }};"></span>{{ ch.label }}
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; opacity: 0.7;">{{ ch.count }}</span>
+        </div>
+      </sc-for>
+      <select value="{{ driver }}" onChange="{{ onDriver }}" style="height: 30px; padding: 0 8px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12px; color: #52525b; background: #ffffff; cursor: pointer;">
+        <option value="">Tous les livreurs</option>
+        <option value="LIVREUR 1">LIVREUR 1</option>
+        <option value="LIVREUR 2">LIVREUR 2</option>
+        <option value="LIVREUR 3">LIVREUR 3</option>
+      </select>
+      <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap;">{{ resultLabel }}</span>
+        <sc-if value="{{ hasFilters }}" hint-placeholder-val="{{ false }}">
+          <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser</div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ resetFilters }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Tournées du jour</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ routeCount }}</span>
+          <span style="font-size: 12px; color: #71717a;">{{ routeBreakdown }}</span>
+        </div>
+        <div style="display: flex; gap: 3px; height: 4px;">
+          <sc-for list="{{ lifeBars }}" as="b" hint-placeholder-count="3">
+            <div style="flex: {{ b.flex }}; border-radius: 999px; background: {{ b.color }};"></div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ filterLive }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Sur le terrain</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #f0fdf4; color: #15803d; white-space: nowrap;">live</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ liveCount }}</span>
+          <span style="font-size: 12px; color: #71717a;">{{ liveUnitTail }}</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: {{ livePct }}; height: 100%; background: #16a34a;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ filterDelivered }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Arrêts livrés</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap;">{{ donePct }}</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ doneStops }}</span>
+          <span style="font-size: 12px; color: #71717a;">sur {{ totalStops }} arrêts planifiés</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: {{ donePct }}; height: 100%; background: #18181b;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ filterFailed }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Échecs</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: {{ failBadgeBg }}; color: {{ failBadgeFg }}; white-space: nowrap;">{{ failBadge }}</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap; color: {{ failColor }};">{{ failedCount }}</span>
+          <span style="font-size: 12px; color: #71717a;">{{ failedUnit }}</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: {{ failPct }}; height: 100%; background: #dc2626;"></div></div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(272px, 336px); gap: 12px; align-items: start;">
+
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+          <span style="font-size: 14px; font-weight: 600;">Carte des tournées</span>
+          <div style="flex: 1;"></div>
+          <sc-for list="{{ legend }}" as="l" hint-placeholder-count="3">
+            <div style="display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: #52525b; white-space: nowrap; cursor: pointer;" onClick="{{ l.select }}">
+              <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ l.color }};"></span>{{ l.name }}
+            </div>
+          </sc-for>
+        </div>
+        <div style="position: relative; height: 296px; background: #f4f4f5; background-image: linear-gradient(#e9e9ec 1px, transparent 1px), linear-gradient(90deg, #e9e9ec 1px, transparent 1px); background-size: 44px 44px;">
+          <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: #a1a1aa;">
+            <div style="width: 34px; height: 34px; border-radius: 9px; border: 1px dashed #c4c4c8; display: flex; align-items: center; justify-content: center; font-size: 15px;">◎</div>
+            <div style="font-size: 12px; font-weight: 500; color: #71717a;">Carte temps réel (FleetMap)</div>
+            <div style="font-size: 11.5px;">Itinéraires et arrêts des tournées filtrées</div>
+          </div>
+          <sc-if value="{{ isLive }}" hint-placeholder-val="{{ true }}">
+            <div style="position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border-radius: 8px; background: #ffffff; border: 1px solid #e4e4e7; font-size: 11.5px; color: #52525b;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #16a34a; animation: omPulse 1.8s ease-in-out infinite;"></span>Positions mises à jour {{ lastEventLabel }}
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+        <div style="padding: 11px 12px; border-bottom: 1px solid #f4f4f5; display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 14px; font-weight: 600;">{{ selName }}</span>
+          <div style="flex: 1;"></div>
+          <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {{ selChipBg }}; color: {{ selChipFg }};">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ selChipDot }};"></span>{{ selLifecycle }}
+          </span>
+        </div>
+        <div style="padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+          <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 12px; border: 1px solid #e4e4e7; border-radius: 9px; background: #fafafa; font-size: 12.5px; color: #71717a; line-height: 1.5;">Sélectionnez une tournée dans le tableau.</div>
+          </sc-if>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-size: 12.5px; color: #52525b;">{{ selDriver }}</span>
+            <span style="font-size: 11.5px; color: #a1a1aa;">{{ selVehicle }} · départ {{ selStart }}</span>
+          </div>
+          </sc-if>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: baseline; gap: 6px;">
+              <span style="font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; white-space: nowrap;">{{ selDone }}</span>
+              <span style="font-size: 12px; color: #71717a;">arrêts livrés · {{ selPct }}</span>
+            </div>
+            <div style="height: 5px; border-radius: 999px; background: #f4f4f5; overflow: hidden; display: flex;">
+              <div style="width: {{ selDonePct }}; background: #18181b;"></div>
+              <div style="width: {{ selFailPct }}; background: #dc2626;"></div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px; font-size: 11.5px; color: #71717a;">
+              <span style="white-space: nowrap;">Reste {{ selRemaining }}</span>
+              <span style="color: #e4e4e7;">·</span>
+              <span style="white-space: nowrap;">Fin estimée {{ selEta }}</span>
+            </div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <div style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa;">Derniers événements</div>
+            <sc-for list="{{ selEvents }}" as="e" hint-placeholder-count="3">
+              <div style="display: flex; align-items: flex-start; gap: 8px;">
+                <span style="flex: 0 0 auto; margin-top: 3px; width: 6px; height: 6px; border-radius: 50%; background: {{ e.color }};"></span>
+                <div style="min-width: 0; display: flex; flex-direction: column; gap: 1px;">
+                  <span style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ e.text }}</span>
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #a1a1aa;">{{ e.time }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          </sc-if>
+          <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-direction: column; gap: 7px;">
+            <div style="height: 32px; display: flex; align-items: center; justify-content: center; background: #18181b; color: #ffffff; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;">Ouvrir la tournée</div>
+            <div style="display: flex; gap: 7px;">
+              <div style="flex: 1; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Appeler</div>
+              <div style="flex: 1; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Suivi client</div>
+            </div>
+          </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+        <span style="font-size: 14px; font-weight: 600;">Tournées</span>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">{{ shownCount }}</span>
+        <div style="flex: 1;"></div>
+        <span style="font-size: 12px; color: #71717a;">Cliquez une ligne pour voir ses arrêts.</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 22px minmax(0, 1.5fr) 112px 78px 168px minmax(0, 1fr) 34px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+        <div style="padding: 8px 0;"></div>
+        <div style="padding: 8px 0;">Tournée · Livreur</div>
+        <div style="padding: 8px 0;">État</div>
+        <div style="padding: 8px 0;">Départ</div>
+        <div style="padding: 8px 0;">Avancement</div>
+        <div style="padding: 8px 0 8px 14px;">Dernier événement</div>
+        <div style="padding: 8px 0;"></div>
+      </div>
+
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="3">
+        <div>
+          <div style="display: grid; grid-template-columns: 22px minmax(0, 1.5fr) 112px 78px 168px minmax(0, 1fr) 34px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; cursor: pointer; background: {{ r.bg }};" style-hover="background: #fafafa;" onClick="{{ r.select }}">
+            <div style="padding: 10px 0;"><span style="display: block; width: 8px; height: 8px; border-radius: 50%; background: {{ r.color }};"></span></div>
+            <div style="padding: 10px 8px 10px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.name }}</span>
+              <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.driver }} · {{ r.vehicle }}</span>
+            </div>
+            <div style="padding: 10px 8px 10px 0;">
+              <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {{ r.chipBg }}; color: {{ r.chipFg }};">
+                <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.chipDot }};"></span>{{ r.lifecycle }}
+              </span>
+            </div>
+            <div style="padding: 10px 0; font-family: 'Geist Mono', monospace; font-size: 12px; white-space: nowrap; color: {{ r.startColor }};">{{ r.start }}</div>
+            <div style="padding: 10px 8px 10px 0; display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; min-width: 40px; height: 5px; border-radius: 999px; background: #f4f4f5; overflow: hidden; display: flex;">
+                <div style="width: {{ r.donePct }}; background: #18181b;"></div>
+                <div style="width: {{ r.failPct }}; background: #dc2626;"></div>
+              </div>
+              <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; white-space: nowrap; flex: 0 0 auto; color: {{ r.progColor }};">{{ r.progress }}</span>
+            </div>
+            <div style="padding: 10px 0 10px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span style="font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{ r.eventColor }};">{{ r.event }}</span>
+              <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #a1a1aa; white-space: nowrap;">{{ r.eventTime }}</span>
+            </div>
+            <div style="padding: 10px 0; text-align: right; color: #a1a1aa; font-size: 15px;">⋯</div>
+          </div>
+
+          <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 10px 12px 14px 34px; border-bottom: 1px solid #f4f4f5; background: #fcfcfc; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">Arrêts</span>
+                <span style="font-size: 12px; color: #a1a1aa;">{{ r.stopsLabel }}</span>
+                <div style="flex: 1;"></div>
+                <span style="font-size: 11.5px; font-weight: 500; color: #18181b; cursor: pointer;" style-hover="text-decoration: underline;">Ouvrir la tournée →</span>
+              </div>
+              <div style="border: 1px solid #e4e4e7; border-radius: 9px; overflow: hidden; background: #ffffff;">
+                <div style="display: grid; grid-template-columns: 44px minmax(0, 1.3fr) minmax(0, 1fr) 118px 96px 76px; padding: 0 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #71717a;">
+                  <div style="padding: 7px 0;">N°</div>
+                  <div style="padding: 7px 0;">Client · BL</div>
+                  <div style="padding: 7px 0;">Lieu</div>
+                  <div style="padding: 7px 0;">Statut</div>
+                  <div style="padding: 7px 0;">Heure</div>
+                  <div style="padding: 7px 0; text-align: right;">Carte</div>
+                </div>
+                <sc-for list="{{ r.stops }}" as="st" hint-placeholder-count="4">
+                  <div style="display: grid; grid-template-columns: 44px minmax(0, 1.3fr) minmax(0, 1fr) 118px 96px 76px; padding: 0 10px; align-items: center; border-bottom: 1px solid #f4f4f5;">
+                    <div style="padding: 8px 0;">
+                      <span style="display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 700; border: 1.5px solid {{ st.iconBorder }}; background: {{ st.iconBg }}; color: {{ st.iconColor }};">{{ st.glyph }}</span>
+                    </div>
+                    <div style="padding: 8px 8px 8px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                      <span style="font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ st.client }}</span>
+                      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ st.dn }}</span>
+                    </div>
+                    <div style="padding: 8px 8px 8px 0; font-size: 12px; color: #52525b; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ st.place }}</div>
+                    <div style="padding: 8px 8px 8px 0;">
+                      <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {{ st.chipBg }}; color: {{ st.chipFg }};">
+                        <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ st.chipDot }};"></span>{{ st.status }}
+                      </span>
+                    </div>
+                    <div style="padding: 8px 0; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #52525b; white-space: nowrap;">{{ st.time }}</div>
+                    <div style="padding: 8px 0; text-align: right; font-size: 11.5px; font-weight: 500; color: #52525b; cursor: pointer;" style-hover="text-decoration: underline;">{{ st.mapLabel }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ r.hasFailure }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; align-items: center; gap: 8px; padding: 9px 11px; border: 1px solid #fecaca; background: #fffafa; border-radius: 9px;">
+                  <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626; flex: 0 0 auto;"></span>
+                  <span style="font-size: 12px; color: #7f1d1d; min-width: 0;">{{ r.failureText }}</span>
+                  <div style="flex: 1;"></div>
+                  <div style="height: 26px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; background: #18181b; color: #ffffff; font-size: 11.5px; font-weight: 500; cursor: pointer; white-space: nowrap;">Replanifier le BL</div>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 44px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+          <div style="width: 36px; height: 36px; border-radius: 10px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 15px;">◎</div>
+          <div style="font-size: 13px; font-weight: 600;">{{ emptyTitle }}</div>
+          <div style="font-size: 12.5px; color: #71717a; max-width: 380px; line-height: 1.55;">{{ emptyBody }}</div>
+          <div style="margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+            <div style="height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser les filtres</div>
+            <div style="height: 30px; padding: 0 12px; display: flex; align-items: center; border-radius: 8px; background: #18181b; color: #ffffff; font-size: 12.5px; font-weight: 500; cursor: pointer;">Ouvrir le planning</div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;dayState&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;complet&quot;,&quot;vide&quot;],&quot;default&quot;:&quot;complet&quot;,&quot;tsType&quot;:&quot;'complet' | 'vide'&quot;,&quot;section&quot;:&quot;Données&quot;},&quot;alertStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compact&quot;,&quot;cartes&quot;],&quot;default&quot;:&quot;compact&quot;,&quot;tsType&quot;:&quot;'compact' | 'cartes'&quot;,&quot;section&quot;:&quot;Anomalies&quot;}}">
+const TODAY = '2026-09-05';
+
+const STOPS_21 = [
+  { seq: 1, client: 'CLIENT 2 · Dépôt Est', dn: 'MAT-DN-2026-00003', place: 'Bir El Djir, Oran', status: 'Livré', time: '08:42' },
+  { seq: 2, client: 'CLIENT 2 · Boutique Centre', dn: 'MAT-DN-2026-00004', place: 'Oran, Oran', status: 'Livré', time: '09:26' },
+  { seq: 3, client: 'CLIENT 4 · Superette', dn: 'MAT-DN-2026-00014', place: 'Es Sénia, Oran', status: 'Livré', time: '10:11' },
+  { seq: 4, client: 'CLIENT 5 · Épicerie Nord', dn: 'MAT-DN-2026-00015', place: 'Oran, Oran', status: 'Échec', time: '10:38' },
+  { seq: 5, client: 'CLIENT 2 · Entrepôt Sud', dn: 'MAT-DN-2026-00016', place: 'Arzew, Oran', status: 'À livrer', time: '—' }
+];
+
+const STOPS_20 = [
+  { seq: 1, client: 'CLIENT 1 · Magasin', dn: 'MAT-DN-2026-00010', place: 'Mostaganem', status: 'Livré', time: '08:05' },
+  { seq: 2, client: 'CLIENT 1 · Dépôt', dn: 'MAT-DN-2026-00011', place: 'Mostaganem', status: 'Livré', time: '08:51' },
+  { seq: 3, client: 'CLIENT 3 · Superette', dn: 'MAT-DN-2026-00012', place: 'Aïn Tédelès', status: 'Livré', time: '09:40' },
+  { seq: 4, client: 'CLIENT 3 · Kiosque', dn: 'MAT-DN-2026-00013', place: 'Mostaganem', status: 'Livré', time: '10:22' }
+];
+
+const STOPS_19 = [
+  { seq: 1, client: 'CLIENT 1 · Magasin', dn: 'MAT-DN-2026-00002', place: 'Mostaganem', status: 'À livrer', time: '—' },
+  { seq: 2, client: 'CLIENT 6 · Boutique', dn: 'MAT-DN-2026-00017', place: 'Mostaganem', status: 'À livrer', time: '—' },
+  { seq: 3, client: 'CLIENT 6 · Dépôt', dn: 'MAT-DN-2026-00018', place: 'Sidi Ali', status: 'À livrer', time: '—' }
+];
+
+const ROUTES = [
+  {
+    name: 'TR-2026-00021', driver: 'LIVREUR 1', vehicle: 'Renault Traffic · 0001-320-31',
+    lifecycle: 'En cours', start: '08:00', startLate: false, color: '#2563eb',
+    eta: '12:20', event: 'Échec · CLIENT 5 absent', eventTone: 'danger', eventTime: 'il y a 12 min',
+    stops: STOPS_21,
+    events: [
+      { text: 'Échec · CLIENT 5 absent', time: '10:38 · il y a 12 min', tone: 'danger' },
+      { text: 'Livré · CLIENT 4 Superette', time: '10:11', tone: 'ok' },
+      { text: 'Livré · CLIENT 2 Boutique Centre', time: '09:26', tone: 'ok' }
+    ]
+  },
+  {
+    name: 'TR-2026-00020', driver: 'LIVREUR 2', vehicle: 'Renault Kangoo · 002-320-31',
+    lifecycle: 'Retour dépôt', start: '07:45', startLate: false, color: '#16a34a',
+    eta: '11:10', event: 'Retour dépôt engagé', eventTone: 'neutral', eventTime: 'il y a 28 min',
+    stops: STOPS_20,
+    events: [
+      { text: 'Retour dépôt engagé', time: '10:22 · il y a 28 min', tone: 'neutral' },
+      { text: 'Livré · CLIENT 3 Kiosque', time: '10:22', tone: 'ok' },
+      { text: 'Livré · CLIENT 3 Superette', time: '09:40', tone: 'ok' }
+    ]
+  },
+  {
+    name: 'TR-2026-00019', driver: 'LIVREUR 3', vehicle: 'Berlingo · 002-226-31',
+    lifecycle: 'Publiée', start: '07:30', startLate: true, color: '#d97706',
+    eta: '—', event: 'Départ non confirmé', eventTone: 'warn', eventTime: 'retard 3 h 20',
+    stops: STOPS_19,
+    events: [
+      { text: 'Départ non confirmé', time: 'prévu 07:30 · retard 3 h 20', tone: 'warn' },
+      { text: 'Tournée publiée', time: 'hier 17:04', tone: 'neutral' }
+    ]
+  }
+];
+
+const LIFE = {
+  'Publiée': { bg: '#eff6ff', fg: '#1d4ed8', dot: '#3b82f6' },
+  'En cours': { bg: '#f0fdf4', fg: '#15803d', dot: '#16a34a' },
+  'Retour dépôt': { bg: '#fffbeb', fg: '#a16207', dot: '#d97706' },
+  'Terminée': { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa' }
+};
+
+const STOP_STATE = {
+  'Livré': { bg: '#f0fdf4', fg: '#15803d', dot: '#16a34a', glyph: '✓', iconBorder: '#16a34a', iconBg: '#dcfce7', iconColor: '#15803d' },
+  'Échec': { bg: '#fef2f2', fg: '#b91c1c', dot: '#dc2626', glyph: '✕', iconBorder: '#dc2626', iconBg: '#fee2e2', iconColor: '#b91c1c' },
+  'À livrer': { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa', glyph: '○', iconBorder: '#d4d4d8', iconBg: '#ffffff', iconColor: '#a1a1aa' }
+};
+
+const EVENT_COLOR = { danger: '#dc2626', warn: '#d97706', ok: '#16a34a', neutral: '#a1a1aa' };
+const EVENT_TEXT = { danger: '#b91c1c', warn: '#a16207', ok: '#09090b', neutral: '#52525b' };
+const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
+function fmt(iso) {
+  const p = iso.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+function shift(iso, days) {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+/** "1 arrêt" / "3 arrêts" — French agreement for the counted nouns used on this page. */
+function plural(n, singular, pluralForm) {
+  return n + ' ' + (n > 1 ? (pluralForm || singular + 's') : singular);
+}
+
+function count(route, status) {
+  return route.stops.filter(s => s.status === status).length;
+}
+
+class Component extends DCLogic {
+  state = { date: TODAY, query: '', life: {}, driver: '', focus: 'all', sel: 'TR-2026-00021', open: 'TR-2026-00021', alerts: null };
+
+  passes(r) {
+    const s = this.state;
+    const q = s.query.trim().toLowerCase();
+    if (q) {
+      const hay = [r.name, r.driver, r.vehicle].concat(r.stops.map(st => st.client + ' ' + st.dn + ' ' + st.place)).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    const lifeKeys = Object.keys(s.life);
+    if (lifeKeys.length && !s.life[r.lifecycle]) return false;
+    if (s.driver && r.driver !== s.driver) return false;
+    if (s.focus === 'live' && r.lifecycle !== 'En cours') return false;
+    if (s.focus === 'failed' && count(r, 'Échec') === 0) return false;
+    if (s.focus === 'delivered' && count(r, 'Livré') === 0) return false;
+    if (s.focus === 'late' && !r.startLate) return false;
+    return true;
+  }
+
+  renderVals() {
+    const s = this.state;
+    const empty = (this.props.dayState || 'complet') === 'vide' || s.date !== TODAY;
+    const all = empty ? [] : ROUTES;
+    const shown = all.filter(r => this.passes(r));
+
+    const totalStops = all.reduce((n, r) => n + r.stops.length, 0);
+    const doneStops = all.reduce((n, r) => n + count(r, 'Livré'), 0);
+    const failedStops = all.reduce((n, r) => n + count(r, 'Échec'), 0);
+    const liveRoutes = all.filter(r => r.lifecycle === 'En cours');
+    const liveRemaining = liveRoutes.reduce((n, r) => n + count(r, 'À livrer'), 0);
+    const lateRoutes = all.filter(r => r.startLate);
+    const donePct = totalStops ? Math.round((doneStops / totalStops) * 100) : 0;
+    const alertsOpen = s.alerts === 'ouvert' || (s.alerts === null && (this.props.alertStyle || 'compact') === 'cartes');
+
+    const lifeCounts = {};
+    all.forEach(r => { lifeCounts[r.lifecycle] = (lifeCounts[r.lifecycle] || 0) + 1; });
+    const lifeOrder = ['Publiée', 'En cours', 'Retour dépôt', 'Terminée'];
+
+    const lifeChips = lifeOrder.filter(k => lifeCounts[k]).map(k => {
+      const on = !!s.life[k];
+      return {
+        label: k, count: lifeCounts[k], dot: LIFE[k].dot,
+        border: on ? '#18181b' : '#e4e4e7',
+        bg: on ? '#18181b' : '#ffffff',
+        color: on ? '#ffffff' : '#52525b',
+        toggle: () => this.setState(v => {
+          const life = Object.assign({}, v.life);
+          if (life[k]) delete life[k]; else life[k] = true;
+          return { life, focus: 'all' };
+        })
+      };
+    });
+
+    const lifeBars = lifeOrder.filter(k => lifeCounts[k]).map(k => ({ flex: lifeCounts[k], color: LIFE[k].dot }));
+
+    const rows = shown.map(r => {
+      const done = count(r, 'Livré');
+      const fail = count(r, 'Échec');
+      const total = r.stops.length;
+      const life = LIFE[r.lifecycle];
+      return {
+        name: r.name, driver: r.driver, vehicle: r.vehicle, lifecycle: r.lifecycle, color: r.color,
+        chipBg: life.bg, chipFg: life.fg, chipDot: life.dot,
+        start: r.start,
+        startColor: r.startLate ? '#b91c1c' : '#52525b',
+        progress: done + ' / ' + total,
+        progColor: done === total ? '#15803d' : (done === 0 ? '#a1a1aa' : '#09090b'),
+        donePct: Math.round((done / total) * 100) + '%',
+        failPct: Math.round((fail / total) * 100) + '%',
+        event: r.event,
+        eventColor: EVENT_TEXT[r.eventTone],
+        eventTime: r.eventTime,
+        bg: s.sel === r.name ? '#f8f8f8' : '#ffffff',
+        open: s.open === r.name,
+        stopsLabel: plural(total, 'arrêt') + ' · ' + plural(done, 'livré') + ' · ' + plural(count(r, 'À livrer'), 'restant'),
+        hasFailure: fail > 0,
+        failureText: plural(fail, 'arrêt') + (fail > 1 ? ' en échec — les BL doivent' : ' en échec — le BL doit') + ' être replanifié ou le retour contrôlé au dépôt.',
+        stops: r.stops.map(st => {
+          const t = STOP_STATE[st.status];
+          return {
+            seq: st.seq, client: st.client, dn: st.dn, place: st.place, status: st.status, time: st.time,
+            glyph: t.glyph, iconBorder: t.iconBorder, iconBg: t.iconBg, iconColor: t.iconColor,
+            chipBg: t.bg, chipFg: t.fg, chipDot: t.dot,
+            mapLabel: st.status === 'À livrer' ? 'Itinéraire' : 'Position'
+          };
+        }),
+        select: () => this.setState({ sel: r.name, open: s.open === r.name ? '' : r.name })
+      };
+    });
+
+    const sel = all.find(r => r.name === s.sel) || shown[0] || null;
+    const selDone = sel ? count(sel, 'Livré') : 0;
+    const selFail = sel ? count(sel, 'Échec') : 0;
+    const selTotal = sel ? sel.stops.length : 0;
+    const selLife = sel ? LIFE[sel.lifecycle] : LIFE['Publiée'];
+
+    return {
+      dayLabel: fmt(s.date),
+      dayRelative: s.date === TODAY ? 'aujourd’hui' : DAYS[new Date(s.date + 'T12:00:00').getDay()],
+      refreshLabel: '10 s',
+      lastEventLabel: all.length ? 'il y a 12 min' : '—',
+      routeCount: all.length,
+      routeBreakdown: all.length
+        ? liveRoutes.length + ' en cours · ' + lateRoutes.length + (lateRoutes.length > 1 ? ' non parties' : ' non partie')
+        : 'aucune tournée publiée',
+      lifeBars, lifeChips,
+      isLive: s.date === TODAY,
+      liveCount: liveRoutes.length,
+      liveUnitTail: (liveRoutes.length > 1 ? 'véhicules' : 'véhicule') + ' · ' + plural(liveRemaining, 'arrêt') + ' restant' + (liveRemaining > 1 ? 's' : ''),
+      liveStops: liveRemaining,
+      livePct: all.length ? Math.round((liveRoutes.length / all.length) * 100) + '%' : '0%',
+      doneStops, totalStops,
+      donePct: donePct + '\u00a0%',
+      failedCount: failedStops,
+      failedUnit: failedStops === 1
+        ? 'arrêt · 1 BL à replanifier'
+        : (failedStops > 1 ? 'arrêts · ' + failedStops + ' BL à replanifier' : 'arrêt en échec'),
+      failColor: failedStops ? '#b91c1c' : '#09090b',
+      failPct: totalStops ? Math.round((failedStops / totalStops) * 100) + '%' : '0%',
+      failBadge: failedStops ? 'à traiter' : 'RAS',
+      failBadgeBg: failedStops ? '#fef2f2' : '#f4f4f5',
+      failBadgeFg: failedStops ? '#b91c1c' : '#52525b',
+      hasIncidents: failedStops + lateRoutes.length > 0,
+      incidentCount: failedStops + lateRoutes.length,
+      showAlerts: alertsOpen && all.length > 0,
+      toggleAlerts: () => this.setState({ alerts: alertsOpen ? 'ferme' : 'ouvert' }),
+      lateCount: lateRoutes.length,
+      failedSummary: failedStops
+        ? plural(failedStops, 'arrêt') + (failedStops > 1 ? ' non livrés sur ' : ' non livré sur ') + (liveRoutes[0] ? liveRoutes[0].name : '—') + ' · client absent, marchandise encore à bord.'
+        : 'Aucun échec déclaré.',
+      lateSummary: lateRoutes.length
+        ? lateRoutes[0].name + ' (' + lateRoutes[0].driver + ') n’a pas confirmé son départ prévu à ' + lateRoutes[0].start + '.'
+        : 'Tous les départs sont confirmés.',
+      focusFailed: () => this.setState({ focus: 'failed', life: {}, sel: 'TR-2026-00021', open: 'TR-2026-00021' }),
+      focusLate: () => this.setState({ focus: 'late', life: {}, sel: 'TR-2026-00019', open: 'TR-2026-00019' }),
+      legend: all.map(r => ({ name: r.name.slice(-5), color: r.color, select: () => this.setState({ sel: r.name, open: r.name }) })),
+      selName: sel ? sel.name : 'Aucune tournée',
+      selLifecycle: sel ? sel.lifecycle : '—',
+      selChipBg: selLife.bg, selChipFg: selLife.fg, selChipDot: selLife.dot,
+      selDriver: sel ? sel.driver : 'Sélectionnez une tournée dans le tableau',
+      selVehicle: sel ? sel.vehicle : '—',
+      selStart: sel ? sel.start : '—',
+      selDone: selDone + ' / ' + selTotal,
+      selPct: selTotal ? Math.round((selDone / selTotal) * 100) + '\u00a0%' : '0\u00a0%',
+      selDonePct: selTotal ? Math.round((selDone / selTotal) * 100) + '%' : '0%',
+      selFailPct: selTotal ? Math.round((selFail / selTotal) * 100) + '%' : '0%',
+      hasSelection: !!sel,
+      noSelection: !sel,
+      selRemaining: sel ? plural(count(sel, 'À livrer'), 'arrêt') : '—',
+      selEta: sel ? sel.eta : '—',
+      selEvents: sel ? sel.events.map(e => ({ text: e.text, time: e.time, color: EVENT_COLOR[e.tone] })) : [],
+      rows,
+      shownCount: shown.length + ' / ' + all.length,
+      isEmpty: shown.length === 0,
+      emptyTitle: all.length ? 'Aucune tournée pour ces filtres' : 'Aucune tournée ce jour',
+      emptyBody: all.length
+        ? 'Modifiez la recherche, le cycle de vie ou le livreur pour retrouver les ' + all.length + ' tournées du jour.'
+        : 'Aucune tournée publiée pour cette date. Préparez un planning, ou revenez au jour courant.',
+      query: s.query,
+      driver: s.driver,
+      onQuery: e => this.setState({ query: e.target.value }),
+      onDriver: e => this.setState({ driver: e.target.value }),
+      hasFilters: !!(s.query || s.driver || Object.keys(s.life).length || s.focus !== 'all'),
+      resultLabel: shown.length + ' / ' + all.length + ' tournées',
+      resetFilters: () => this.setState({ query: '', driver: '', life: {}, focus: 'all' }),
+      filterLive: () => this.setState({ focus: 'live', life: {} }),
+      filterDelivered: () => this.setState({ focus: 'delivered', life: {} }),
+      filterFailed: () => this.setState({ focus: 'failed', life: {}, sel: 'TR-2026-00021', open: 'TR-2026-00021' }),
+      prevDay: () => this.setState(v => ({ date: shift(v.date, -1) })),
+      nextDay: () => this.setState(v => ({ date: shift(v.date, 1) })),
+      goToday: () => this.setState({ date: TODAY })
+    };
+  }
+}
+
+</script>
+</body>
+</html>

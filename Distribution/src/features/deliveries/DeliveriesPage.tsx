@@ -1,29 +1,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, ArrowRight, CheckCircle2, MapPin, RotateCcw, Route, Search, Truck } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, RotateCcw, Route, Search, Truck } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { KpiTile } from "@/components/ui/kpi-tile";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar";
+import { DataTable } from "@/components/ui/data-table";
+import { DeliveriesAlertsSummary, IncidentChip } from "@/features/deliveries/DeliveriesAlertsSummary";
+import { DeliveriesKpis, type KpiFocus } from "@/features/deliveries/DeliveriesKpis";
+import { SelectedRouteRail } from "@/features/deliveries/SelectedRouteRail";
+import { StopsSubTable } from "@/features/deliveries/StopsSubTable";
+import { hasRouteEvents, lastRouteEvent, routeEvents } from "@/features/deliveries/routeEvents";
+import { routeProgressColumns } from "@/features/deliveries/routeProgressColumns";
 import { getStopVisualStyle } from "@/features/planning/stopStatus";
 import { FleetMap } from "@/features/today/FleetMap";
-import { fleetColor, isLiveRoute, stopProgress } from "@/features/today/fleetProgress";
+import { fleetColor, isLiveRoute, lateDeparture } from "@/features/today/fleetProgress";
+import { preparationChipClass } from "@/features/preparation/PreparationQueueShell";
 import { apiErrorMessage, usePlanningBoard } from "@/shared/api/distribution";
-import { routeLifecycleTone } from "@/shared/design/statusTone";
+import { formatShortDate } from "@/shared/format";
 import type { DistributionRoute, RouteLifecycle, RouteStop } from "@/shared/types/distribution";
+import { cn } from "@/lib/utils";
 
 const LIFECYCLES: RouteLifecycle[] = ["Publiée", "En cours", "Retour dépôt", "Terminée"];
 
-type KpiFocus = "all" | "live" | "delivered" | "failed";
+const LIFECYCLE_DOT: Record<string, string> = {
+  Publiée: "bg-blue-500",
+  "En cours": "bg-emerald-600",
+  "Retour dépôt": "bg-amber-500",
+  Terminée: "bg-muted-foreground/40",
+};
 
 function kpiFromParam(value: string | null): KpiFocus {
-  if (value === "live" || value === "delivered" || value === "failed") return value;
+  if (value === "live" || value === "delivered" || value === "failed" || value === "late") return value;
   return "all";
 }
 
@@ -32,11 +42,17 @@ function localDate() {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
 }
 
-function formatDateLabel(value: string) {
-  if (!value) return "";
-  const parsed = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleDateString("fr-FR");
+function addDays(iso: string, offset: number) {
+  const [year, month, day] = iso.split("-").map(Number);
+  const date = new Date(year, month - 1, day + offset);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function dayRelative(iso: string, today: string) {
+  if (iso === today) return "Aujourd’hui";
+  if (iso === addDays(today, -1)) return "Hier";
+  if (iso === addDays(today, 1)) return "Demain";
+  return "";
 }
 
 function matchesSearch(route: DistributionRoute, query: string) {
@@ -62,250 +78,191 @@ function hasFailedStop(route: DistributionRoute) {
   return route.stops.some((stop) => getStopVisualStyle(stop.status).state === "failed");
 }
 
+function toggleLifecycle(current: Set<RouteLifecycle>, value: RouteLifecycle) {
+  const next = new Set(current);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  return next;
+}
+
 export function DeliveriesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const today = localDate();
   const [date, setDate] = useState(today);
-  const [lifecycle, setLifecycle] = useState<RouteLifecycle | "">("");
+  const [lifecycle, setLifecycle] = useState<Set<RouteLifecycle>>(new Set());
   const [driver, setDriver] = useState("");
   const [search, setSearch] = useState("");
   const [kpi, setKpi] = useState<KpiFocus>(() => kpiFromParam(searchParams.get("kpi")));
   const [selected, setSelected] = useState<string>(() => searchParams.get("route") || "");
-  const allDates = !date;
-  const live = Boolean(date) && date === today;
-  const { data, error, isLoading } = usePlanningBoard(date || today, date || today, allDates ? { allDates: true } : {}, {
-    live,
-  });
+  const [expanded, setExpanded] = useState<string>(() => searchParams.get("route") || "");
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const live = date === today;
+  const { data, error, isLoading } = usePlanningBoard(date, date, {}, { live });
   const routes = data?.message.routes || [];
   const query = search.trim().toLocaleLowerCase("fr");
-  const filtersActive = Boolean(date || lifecycle || driver || search || kpi !== "all");
+  const filtersActive = Boolean(lifecycle.size || driver || search || kpi !== "all" || date !== today);
 
-  const deliveredStops = routes.flatMap((route) => route.stops).filter((stop) => getStopVisualStyle(stop.status).state === "delivered").length;
-  const failedStops = routes.flatMap((route) => route.stops).filter((stop) => getStopVisualStyle(stop.status).state === "failed").length;
-  const liveCount = routes.filter(isLiveRoute).length;
+  const failedStops = routes.flatMap((route) => route.stops).filter((stop) => getStopVisualStyle(stop.status).state === "failed");
+  const lateRoutes = routes.filter((route) => lateDeparture(route));
+  const incidentCount = failedStops.length + lateRoutes.length;
 
   const filtered = useMemo(() => {
     return routes.filter((route) => {
-      if (lifecycle && route.lifecycle !== lifecycle) return false;
+      if (lifecycle.size && !lifecycle.has(route.lifecycle)) return false;
       if (driver && route.driver !== driver) return false;
       if (kpi === "live" && !isLiveRoute(route)) return false;
       if (kpi === "delivered" && !hasDeliveredStop(route)) return false;
       if (kpi === "failed" && !hasFailedStop(route)) return false;
+      if (kpi === "late" && !lateDeparture(route)) return false;
       return matchesSearch(route, query);
     });
   }, [driver, kpi, lifecycle, query, routes]);
   const focusDn = searchParams.get("dn") || "";
 
   useEffect(() => {
-    if (focusDn) {
-      const match = filtered.find((route) => route.stops.some((stop) => stop.deliveryNote === focusDn));
-      if (match) {
-        setSelected(match.name);
-        return;
-      }
+    if (!focusDn) return;
+    const match = filtered.find((route) => route.stops.some((stop) => stop.deliveryNote === focusDn));
+    if (match) {
+      setSelected(match.name);
+      setExpanded(match.name);
     }
-    if (!filtered.some((route) => route.name === selected)) {
-      setSelected(filtered[0]?.name || "");
+  }, [filtered, focusDn]);
+
+  useEffect(() => {
+    if (selected && !filtered.some((route) => route.name === selected)) {
+      setSelected("");
+      setExpanded("");
     }
-  }, [filtered, focusDn, selected]);
+  }, [filtered, selected]);
 
   const selectedRoute = filtered.find((route) => route.name === selected);
-  const selectedProgress = selectedRoute ? stopProgress(selectedRoute) : undefined;
+  const showLastEvent = hasRouteEvents(filtered);
 
   const applyKpi = (focus: KpiFocus) => {
     setKpi(focus);
-    setLifecycle("");
+    setLifecycle(new Set());
+  };
+
+  const selectAndExpand = (name: string, collapseIfSame = false) => {
+    if (collapseIfSame && expanded === name && selected === name) {
+      setExpanded("");
+      return;
+    }
+    setSelected(name);
+    setExpanded(name);
   };
 
   const clearFilters = () => {
-    setDate("");
-    setLifecycle("");
+    setDate(today);
+    setLifecycle(new Set());
     setDriver("");
     setSearch("");
     setKpi("all");
   };
 
-  const emptyTitle = routes.length ? "Aucune tournée pour ces filtres" : date ? "Aucune tournée ce jour" : "Aucune tournée";
+  const emptyTitle = routes.length ? "Aucune tournée pour ces filtres" : "Aucune tournée ce jour";
   const emptyDescription = routes.length
     ? "Modifiez la recherche ou le cycle de vie."
-    : date
-      ? "Changez de date ou préparez un nouveau planning."
-      : "Publiez un planning pour suivre les livraisons.";
+    : "Changez de date ou préparez un nouveau planning.";
   const emptyMapDescription = routes.length
     ? "Élargissez les filtres pour afficher la carte."
-    : date
-      ? "Changez de date ou publiez un planning."
-      : "Publiez un planning pour afficher la carte.";
+    : "Changez de date ou publiez un planning.";
 
-  const routeColumns: Array<DataTableColumn<DistributionRoute>> = [
-    {
-      id: "name",
-      header: "Tournée",
-      sortValue: (route) => route.name,
-      cell: (route) => (
-        <div className="min-w-0">
-          <p className="flex items-center gap-2 font-medium">
-            <span className="size-2 shrink-0 rounded-full" style={{ background: fleetColor(filtered.indexOf(route)) }} />
-            {route.name}
-          </p>
-          <p className="truncate t-meta text-muted-foreground">
-            {route.driverName || "Livreur non affecté"} · {route.vehicleLabel || "Véhicule non affecté"}
-          </p>
-        </div>
-      ),
-    },
-    {
-      id: "lifecycle",
-      header: "État",
-      width: "140px",
-      sortValue: (route) => route.lifecycle,
-      cell: (route) => <StatusBadge tone={routeLifecycleTone(route.lifecycle)} size="sm">{route.lifecycle}</StatusBadge>,
-    },
-    {
-      id: "progress",
-      header: "Arrêts",
-      width: "110px",
-      align: "right",
-      numeric: true,
-      sortValue: (route) => stopProgress(route).percent,
-      cell: (route) => {
-        const progress = stopProgress(route);
-        return `${progress.done} / ${progress.total}`;
-      },
-    },
-    {
-      id: "percent",
-      header: "%",
-      width: "70px",
-      align: "right",
-      numeric: true,
-      hideBelow: "md",
-      sortValue: (route) => stopProgress(route).percent,
-      cell: (route) => `${stopProgress(route).percent} %`,
-    },
-  ];
+  const openRoute = (name: string) => navigate(`/planning/routes/${name}`);
+  const replanStop = (stop: RouteStop) => navigate(`/planning?select=${encodeURIComponent(stop.deliveryNote)}`);
+  const callHref = selectedRoute?.stops.find((stop) => stop.phone)?.phone;
 
-  const stopColumns: Array<DataTableColumn<RouteStop>> = [
-    {
-      id: "sequence",
-      header: "N°",
-      width: "56px",
-      numeric: true,
-      sortValue: (stop) => stop.sequence,
-      cell: (stop) => {
-        const visual = getStopVisualStyle(stop.status);
-        return (
-          <span className={`num grid size-7 place-items-center rounded-full text-xs font-semibold ${visual.sequenceClass}`}>
-            {visual.markerSymbol || stop.sequence}
-          </span>
-        );
-      },
-    },
-    {
-      id: "customer",
-      header: "Client",
-      sortValue: (stop) => stop.customerName,
-      cell: (stop) => (
-        <div className="min-w-0">
-          <p className="truncate font-medium">{stop.customerName}</p>
-          <p className="truncate t-meta text-muted-foreground">{stop.deliveryNote}</p>
-        </div>
-      ),
-    },
-    {
-      id: "place",
-      header: "Lieu",
-      hideBelow: "md",
-      sortValue: (stop) => stop.commune || stop.address || "",
-      cell: (stop) => <span className="truncate">{stop.commune || stop.address || "Adresse non renseignée"}</span>,
-    },
-    {
-      id: "status",
-      header: "Statut",
-      width: "140px",
-      sortValue: (stop) => stop.status,
-      cell: (stop) => {
-        const visual = getStopVisualStyle(stop.status);
-        return <StatusBadge tone={visual.tone} size="sm">{stop.status}</StatusBadge>;
-      },
-    },
-    {
-      id: "actions",
-      header: "",
-      width: "88px",
-      align: "right",
-      cell: (stop) => (
-        <span className="inline-flex items-center justify-end gap-1">
-          {stop.latitude != null && stop.longitude != null && (
-            <a
-              aria-label={`Ouvrir la position de ${stop.customerName}`}
-              target="_blank"
-              rel="noreferrer"
-              href={`https://www.google.com/maps/dir/?api=1&destination=${stop.latitude},${stop.longitude}`}
-              className="rounded-md p-1.5 text-brand-700 hover:bg-brand-50"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <MapPin className="size-4" />
-            </a>
-          )}
-        </span>
-      ),
-    },
-  ];
+  const columns = useMemo(
+    () =>
+      routeProgressColumns({
+        routes: filtered,
+        expanded,
+        lastEvent: showLastEvent ? lastRouteEvent : undefined,
+      }),
+    [expanded, filtered, showLastEvent],
+  );
 
   return (
     <>
       <PageHeader
         eyebrow="Suivi opérationnel"
         title="Livraisons"
-        description={
-          date
-            ? `Avancement des tournées du ${formatDateLabel(date)}.`
-            : "Avancement de toutes les tournées."
-        }
+        description={`Avancement des tournées du ${formatShortDate(date)}.`}
         meta={
-          live ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
-              <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
-              Live 10 s
-            </span>
-          ) : undefined
+          <>
+            {live ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />
+                Live · 10 s
+              </span>
+            ) : undefined}
+            <IncidentChip count={incidentCount} open={alertsOpen} onToggle={() => setAlertsOpen((open) => !open)} />
+          </>
         }
         actions={
-          <Button variant="outline" onClick={() => navigate("/planning")}>
-            Ouvrir le planning
-            <ArrowRight />
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => navigate("/cashier")}>
+              Contrôle de caisse
+            </Button>
+            <Button onClick={() => navigate("/planning")}>
+              Ouvrir le planning
+              <ArrowRight />
+            </Button>
+          </>
         }
       />
 
-      <Toolbar>
-        <InputGroup className="w-40 bg-background">
-          <InputGroupAddon>
-            <span className="text-muted-foreground">Date</span>
-          </InputGroupAddon>
-          <InputGroupInput type="date" aria-label="Date" value={date} onChange={(event) => setDate(event.target.value)} />
-        </InputGroup>
-        <FilterSelect
-          label="Cycle de vie"
-          value={lifecycle || "all"}
-          onChange={(value) => {
-            setLifecycle(value === "all" ? "" : (value as RouteLifecycle));
-            setKpi("all");
+      {alertsOpen ? (
+        <DeliveriesAlertsSummary
+          routes={routes}
+          onFocusFailed={(name) => {
+            applyKpi("failed");
+            if (name) selectAndExpand(name);
+            setAlertsOpen(false);
           }}
-          options={[{ value: "all", label: "Tous" }, ...LIFECYCLES.map((status) => ({ value: status, label: status }))]}
+          onFocusLate={(name) => {
+            applyKpi("late");
+            if (name) selectAndExpand(name);
+            setAlertsOpen(false);
+          }}
         />
-        <FilterSelect
-          label="Livreur"
-          value={driver || "all"}
-          onChange={(value) => setDriver(value === "all" ? "" : value)}
-          options={[
-            { value: "all", label: "Tous" },
-            ...(data?.message.drivers || []).map((item) => ({ value: item.name, label: item.label })),
-          ]}
-        />
-        <InputGroup className="min-w-48 flex-1 bg-background">
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card px-3 py-2.5">
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="Jour précédent"
+            className="rounded-r-none"
+            onClick={() => setDate((current) => addDays(current, -1))}
+          >
+            <ChevronLeft />
+          </Button>
+          <div className="flex h-8 items-center gap-2 border-y border-input px-3">
+            <span className="num whitespace-nowrap text-[12.5px] font-medium">{formatShortDate(date)}</span>
+            {dayRelative(date, today) ? (
+              <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">{dayRelative(date, today)}</span>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label="Jour suivant"
+            className="rounded-l-none"
+            onClick={() => setDate((current) => addDays(current, 1))}
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+        <Button type="button" variant="outline" size="sm" className="h-[30px]" onClick={() => setDate(today)}>
+          Aujourd’hui
+        </Button>
+        <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
+        <InputGroup className="h-[30px] w-[220px] min-w-48 bg-background">
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
@@ -316,16 +273,46 @@ export function DeliveriesPage() {
             placeholder="Tournée, client, BL…"
           />
         </InputGroup>
-        {filtersActive && (
-          <>
-            <ToolbarSpacer />
-            <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
-              <RotateCcw data-icon="inline-start" />
-              Réinitialiser
-            </Button>
-          </>
-        )}
-      </Toolbar>
+        {LIFECYCLES.map((status) => {
+          const count = routes.filter((route) => route.lifecycle === status).length;
+          const active = lifecycle.has(status);
+          return (
+            <button
+              key={status}
+              type="button"
+              aria-pressed={active}
+              aria-label={status}
+              className={preparationChipClass(active)}
+              onClick={() => {
+                setLifecycle((current) => toggleLifecycle(current, status));
+                setKpi("all");
+              }}
+            >
+              <span className={cn("size-1.5 rounded-full", LIFECYCLE_DOT[status])} />
+              {status}
+              <span className="num text-[11px] opacity-70">{count}</span>
+            </button>
+          );
+        })}
+        <FilterSelect
+          label="Livreur"
+          value={driver || "all"}
+          onChange={(value) => setDriver(value === "all" ? "" : value)}
+          options={[
+            { value: "all", label: "Tous les livreurs" },
+            ...(data?.message.drivers || []).map((item) => ({ value: item.name, label: item.label })),
+          ]}
+        />
+        <span className="num ml-auto text-[11px] text-muted-foreground">
+          {filtered.length} / {routes.length} tournées
+        </span>
+        {filtersActive ? (
+          <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+            <RotateCcw data-icon="inline-start" />
+            Réinitialiser
+          </Button>
+        ) : null}
+      </div>
 
       {error && (
         <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -333,46 +320,31 @@ export function DeliveriesPage() {
         </div>
       )}
 
-      <section aria-label="Indicateurs du jour" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile
-          icon={Route}
-          tone="info"
-          label={date ? "Tournées du jour" : "Tournées"}
-          value={isLoading ? "—" : routes.length}
-          hint="Toutes les tournées →"
-          onClick={() => applyKpi("all")}
-        />
-        <KpiTile
-          icon={Truck}
-          tone="success"
-          label="En cours"
-          value={isLoading ? "—" : liveCount}
-          hint="Véhicules sur le terrain →"
-          onClick={() => applyKpi("live")}
-        />
-        <KpiTile
-          icon={CheckCircle2}
-          tone="success"
-          label="Arrêts livrés"
-          value={isLoading ? "—" : deliveredStops}
-          hint="Tournées avec livraisons →"
-          onClick={() => applyKpi("delivered")}
-        />
-        <KpiTile
-          icon={AlertCircle}
-          tone={failedStops ? "warning" : "neutral"}
-          label="Échecs"
-          value={isLoading ? "—" : failedStops}
-          hint={failedStops ? "Tournées en échec →" : "RAS →"}
-          onClick={() => applyKpi("failed")}
-        />
-      </section>
+      <DeliveriesKpis routes={routes} isLoading={isLoading} focus={kpi} onFocus={applyKpi} />
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(272px,336px)]">
         <Card className="overflow-hidden">
-          <CardHeader>
+          <CardHeader className="flex-row flex-wrap items-center gap-2">
             <CardTitle>Carte des tournées</CardTitle>
-            <p className="t-body text-muted-foreground">Itinéraires et arrêts des tournées filtrées.</p>
+            <div className="flex flex-1 flex-wrap items-center gap-2">
+              {filtered.map((route, index) => (
+                <button
+                  key={route.name}
+                  type="button"
+                  className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-foreground"
+                  onClick={() => selectAndExpand(route.name)}
+                >
+                  <span className="size-2 rounded-full" style={{ background: fleetColor(index) }} />
+                  {route.name}
+                </button>
+              ))}
+            </div>
+            {live ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" aria-hidden />
+                Positions mises à jour
+              </span>
+            ) : null}
           </CardHeader>
           <CardContent className="px-0 pb-0">
             {filtered.length ? (
@@ -382,97 +354,54 @@ export function DeliveriesPage() {
                 icon={Truck}
                 title={emptyTitle}
                 description={emptyMapDescription}
-                action={<Button variant="outline" onClick={() => navigate("/planning")}>Ouvrir le planning</Button>}
+                action={
+                  <Button variant="outline" onClick={() => navigate("/planning")}>
+                    Ouvrir le planning
+                  </Button>
+                }
               />
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Tournée sélectionnée</CardTitle>
-            <p className="t-body text-muted-foreground">Détail et accès à la fiche.</p>
-          </CardHeader>
-          <CardContent>
-            {selectedRoute && selectedProgress ? (
-              <div className="space-y-3">
-                <div>
-                  <p className="font-medium">{selectedRoute.name}</p>
-                  <p className="t-meta text-muted-foreground">
-                    {selectedRoute.driverName || "Livreur non affecté"} · {selectedRoute.vehicleLabel || "Véhicule non affecté"}
-                  </p>
-                </div>
-                <StatusBadge tone={routeLifecycleTone(selectedRoute.lifecycle)}>{selectedRoute.lifecycle}</StatusBadge>
-                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                  <div className="h-full rounded-full bg-brand-600" style={{ width: `${selectedProgress.percent}%` }} />
-                </div>
-                <p className="num t-meta text-muted-foreground">
-                  {selectedProgress.done} / {selectedProgress.total} arrêts · {selectedProgress.percent} %
-                </p>
-                <Button className="w-full" onClick={() => navigate(`/planning/routes/${selectedRoute.name}`)}>
-                  Ouvrir la tournée
-                  <ArrowRight />
-                </Button>
-              </div>
-            ) : (
-              <p className="rounded-md border border-hairline bg-surface-subtle p-3 t-body text-muted-foreground">
-                Sélectionnez une tournée dans le tableau.
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <SelectedRouteRail
+          route={selectedRoute}
+          events={selectedRoute ? routeEvents(selectedRoute).slice(0, 3) : undefined}
+          onOpenRoute={openRoute}
+          onCall={
+            callHref
+              ? () => {
+                  window.location.href = `tel:${callHref}`;
+                }
+              : undefined
+          }
+        />
       </section>
 
-      <Card>
-        <CardHeader>
+      <Card className="overflow-hidden py-0">
+        <CardHeader className="flex-row flex-wrap items-center gap-2 py-2.5">
           <CardTitle>Tournées</CardTitle>
-          <p className="t-body text-muted-foreground">Cliquez une ligne pour voir les arrêts.</p>
+          <span className="num rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{filtered.length}</span>
+          <p className="ml-auto t-body text-muted-foreground">Cliquez une ligne pour voir les arrêts.</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-0 pb-0">
           <DataTable
+            className="rounded-none border-0 border-t"
             label="Tournées du jour"
-            columns={routeColumns}
+            columns={columns}
             rows={filtered}
             rowKey={(route) => route.name}
-            rowTone={(route) => routeLifecycleTone(route.lifecycle)}
             isRowActive={(route) => route.name === selected}
-            onRowClick={(route) => setSelected(route.name)}
+            isRowExpanded={(route) => route.name === expanded}
+            expandedContent={(route) => (
+              <StopsSubTable route={route} onOpenRoute={openRoute} onReplanStop={replanStop} />
+            )}
+            onRowClick={(route) => selectAndExpand(route.name, true)}
             isLoading={isLoading}
-            empty={
-              <EmptyState
-                icon={Route}
-                title={emptyTitle}
-                description={emptyDescription}
-              />
-            }
+            empty={<EmptyState icon={Route} title={emptyTitle} description={emptyDescription} />}
           />
         </CardContent>
       </Card>
-
-      {selectedRoute && (
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-3">
-            <div>
-              <CardTitle>Arrêts · {selectedRoute.name}</CardTitle>
-              <p className="t-body text-muted-foreground">Statut terrain et accès carte.</p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/planning/routes/${selectedRoute.name}`)}>
-              Ouvrir la tournée
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              label={`Arrêts de ${selectedRoute.name}`}
-              columns={stopColumns}
-              rows={[...selectedRoute.stops].sort((left, right) => left.sequence - right.sequence)}
-              rowKey={(stop) => stop.deliveryNote}
-              rowTone={(stop) => getStopVisualStyle(stop.status).tone}
-              onRowClick={() => navigate(`/planning/routes/${selectedRoute.name}`)}
-              empty={<p className="py-8 text-center t-body text-muted-foreground">Aucun arrêt sur cette tournée.</p>}
-            />
-          </CardContent>
-        </Card>
-      )}
     </>
   );
 }

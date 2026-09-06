@@ -175,11 +175,24 @@ export function PickFloorView({
               line.complete && "opacity-50",
             )}
           >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">
-                {line.itemCode} · {line.itemName}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">{line.warehouse || "Entrepôt non défini"}</p>
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className={cn(
+                  "grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] text-[11px] font-bold",
+                  line.complete && "border-emerald-600 bg-emerald-100 text-emerald-700",
+                  !line.complete && line.picked > 0 && "border-amber-500 bg-amber-100 text-amber-700",
+                  line.picked === 0 && "border-border bg-background text-muted-foreground",
+                )}
+                aria-hidden
+              >
+                {line.complete ? "✓" : line.picked > 0 ? "◐" : "○"}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {line.itemCode} · {line.itemName}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">{line.warehouse || "Entrepôt non défini"}</p>
+              </div>
             </div>
             <p className="num shrink-0 text-sm font-semibold">
               {formatQuantity(line.picked)}/{formatQuantity(line.requested)}
@@ -189,7 +202,19 @@ export function PickFloorView({
       </ul>
 
       <div className="flex flex-col gap-2 pt-2">
-        <Button type="button" variant="outline" size="touch" className="w-full" onClick={onReview} disabled={busy}>
+        <Button
+          type="button"
+          variant="outline"
+          size="touch"
+          className="w-full"
+          onClick={onReview}
+          disabled={busy || remainingArticles > 0}
+          title={
+            remainingArticles > 0
+              ? `Encore ${remainingArticles} article${remainingArticles > 1 ? "s" : ""} à prélever`
+              : undefined
+          }
+        >
           <CheckCircle />
           Contrôle final
         </Button>

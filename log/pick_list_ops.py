@@ -1120,6 +1120,39 @@ def get_recent_pick_lists(limit=25):
 	return _enrich_recent_pick_lists(rows)
 
 
+def pick_list_queue_stats() -> dict:
+	"""Totaux de la file des listes, hors limite de `get_recent_pick_lists`."""
+	filters = {"purpose": "Delivery", "docstatus": ["<", 2]}
+	drafts = cint(frappe.db.count("Pick List", {**filters, "docstatus": 0}))
+	submitted = cint(frappe.db.count("Pick List", {**filters, "docstatus": 1}))
+	changed = 0
+	if frappe.db.has_column("Pick List", "custom_order_changed"):
+		changed = cint(frappe.db.count("Pick List", {**filters, "custom_order_changed": 1}))
+	remaining = 0.0
+	row = frappe.db.sql(
+		"""
+		SELECT COALESCE(SUM(GREATEST(IFNULL(item.qty, 0) - IFNULL(item.picked_qty, 0), 0)), 0)
+		FROM `tabPick List Item` item
+		INNER JOIN `tabPick List` pl ON pl.name = item.parent
+		WHERE pl.purpose = 'Delivery' AND pl.docstatus < 2
+		"""
+	)
+	if row:
+		remaining = flt(row[0][0])
+	return {
+		"drafts": drafts,
+		"submitted": submitted,
+		"remainingQty": remaining,
+		"changed": changed,
+	}
+
+
+@frappe.whitelist()
+def get_pick_list_queue_stats():
+	_require_preparation_role()
+	return pick_list_queue_stats()
+
+
 def cint_or_default(value, default):
 	try:
 		return int(value)

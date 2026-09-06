@@ -296,6 +296,27 @@ class TestDistributionFulfillment(unittest.TestCase):
 		self.assertEqual(route.statut_caisse, "Sans encaissement")
 		route.save.assert_not_called()
 
+	def test_declare_route_return_persist_false_does_not_save(self):
+		route = frappe._dict(
+			name="LIV-1",
+			statut_chargement="Chargé",
+			etat_planification="En cours",
+			lignes_chargement=[frappe._dict(loaded_qty=3, delivered_qty=1, returned_qty=0)],
+			save=Mock(),
+		)
+		with (
+			patch.object(fulfillment, "now_datetime", return_value="2026-09-05 21:00:00"),
+			patch.object(fulfillment.frappe, "session", SimpleNamespace(user="driver@example.com")),
+		):
+			summary = fulfillment.declare_route_return(route, persist=False)
+		self.assertEqual(route.statut_chargement, "Retour déclaré")
+		self.assertEqual(route.etat_planification, "Retour dépôt")
+		self.assertEqual(route.date_declaration_retour, "2026-09-05 21:00:00")
+		self.assertEqual(route.retour_declare_par, "driver@example.com")
+		self.assertEqual(summary["status"], "Retour déclaré")
+		self.assertEqual(summary["remainingQuantity"], 2)
+		route.save.assert_not_called()
+
 	def test_complete_empty_route_return_closes_when_nothing_left(self):
 		route = frappe._dict(
 			name="LIV-1",
@@ -365,6 +386,175 @@ class TestDistributionFulfillment(unittest.TestCase):
 		self.assertEqual(status, "created")
 		invoice.insert.assert_called_once_with(ignore_permissions=True)
 		invoice.submit.assert_called_once()
+
+
+class TestReturnControlMetrics(unittest.TestCase):
+	def test_counts_declared_returns_and_average_delay(self):
+		fake_db = Mock()
+		fake_db.has_column.return_value = True
+		fake_db.table_exists.return_value = True
+		fake_db.count.return_value = 2
+		rows = [
+			frappe._dict(
+				{
+					"date_declaration_retour": "2026-09-05 10:00:00",
+					"date_confirmation_retour": "2026-09-05 10:40:00",
+				}
+			),
+			frappe._dict(
+				{
+					"date_declaration_retour": "2026-09-04 09:00:00",
+					"date_confirmation_retour": None,
+				}
+			),
+		]
+		with (
+			patch.object(fulfillment, "now_datetime", return_value="2026-09-05 12:00:00"),
+			patch.object(fulfillment.frappe, "get_all", return_value=rows),
+			patch.object(fulfillment.frappe, "db", fake_db),
+		):
+			stats = fulfillment.return_control_metrics(30)
+		self.assertEqual(stats["declared"], 2)
+		self.assertEqual(stats["discrepancies"], 2)
+		self.assertEqual(stats["averageControlDelay"], 40)
+		self.assertEqual(stats["days"], 30)
+		fake_db.count.assert_called_once()
+
+	def test_hides_delay_when_schema_or_confirmations_are_missing(self):
+		fake_db = Mock()
+		fake_db.has_column.return_value = False
+		fake_db.table_exists.return_value = False
+		with (
+			patch.object(fulfillment, "now_datetime", return_value="2026-09-05 12:00:00"),
+			patch.object(fulfillment.frappe, "get_all", return_value=[]),
+			patch.object(fulfillment.frappe, "db", fake_db),
+		):
+			stats = fulfillment.return_control_metrics(30)
+		self.assertEqual(stats["declared"], 0)
+		self.assertEqual(stats["discrepancies"], 0)
+		self.assertIsNone(stats["averageControlDelay"])
+
+
+class TestListReturnHistory(unittest.TestCase):
+	def test_includes_confirmed_returns_and_skips_empty_routes(self):
+		routes = [
+			frappe._dict(
+				{
+					"name": "LIV-DONE",
+					"date_liv": "2026-09-04",
+					"livreur": "DRV-1",
+					"nom_livreur": "Karim",
+					"vehicule": "VH-1",
+					"statut_chargement": "Retourné",
+					"revision": 1,
+					"date_declaration_retour": "2026-09-04 18:00:00",
+					"date_confirmation_retour": "2026-09-04 18:20:00",
+					"stock_entry_retour": "STE-1",
+					"total_quantite_chargee": 10,
+					"total_quantite_livree": 6,
+					"total_quantite_restante": 0,
+					"total_quantite_retournee": 4,
+				}
+			),
+			frappe._dict(
+				{
+					"name": "LIV-PENDING",
+					"date_liv": "2026-09-05",
+					"livreur": "DRV-2",
+					"nom_livreur": "Samir",
+					"vehicule": "VH-2",
+					"statut_chargement": "Retour déclaré",
+					"revision": 2,
+					"date_declaration_retour": "2026-09-05 17:00:00",
+					"date_confirmation_retour": None,
+					"stock_entry_retour": None,
+					"total_quantite_chargee": 3,
+					"total_quantite_livree": 1,
+					"total_quantite_restante": 2,
+					"total_quantite_retournee": 0,
+				}
+			),
+		]
+		lines = [
+			frappe._dict(
+				{
+					"name": "LINE-DONE",
+					"parent": "LIV-DONE",
+					"delivery_note": "DN-1",
+					"delivery_note_item": "dni-1",
+					"residual_delivery_note": None,
+					"item_code": "ART-1",
+					"item_name": "Article 1",
+					"batch_no": "LOT-1",
+					"source_warehouse": "WH-A",
+					"vehicle_warehouse": "WH-V",
+					"return_warehouse": "WH-R",
+					"loaded_qty": 10,
+					"delivered_qty": 6,
+					"returned_qty": 4,
+					"uom": "Unité",
+				}
+			),
+			frappe._dict(
+				{
+					"name": "LINE-PEND",
+					"parent": "LIV-PENDING",
+					"delivery_note": "DN-2",
+					"delivery_note_item": "dni-2",
+					"residual_delivery_note": None,
+					"item_code": "ART-2",
+					"item_name": "Article 2",
+					"batch_no": None,
+					"source_warehouse": "WH-A",
+					"vehicle_warehouse": "WH-V",
+					"return_warehouse": None,
+					"loaded_qty": 3,
+					"delivered_qty": 1,
+					"returned_qty": 0,
+					"uom": "Unité",
+				}
+			),
+		]
+		notes = [
+			frappe._dict({"name": "DN-1", "customer": "C-1", "customer_name": "Client Un"}),
+			frappe._dict({"name": "DN-2", "customer": "C-2", "customer_name": "Client Deux"}),
+		]
+		vehicles = [
+			frappe._dict({"name": "VH-1", "nom": "Camion A", "immatriculation": "AA-1"}),
+			frappe._dict({"name": "VH-2", "nom": "Camion B", "immatriculation": "BB-2"}),
+		]
+		calls = []
+
+		def fake_get_all(doctype, **kwargs):
+			calls.append((doctype, kwargs))
+			if doctype == "Livraison":
+				return routes
+			if doctype == "Ligne Chargement Tournee":
+				return lines
+			if doctype == "Delivery Note":
+				return notes
+			if doctype == "Vehicule":
+				return vehicles
+			return []
+
+		with patch.object(fulfillment.frappe, "get_all", side_effect=fake_get_all):
+			rows = fulfillment.list_return_history("2026-08-06", "2026-09-05")
+
+		livraison_filters = next(kwargs for doctype, kwargs in calls if doctype == "Livraison")
+		self.assertIn("Retourné", livraison_filters["filters"]["statut_chargement"][1])
+		self.assertEqual(livraison_filters["or_filters"]["total_quantite_restante"], [">", 0])
+		self.assertEqual(livraison_filters["or_filters"]["total_quantite_retournee"], [">", 0])
+		self.assertEqual([row["name"] for row in rows], ["LIV-PENDING", "LIV-DONE"])
+		self.assertEqual(rows[0]["customers"][0]["customerName"], "Client Deux")
+		self.assertEqual(rows[0]["remainingQuantity"], 2)
+		self.assertEqual(rows[1]["returnedQuantity"], 4)
+		self.assertEqual(rows[1]["vehicleLabel"], "Camion A · AA-1")
+		self.assertEqual(rows[1]["lines"][0]["customerName"], "Client Un")
+		self.assertEqual(rows[1]["lines"][0]["returnedQuantity"], 4)
+
+	def test_returns_empty_list_when_no_routes_match(self):
+		with patch.object(fulfillment.frappe, "get_all", return_value=[]):
+			self.assertEqual(fulfillment.list_return_history("2026-08-06", "2026-09-05"), [])
 
 
 if __name__ == "__main__":

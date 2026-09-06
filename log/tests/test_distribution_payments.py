@@ -87,6 +87,43 @@ class TestDistributionPaymentSummary(unittest.TestCase):
 		route.save.assert_called_once_with(ignore_permissions=True)
 		try_complete.assert_called_once_with(reloaded)
 
+	def test_refresh_route_lifecycle_declares_return_when_goods_remain(self):
+		route = SimpleNamespace(
+			name="LIV-1",
+			bons_de_livraison=[SimpleNamespace(bon_de_livraison="DN-1")],
+			etat_planification="En cours",
+			statut_chargement="Chargé",
+			save=Mock(),
+		)
+		dn = SimpleNamespace(name="DN-1", docstatus=1)
+		db = Mock()
+		db.get_value.return_value = "Partiellement Livré"
+
+		def fake_get_doc(doctype, name):
+			if doctype == "Delivery Note":
+				return dn
+			return route
+
+		with (
+			patch.object(distribution, "frappe", SimpleNamespace(db=db, get_doc=fake_get_doc)),
+			patch.object(distribution, "_refresh_document_timestamp"),
+			patch.object(distribution, "_set_delivery_note_assignment"),
+			patch(
+				"log.services.distribution_fulfillment.complete_empty_route_return",
+				return_value=False,
+			) as complete,
+			patch(
+				"log.services.distribution_fulfillment.declare_route_return",
+			) as declare,
+			patch.object(distribution, "_try_complete_route") as try_complete,
+		):
+			distribution._refresh_route_lifecycle(route)
+		complete.assert_called_once_with(route, persist=False)
+		declare.assert_called_once_with(route, persist=False)
+		self.assertEqual(route.statut_chargement, "Chargé")
+		route.save.assert_called_once_with(ignore_permissions=True)
+		try_complete.assert_not_called()
+
 	def test_try_complete_route_finishes_without_payments(self):
 		route = SimpleNamespace(
 			name="LIV-1",

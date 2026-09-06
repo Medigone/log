@@ -12,7 +12,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import flt, now_datetime, nowtime, today
+from frappe.utils import add_days, cint, flt, get_datetime, getdate, now_datetime, nowtime, today
 
 
 def _line_remaining(line) -> float:
@@ -500,7 +500,7 @@ def finalize_delivery_document(route, doc, outcome: str) -> dict[str, Any]:
 	}
 
 
-def declare_route_return(route):
+def declare_route_return(route, *, persist: bool = True):
 	if route.get("statut_chargement") == "Retourné":
 		return route_stock_summary(route)
 	if route.get("statut_chargement") not in {"Chargé", "Retour requis", "Retour déclaré", "Exception"}:
@@ -510,7 +510,8 @@ def declare_route_return(route):
 	route.retour_declare_par = route.get("retour_declare_par") or frappe.session.user
 	route.etat_planification = "Retour dépôt"
 	refresh_route_stock_totals(route)
-	route.save(ignore_permissions=True)
+	if persist and hasattr(route, "save"):
+		route.save(ignore_permissions=True)
 	return route_stock_summary(route)
 
 
@@ -700,3 +701,207 @@ def confirm_route_return(route, counted_lines: list[dict[str, Any]]) -> dict[str
 		)
 	route.save(ignore_permissions=True)
 	return {"success": True, "stock": route_stock_summary(route), "stockEntry": entry.name if entry else None}
+
+
+RETURN_HISTORY_STATUSES = ("Retour requis", "Retour déclaré", "Exception", "Retourné")
+RETURN_HISTORY_STATUS_RANK = {
+	"Retour déclaré": 0,
+	"Exception": 1,
+	"Retour requis": 2,
+	"Retourné": 3,
+}
+
+
+def list_return_history(date_from=None, date_to=None) -> list[dict[str, Any]]:
+	"""Tournées avec reliquat à contrôler ou quantités déjà retournées, sans sérialiser la tournée complète."""
+	start = getdate(date_from or add_days(today(), -30))
+	end = getdate(date_to or today())
+	routes = frappe.get_all(
+		"Livraison",
+		filters={
+			"date_liv": ["between", [start, end]],
+			"statut_chargement": ["in", list(RETURN_HISTORY_STATUSES)],
+		},
+		or_filters={
+			"total_quantite_restante": [">", 0],
+			"total_quantite_retournee": [">", 0],
+		},
+		fields=[
+			"name",
+			"date_liv",
+			"livreur",
+			"nom_livreur",
+			"vehicule",
+			"statut_chargement",
+			"revision",
+			"date_declaration_retour",
+			"date_confirmation_retour",
+			"stock_entry_retour",
+			"total_quantite_chargee",
+			"total_quantite_livree",
+			"total_quantite_restante",
+			"total_quantite_retournee",
+		],
+	)
+	if not routes:
+		return []
+
+	names = [row.name for row in routes]
+	lines = frappe.get_all(
+		"Ligne Chargement Tournee",
+		filters={"parent": ["in", names]},
+		fields=[
+			"name",
+			"parent",
+			"delivery_note",
+			"delivery_note_item",
+			"residual_delivery_note",
+			"item_code",
+			"item_name",
+			"batch_no",
+			"source_warehouse",
+			"vehicle_warehouse",
+			"return_warehouse",
+			"loaded_qty",
+			"delivered_qty",
+			"returned_qty",
+			"uom",
+		],
+		order_by="idx asc",
+	)
+	delivery_notes = {line.delivery_note for line in lines if line.delivery_note}
+	customers_by_dn: dict[str, dict[str, str]] = {}
+	if delivery_notes:
+		for note in frappe.get_all(
+			"Delivery Note",
+			filters={"name": ["in", list(delivery_notes)]},
+			fields=["name", "customer", "customer_name"],
+		):
+			customers_by_dn[note.name] = {
+				"name": note.customer or "",
+				"customerName": note.customer_name or note.customer or "",
+			}
+
+	vehicle_ids = {row.vehicule for row in routes if row.vehicule}
+	vehicle_labels: dict[str, str] = {}
+	if vehicle_ids:
+		for vehicle in frappe.get_all(
+			"Vehicule",
+			filters={"name": ["in", list(vehicle_ids)]},
+			fields=["name", "nom", "immatriculation"],
+		):
+			vehicle_labels[vehicle.name] = (
+				" · ".join(filter(None, [vehicle.nom, vehicle.immatriculation])) or vehicle.name
+			)
+
+	lines_by_parent: dict[str, list[Any]] = {}
+	for line in lines:
+		lines_by_parent.setdefault(line.parent, []).append(line)
+
+	rows: list[dict[str, Any]] = []
+	for route in routes:
+		customers: list[dict[str, str]] = []
+		seen_customers: set[str] = set()
+		serialized_lines = []
+		for line in lines_by_parent.get(route.name, []):
+			customer = customers_by_dn.get(line.delivery_note) or {}
+			customer_id = customer.get("name") or ""
+			if customer_id and customer_id not in seen_customers:
+				seen_customers.add(customer_id)
+				customers.append(customer)
+			serialized_lines.append(
+				{
+					"name": line.name,
+					"deliveryNote": line.delivery_note,
+					"deliveryNoteItem": line.delivery_note_item,
+					"residualDeliveryNote": line.residual_delivery_note,
+					"itemCode": line.item_code,
+					"itemName": line.item_name,
+					"batchNo": line.batch_no,
+					"sourceWarehouse": line.source_warehouse,
+					"vehicleWarehouse": line.vehicle_warehouse,
+					"returnWarehouse": line.return_warehouse,
+					"loadedQuantity": flt(line.loaded_qty),
+					"deliveredQuantity": flt(line.delivered_qty),
+					"remainingQuantity": _line_remaining(line),
+					"returnedQuantity": flt(line.returned_qty),
+					"uom": line.uom,
+					"customer": customer.get("name") or None,
+					"customerName": customer.get("customerName") or None,
+				}
+			)
+		rows.append(
+			{
+				"name": route.name,
+				"date": str(route.date_liv) if route.date_liv else "",
+				"declaredAt": str(route.date_declaration_retour or "") or None,
+				"confirmedAt": str(route.date_confirmation_retour or "") or None,
+				"revision": max(cint(route.revision), 1),
+				"driver": route.livreur,
+				"driverName": route.nom_livreur,
+				"vehicle": route.vehicule,
+				"vehicleLabel": vehicle_labels.get(route.vehicule) or route.vehicule,
+				"customers": customers,
+				"status": route.statut_chargement,
+				"remainingQuantity": flt(route.total_quantite_restante),
+				"returnedQuantity": flt(route.total_quantite_retournee),
+				"loadedQuantity": flt(route.total_quantite_chargee),
+				"deliveredQuantity": flt(route.total_quantite_livree),
+				"returnStockEntry": route.stock_entry_retour,
+				"lines": serialized_lines,
+			}
+		)
+
+	rows.sort(key=lambda row: row["name"])
+	rows.sort(key=lambda row: row["date"] or "", reverse=True)
+	rows.sort(key=lambda row: RETURN_HISTORY_STATUS_RANK.get(row["status"], 9))
+	return rows
+
+
+def return_control_metrics(days: int = 30) -> dict[str, Any]:
+	"""Agrégats 30 jours de l’onglet Retours : déclarations, écarts, délai moyen."""
+	window = max(1, min(cint(days) or 30, 90))
+	start = add_days(now_datetime(), -window)
+	declared = 0
+	average = None
+	if frappe.db.has_column("Livraison", "date_declaration_retour"):
+		fields = ["date_declaration_retour"]
+		if frappe.db.has_column("Livraison", "date_confirmation_retour"):
+			fields.append("date_confirmation_retour")
+		rows = frappe.get_all(
+			"Livraison",
+			filters={"date_declaration_retour": [">=", start]},
+			fields=fields,
+		)
+		declared = len(rows)
+		delays: list[float] = []
+		for row in rows:
+			declared_raw = row.get("date_declaration_retour")
+			confirmed_raw = row.get("date_confirmation_retour")
+			if not declared_raw or not confirmed_raw:
+				continue
+			declared_at = get_datetime(declared_raw)
+			confirmed_at = get_datetime(confirmed_raw)
+			if not declared_at or not confirmed_at:
+				continue
+			minutes = (confirmed_at - declared_at).total_seconds() / 60
+			if minutes >= 0:
+				delays.append(minutes)
+		if delays:
+			average = cint(round(sum(delays) / len(delays)))
+
+	discrepancies = 0
+	if frappe.db.table_exists("tabException Distribution"):
+		discrepancies = cint(
+			frappe.db.count(
+				"Exception Distribution",
+				{"type_exception": "Retour de stock", "date_signalement": [">=", start]},
+			)
+		)
+
+	return {
+		"declared": declared,
+		"discrepancies": discrepancies,
+		"averageControlDelay": average,
+		"days": window,
+	}

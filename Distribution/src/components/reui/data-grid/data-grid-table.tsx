@@ -1655,6 +1655,7 @@ function DataGridTableBodyRowExpandded<TData extends object>({
       className={cn(props.tableLayout?.rowBorder && bodyRowBottomBorderClasses)}
     >
       <td
+        className="w-full p-0"
         colSpan={
           getDataGridTableOrderedVisibleCells(row).length +
           (props.tableLayout?.columnsResizable ? 1 : 0)

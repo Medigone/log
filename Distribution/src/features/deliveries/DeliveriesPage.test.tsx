@@ -3,7 +3,6 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage";
-import { chooseOption } from "@/test/chooseOption";
 
 const sampleRoutes = [
   {
@@ -73,32 +72,33 @@ describe("DeliveriesPage", () => {
     mocks.filters = {};
   });
 
-  it("affiche les KPI, la carte et sélectionne une tournée", () => {
+  it("affiche les KPI, la carte et le tableau des tournées", () => {
     renderPage();
 
     expect(screen.getByRole("heading", { name: /livraisons/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /tournées du jour/i })).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: /en cours/i })).toHaveTextContent("1");
+    expect(screen.getByRole("button", { name: /sur le terrain/i })).toHaveTextContent("1");
     expect(screen.getByRole("button", { name: /arrêts livrés/i })).toHaveTextContent("1");
     expect(screen.getByRole("button", { name: /échecs/i })).toHaveTextContent("1");
     expect(screen.getAllByText(/camion a/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
-    expect(screen.getByText("Client A")).toBeInTheDocument();
-    expect(screen.getByText("DN-1")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /ouvrir la tournée/i }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /1 à traiter/i })).toBeInTheDocument();
+    expect(screen.getByText("Sélectionnez une tournée dans le tableau.")).toBeInTheDocument();
   });
 
   it("filtre par cycle de vie et par KPI échecs", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await chooseOption(user, screen.getByLabelText("Cycle de vie"), "Terminée");
+    await user.click(screen.getByRole("button", { name: "Terminée" }));
     expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
     expect(screen.queryAllByText(/camion a/i)).toHaveLength(0);
     expect(screen.getAllByText(/camion b/i).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: /échecs/i }));
     expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "Tournées du jour" });
+    await user.click(within(table).getByText("LIV-2"));
     expect(screen.getByText("Client C")).toBeInTheDocument();
   });
 
@@ -108,14 +108,15 @@ describe("DeliveriesPage", () => {
     expect(screen.queryByText("Carte flotte LIV-1 LIV-2")).not.toBeInTheDocument();
   });
 
-  it("sélectionne une tournée au clic dans le tableau", async () => {
+  it("sélectionne une tournée au clic et déplie ses arrêts", async () => {
     const user = userEvent.setup();
     renderPage();
 
     const table = screen.getByRole("table", { name: "Tournées du jour" });
     await user.click(within(table).getByText("LIV-2"));
     expect(screen.getByText("Client C")).toBeInTheDocument();
-    expect(screen.getByText("Arrêts · LIV-2")).toBeInTheDocument();
+    expect(screen.getByText("DN-3")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /ouvrir la tournée/i }).length).toBeGreaterThan(0);
   });
 
   it("distingue l’état vide des filtres", async () => {
@@ -135,31 +136,28 @@ describe("DeliveriesPage", () => {
     expect(screen.queryByText("Aucune tournée pour ces filtres")).not.toBeInTheDocument();
   });
 
-  it("affiche toutes les tournées quand la date est effacée", async () => {
+  it("revient au jour courant depuis le stepper", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.clear(screen.getByLabelText("Date"));
+    await user.click(screen.getByRole("button", { name: "Jour précédent" }));
+    await user.click(screen.getByRole("button", { name: "Aujourd’hui" }));
 
-    expect(screen.queryByText(/invalid date/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Avancement de toutes les tournées.")).toBeInTheDocument();
-    expect(mocks.filters).toEqual({ allDates: true });
     expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^tournées /i })).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: /tournées du jour/i })).toHaveTextContent("2");
   });
 
   it("réinitialise les filtres et réaffiche toutes les tournées", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await chooseOption(user, screen.getByLabelText("Cycle de vie"), "Terminée");
+    await user.click(screen.getByRole("button", { name: "Terminée" }));
     expect(screen.getByText("Carte flotte LIV-2")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /réinitialiser/i }));
-    expect(screen.getByText("Avancement de toutes les tournées.")).toBeInTheDocument();
-    expect(mocks.filters).toEqual({ allDates: true });
+    expect(mocks.filters).toEqual({});
     expect(screen.getByText("Carte flotte LIV-1 LIV-2")).toBeInTheDocument();
-    expect(screen.getByLabelText("Cycle de vie")).not.toHaveTextContent("Terminée");
+    expect(screen.getByRole("button", { name: "Terminée" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: /réinitialiser/i })).not.toBeInTheDocument();
   });
 });

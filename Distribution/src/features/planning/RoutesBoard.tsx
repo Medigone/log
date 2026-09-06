@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Eye, RotateCcw, Route, Search, Trash2 } from "lucide-react"
 import { DateRangeFilter } from "@/components/DateRangeFilter"
@@ -22,17 +22,22 @@ interface RoutesBoardProps {
   vehicles: PlanningResource[]
   isLoading: boolean
   onDeleteRoute?: (route: DistributionRoute) => void
+  lifecycleFilter?: string
 }
 
-export function RoutesBoard({ routes, drivers, vehicles, isLoading, onDeleteRoute }: RoutesBoardProps) {
+export function RoutesBoard({ routes, drivers, vehicles, isLoading, onDeleteRoute, lifecycleFilter = "" }: RoutesBoardProps) {
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
-  const [lifecycle, setLifecycle] = useState("")
+  const [lifecycle, setLifecycle] = useState(lifecycleFilter)
   const [driver, setDriver] = useState("")
   const [vehicle, setVehicle] = useState("")
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
   const [alertsOnly, setAlertsOnly] = useState(false)
+
+  useEffect(() => {
+    setLifecycle(lifecycleFilter)
+  }, [lifecycleFilter])
 
   const driverNames = useMemo(
     () => Object.fromEntries(drivers.map((item) => [item.name, item.label])),
@@ -95,44 +100,56 @@ export function RoutesBoard({ routes, drivers, vehicles, isLoading, onDeleteRout
       sortValue: (row) => `${row.date}-${row.name}`,
       cell: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-semibold text-brand-700">{row.name}</p>
-          <p className="truncate t-meta text-muted-foreground">
-            {row.date} · {timePart(row.plannedStart) || "créneau manquant"}–{timePart(row.plannedEnd) || "—"}
-          </p>
+          <p className="truncate font-mono text-[12.5px] font-semibold">{row.name}</p>
+          <p className="truncate t-meta text-muted-foreground">{row.date}</p>
         </div>
       ),
     },
     {
-      id: "resources",
-      header: "Ressources",
+      id: "driver",
+      header: "Livreur",
       hideBelow: "md",
-      sortValue: (row) => `${row.driverName || row.driver || ""} ${row.vehicleLabel || row.vehicle || ""}`,
+      sortValue: (row) => row.driverName || row.driver || "",
+      cell: (row) => <span className="truncate">{row.driverName || driverLabel(row.driver) || "—"}</span>,
+    },
+    {
+      id: "vehicle",
+      header: "Véhicule",
+      hideBelow: "md",
+      sortValue: (row) => row.vehicleLabel || row.vehicle || "",
+      cell: (row) => <span className="truncate text-muted-foreground">{row.vehicleLabel || vehicleLabel(row.vehicle) || "—"}</span>,
+    },
+    {
+      id: "slot",
+      header: "Créneau",
+      hideBelow: "lg",
       cell: (row) => (
-        <div className="min-w-0">
-          <p className="truncate">{row.driverName || driverLabel(row.driver) || "Livreur manquant"}</p>
-          <p className="truncate t-meta text-muted-foreground">
-            {row.vehicleLabel || vehicleLabel(row.vehicle) || "Véhicule manquant"}
-          </p>
-        </div>
+        <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+          {timePart(row.plannedStart) || "—"} – {timePart(row.plannedEnd) || "—"}
+        </span>
       ),
     },
     {
       id: "stops",
-      header: "Arrêts",
-      width: "120px",
+      header: "BL",
+      width: "64px",
       numeric: true,
-      hideBelow: "lg",
+      align: "right",
       sortValue: (row) => row.stops.length,
-      cell: (row) => (
-        <div className="min-w-0">
-          <p className="num">{row.stops.length} arrêt{row.stops.length > 1 ? "s" : ""}</p>
-          <p className="num t-meta text-muted-foreground">{formatQuantity(row.totalQuantity)} art.</p>
-        </div>
-      ),
+      cell: (row) => <span className="num">{row.stops.length}</span>,
+    },
+    {
+      id: "articles",
+      header: "Art.",
+      width: "74px",
+      numeric: true,
+      align: "right",
+      sortValue: (row) => row.totalQuantity,
+      cell: (row) => <span className="num text-muted-foreground">{formatQuantity(row.totalQuantity)}</span>,
     },
     {
       id: "status",
-      header: "Statut",
+      header: "État",
       width: "minmax(0, 1.1fr)",
       sortValue: (row) => row.lifecycle,
       cell: (row) => (
@@ -141,27 +158,15 @@ export function RoutesBoard({ routes, drivers, vehicles, isLoading, onDeleteRout
             {row.lifecycle}
           </StatusBadge>
           <p className="truncate t-meta text-muted-foreground">
-            Révision {row.revision}
-            {row.acknowledged ? " · acceptée" : row.lifecycle === "Publiée" ? " · acceptation requise" : ""}
+            {row.acknowledged ? "Acceptée" : row.lifecycle === "Publiée" ? "Acceptation requise" : `Révision ${row.revision}`}
           </p>
         </div>
       ),
     },
     {
-      id: "alerts",
-      header: "Alertes",
-      hideBelow: "md",
-      sortValue: (row) => (row.needsReview || row.alerts.length ? 1 : 0),
-      cell: (row) => {
-        const text = [row.reviewReason, ...row.alerts].filter(Boolean).join(" ")
-        if (!text) return <span className="text-muted-foreground">—</span>
-        return <p className="line-clamp-2 t-meta text-amber-800">{text}</p>
-      },
-    },
-    {
       id: "actions",
-      header: "Actions",
-      width: "260px",
+      header: "",
+      width: "160px",
       align: "right",
       cell: (row) => (
         <span className="inline-flex items-center justify-end gap-2" onClick={(event) => event.stopPropagation()}>
@@ -193,7 +198,10 @@ export function RoutesBoard({ routes, drivers, vehicles, isLoading, onDeleteRout
 
   return (
     <div className="flex flex-col gap-5">
-      <h2 className="text-base font-semibold">Tournées ({filtered.length})</h2>
+      <div>
+        <h2 className="text-base font-semibold">Tournées ({filtered.length})</h2>
+        <p className="t-meta text-muted-foreground">Une tournée publiée exige un motif de reprogrammation.</p>
+      </div>
 
       <Toolbar>
         <InputGroup className="min-w-48 flex-1 bg-background">

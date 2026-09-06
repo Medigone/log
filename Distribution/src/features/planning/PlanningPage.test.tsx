@@ -210,10 +210,10 @@ describe("PlanningPage", () => {
     const user = userEvent.setup();
     renderPage("/?view=table");
     const table = screen.getByRole("table", { name: /bons de livraison/i });
-    expect(within(table).getByRole("columnheader", { name: /n° bl/i })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: /bl · client/i })).toBeInTheDocument();
     expect(within(table).getByRole("columnheader", { name: /statut/i })).toBeInTheDocument();
     expect(screen.getByText("GPS client à collecter")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /planifier/i }));
+    await user.click(within(table).getByRole("button", { name: /^planifier$/i }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText(/planifier la livraison/i)).toBeInTheDocument();
     expect(within(dialog).queryByLabelText("Position")).not.toBeInTheDocument();
@@ -258,7 +258,7 @@ describe("PlanningPage", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("tab=tournees");
     const table = screen.getByRole("table", { name: /tournées à planifier/i });
     expect(within(table).getByRole("columnheader", { name: /tournée/i })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: /statut/i })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: /état/i })).toBeInTheDocument();
     expect(within(table).getByText("LIV-26-08-00002")).toBeInTheDocument();
     expect(within(table).getByText("Publiée")).toBeInTheDocument();
     expect(within(table).getByText(/acceptation requise/i)).toBeInTheDocument();
@@ -303,9 +303,11 @@ describe("PlanningPage", () => {
     const today = new Date();
     const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
     expect(screen.getByRole("button", { name: /kanban/i })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Date BL")).toHaveValue("");
+    expect(screen.queryByLabelText("Date BL")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Date livraison")).toHaveValue(iso);
     expect(screen.getByText("À planifier")).toBeInTheDocument();
+    expect(screen.getByText("1 · À planifier")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /plus de filtres/i })).toBeInTheDocument();
     expect(screen.getByText("Livreur Test")).toBeInTheDocument();
     expect(screen.getByText("Livreur 2")).toBeInTheDocument();
     expect(screen.getAllByText(/nouvelle tournée/i).length).toBeGreaterThan(0);
@@ -368,7 +370,7 @@ describe("PlanningPage", () => {
     const user = userEvent.setup();
     renderPage("/?date=2026-09-07&blDate=2026-09-06");
     await user.click(screen.getByRole("button", { name: /^toutes$/i }));
-    expect(screen.getByLabelText("Date BL")).toHaveValue("");
+    expect(screen.queryByLabelText("Date BL")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Date livraison")).toHaveValue("2026-09-07");
     expect(mocks.boardArgs).toEqual({
       dateFrom: "2026-09-07",
@@ -423,7 +425,6 @@ describe("PlanningPage", () => {
     renderPage("/?date=2026-08-26");
     await revealRouteStops(user, "LIV-26-08-00002");
     expect(screen.getByText("MAT-DN-2026-00004")).toBeInTheDocument();
-    expect(screen.getByText("Terminé")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reprogrammer/i })).not.toBeInTheDocument();
   });
 
@@ -431,6 +432,7 @@ describe("PlanningPage", () => {
     renderPage("/?date=2026-08-26");
     expect(screen.getByLabelText("Livreur Test, 1 BL, 12 articles")).toBeInTheDocument();
     expect(screen.getByLabelText("Livreur 2, 0 BL, 0 articles")).toBeInTheDocument();
+    expect(screen.getByText(/1 livreur/)).toBeInTheDocument();
   });
 
   it("affiche la tournée avec ses BL à l'intérieur et une zone nouvelle tournée", async () => {

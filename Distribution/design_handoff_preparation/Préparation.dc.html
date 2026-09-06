@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 0; background: #fafafa; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #18181b; text-decoration: none; }
+  a:hover { color: #52525b; }
+  input { font-family: inherit; }
+  input:focus { outline: none; }
+</style>
+</helmet>
+<div style="font-family: Geist, system-ui, -apple-system, sans-serif; color: #09090b; background: #fafafa; min-height: 100vh; font-size: 14px;">
+
+  <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 20px; background: #ffffff; border-bottom: 1px solid #e4e4e7; position: sticky; top: 0; z-index: 20;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+      <div style="width: 14px; height: 12px; border: 1.5px solid currentColor; border-radius: 2px; display: flex;"><div style="width: 5px; border-right: 1.5px solid currentColor;"></div></div>
+    </div>
+    <div style="width: 1px; height: 18px; background: #e4e4e7;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717a;">
+      <span>Entrepôt</span><span style="color: #d4d4d8;">/</span><span style="color: #09090b; font-weight: 500;">Préparation</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fafafa; color: #a1a1aa; font-size: 13px; min-width: 240px; cursor: pointer;" style-hover="background: #ffffff; border-color: #d4d4d8;">
+      <div style="width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%;"></div>
+      <span>Rechercher une commande, un article…</span>
+      <div style="flex: 1;"></div>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 5px; border: 1px solid #e4e4e7; border-radius: 4px; background: #ffffff;">⌘K</span>
+    </div>
+    <div style="width: 28px; height: 28px; border-radius: 50%; background: #18181b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">MB</div>
+  </div>
+
+  <div style="max-width: 1480px; margin: 0 auto; padding: 22px 20px 56px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa;">Entrepôt · vendredi 05/09/2026</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.02em;">Préparation</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; background: #fef2f2; color: #b91c1c; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #fecaca; white-space: nowrap;" style-hover="background: #fee2e2;" onClick="{{ toggleAlertDetail }}">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>2 anomalies
+          </span>
+        </div>
+        <div style="font-size: 13px; color: #71717a;">Commande client → Liste de prélèvement → Bon de livraison.</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 7px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">
+          <span style="width: 12px; height: 12px; border: 1.5px solid #52525b; border-radius: 3px;"></span>Scanner
+        </div>
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 6px; background: #18181b; color: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;">Nouvelle liste <span style="opacity: 0.6;">→</span></div>
+      </div>
+    </div>
+
+    <sc-if value="{{ showAlerts }}" hint-placeholder-val="{{ false }}">
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
+        <div style="border: 1px solid #fecaca; background: #fffafa; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #7f1d1d;">Stock manquant</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c;">2</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">SAL-ORD-2026-00003 et 00007 · prélèvement à compléter, 6 articles restants.</div>
+          <div style="font-size: 12px; font-weight: 500; color: #b91c1c; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ selectShort }}">Sélectionner ces commandes →</div>
+        </div>
+        <div style="border: 1px solid #fde68a; background: #fffdf7; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #78350f;">Échéances dépassées</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fffbeb; color: #a16207;">6</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">6 commandes ont une échéance antérieure à aujourd’hui.</div>
+          <div style="font-size: 12px; font-weight: 500; color: #a16207; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ toggleOverdue }}">Filtrer sur les retards →</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #e4e4e7;">
+      <div style="display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13.5px; margin-bottom: -1px; cursor: pointer; font-weight: {{ tabCmdWeight }}; color: {{ tabCmdColor }}; border-bottom: 2px solid {{ tabCmdBorder }};" onClick="{{ goCommandes }}">
+        Commandes <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: {{ tabCmdChipBg }}; color: {{ tabCmdChipFg }};">10</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13.5px; margin-bottom: -1px; cursor: pointer; font-weight: {{ tabListWeight }}; color: {{ tabListColor }}; border-bottom: 2px solid {{ tabListBorder }};" onClick="{{ goListes }}">
+        Listes <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: {{ tabListChipBg }}; color: {{ tabListChipFg }};">2</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13.5px; margin-bottom: -1px; cursor: pointer; font-weight: {{ tabRetWeight }}; color: {{ tabRetColor }}; border-bottom: 2px solid {{ tabRetBorder }};" onClick="{{ goRetours }}">
+        Retours <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: {{ tabRetChipBg }}; color: {{ tabRetChipFg }};">0</span>
+      </div>
+    </div>
+
+    <sc-if value="{{ isCommandes }}" hint-placeholder-val="{{ true }}">
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ filterDraft }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">1 · À prélever</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fffbeb; color: #a16207; white-space: nowrap;">2 brouillons</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">2</span>
+          <span style="font-size: 12px; color: #71717a;">commandes · 27 art.</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 20%; height: 100%; background: #18181b;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ filterPartial }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">2 · En cours</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c; white-space: nowrap;">1 partielle</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">1</span>
+          <span style="font-size: 12px; color: #71717a;">prélèvement</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 10%; height: 100%; background: #18181b;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ selectShort }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">3 · À compléter</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c; white-space: nowrap;">stock</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">2</span>
+          <span style="font-size: 12px; color: #71717a;">commandes</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 20%; height: 100%; background: #dc2626;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ filterReady }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">4 · Prêtes à livrer</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">7</span>
+          <span style="font-size: 12px; color: #71717a;">listes soumises</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 70%; height: 100%; background: #16a34a;"></div></div>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+        <input type="text" placeholder="Rechercher une commande, un client, une ville…" value="{{ query }}" onChange="{{ onQuery }}" style="height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 13px; width: 280px; color: #09090b;" style-focus="border-color: #a1a1aa;" />
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid {{ overdueBorder }}; background: {{ overdueBg }}; color: {{ overdueColor }};" onClick="{{ toggleOverdue }}">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span> Échéance dépassée
+        </div>
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid {{ shortBorder }}; background: {{ shortBg }}; color: {{ shortColor }};" onClick="{{ toggleShort }}">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span> À compléter
+        </div>
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; border: 1px solid {{ draftBorder }}; background: {{ draftBg }}; color: {{ draftColor }};" onClick="{{ toggleDraft }}">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #a1a1aa;"></span> Non prélevées
+        </div>
+        <div style="width: 1px; height: 20px; background: #e4e4e7;"></div>
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">Plus de filtres <span style="color: #a1a1aa;">▾</span></div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+          <div style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap;">{{ resultLabel }}</div>
+          <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;">Colonnes</div>
+        </div>
+      </div>
+
+      <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #18181b; color: #ffffff; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 500;">{{ selectionLabel }}</span>
+          <span style="font-size: 12px; color: #a1a1aa;">{{ selectionMeta }}</span>
+          <div style="flex: 1;"></div>
+          <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; background: #ffffff; color: #18181b; font-size: 12px; font-weight: 600; cursor: pointer;">Créer la liste de prélèvement</div>
+          <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; border: 1px solid #3f3f46; font-size: 12px; cursor: pointer;" style-hover="background: #27272a;">Imprimer</div>
+          <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; color: #a1a1aa; font-size: 12px; cursor: pointer;" style-hover="color: #ffffff;" onClick="{{ clearSelection }}">Effacer</div>
+        </div>
+      </sc-if>
+
+      <div style="display: grid; grid-template-columns: 36px 24px minmax(0, 1.5fr) minmax(0, 1fr) 96px 150px 112px 34px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+        <div style="padding: 8px 0;">
+          <div style="width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; cursor: pointer; color: #ffffff; border: 1.5px solid {{ allBorder }}; background: {{ allBg }};" onClick="{{ toggleAll }}">{{ allCheck }}</div>
+        </div>
+        <div style="padding: 8px 0;"></div>
+        <div style="padding: 8px 0;">Commande · Client</div>
+        <div style="padding: 8px 0;">Lieu</div>
+        <div style="padding: 8px 0;">Échéance</div>
+        <div style="padding: 8px 0;">Prélèvement</div>
+        <div style="padding: 8px 0; text-align: center;">État liste</div>
+        <div style="padding: 8px 0;"></div>
+      </div>
+
+      <sc-for list="{{ rows }}" as="r" hint-placeholder-count="10">
+        <div>
+          <div style="display: grid; grid-template-columns: 36px 24px minmax(0, 1.5fr) minmax(0, 1fr) 96px 150px 112px 34px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; cursor: pointer; background: {{ r.bg }};" style-hover="background: #fafafa;" onClick="{{ r.toggle }}">
+            <div style="padding: 9px 0;">
+              <div style="width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #ffffff; border: 1.5px solid {{ r.boxBorder }}; background: {{ r.boxBg }};">{{ r.check }}</div>
+            </div>
+            <div style="padding: 9px 0; color: #a1a1aa; font-size: 11px; cursor: pointer;" onClick="{{ r.expand }}">{{ r.caret }}</div>
+            <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.ref }}</span>
+              <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.client }} · {{ r.articles }} art.</span>
+            </div>
+            <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+              <span style="font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.city }}</span>
+              <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.wilaya }}</span>
+            </div>
+            <div style="padding: 9px 0; font-size: 12.5px; white-space: nowrap; color: {{ r.dateColor }};">{{ r.date }}</div>
+            <div style="padding: 9px 8px 9px 0; display: flex; align-items: center; gap: 8px;">
+              <div style="flex: 1; min-width: 34px; height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;">
+                <div style="height: 100%; width: {{ r.pct }}; background: {{ r.barColor }};"></div>
+              </div>
+              <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; white-space: nowrap; flex: 0 0 auto; color: {{ r.pickColor }};">{{ r.picked }}</span>
+            </div>
+            <div style="padding: 9px 0; display: flex; justify-content: center;" title="{{ r.listState }}">
+              <span style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700; border: 1.5px solid {{ r.iconBorder }}; background: {{ r.iconBg }}; color: {{ r.iconColor }};">{{ r.iconGlyph }}</span>
+            </div>
+            <div style="padding: 9px 0; text-align: right; color: #a1a1aa; font-size: 15px;">⋯</div>
+          </div>
+
+          <sc-if value="{{ r.open }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 10px 12px 14px 72px; border-bottom: 1px solid #f4f4f5; background: #fcfcfc; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">Articles</span>
+                <span style="font-size: 12px; color: #a1a1aa;">{{ r.itemsLabel }}</span>
+                <div style="flex: 1;"></div>
+                <span style="font-size: 11.5px; font-weight: 500; color: #18181b; cursor: pointer;" style-hover="text-decoration: underline;">Ouvrir la commande →</span>
+              </div>
+              <div style="border: 1px solid #e4e4e7; border-radius: 9px; overflow: hidden; background: #ffffff;">
+                <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) 90px 110px 90px minmax(0, 1fr) 92px; padding: 0 10px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: #71717a;">
+                  <div style="padding: 7px 0;">Article</div>
+                  <div style="padding: 7px 0;">Code</div>
+                  <div style="padding: 7px 0; text-align: right;">Restant</div>
+                  <div style="padding: 7px 0; text-align: right;">Dispo.</div>
+                  <div style="padding: 7px 0 7px 12px;">Entrepôt</div>
+                  <div style="padding: 7px 0; text-align: right;">État</div>
+                </div>
+                <sc-for list="{{ r.items }}" as="it" hint-placeholder-count="2">
+                  <div style="display: grid; grid-template-columns: minmax(0, 1.4fr) 90px 110px 90px minmax(0, 1fr) 92px; padding: 0 10px; align-items: center; border-bottom: 1px solid #f4f4f5;">
+                    <div style="padding: 8px 8px 8px 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ it.name }}</div>
+                    <div style="padding: 8px 0; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #a1a1aa;">{{ it.code }}</div>
+                    <div style="padding: 8px 0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: {{ it.remainColor }};">{{ it.remain }}</div>
+                    <div style="padding: 8px 0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #52525b;">{{ it.available }}</div>
+                    <div style="padding: 8px 0 8px 12px; font-size: 12px; color: #52525b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ it.warehouse }}</div>
+                    <div style="padding: 8px 0; text-align: right;">
+                      <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {{ it.badgeBg }}; color: {{ it.badgeFg }};">
+                        <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ it.badgeDot }};"></span>{{ it.state }}
+                      </span>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+
+      <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="padding: 42px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+          <div style="width: 34px; height: 34px; border-radius: 9px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 14px;">✓</div>
+          <div style="font-size: 13px; font-weight: 600;">Aucune commande ne correspond</div>
+          <div style="font-size: 12.5px; color: #71717a; max-width: 320px; line-height: 1.5;">Aucun résultat pour ces filtres. Réinitialisez pour retrouver les 10 commandes.</div>
+          <div style="margin-top: 4px; height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser les filtres</div>
+        </div>
+      </sc-if>
+
+      <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fafafa; flex-wrap: wrap;">
+        <span style="font-size: 12px; color: #71717a;">Lignes par page</span>
+        <div style="height: 28px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 7px; font-size: 12px; cursor: pointer;">25 <span style="color: #a1a1aa;">▾</span></div>
+        <div style="flex: 1;"></div>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #71717a;">{{ pageLabel }}</span>
+        <div style="display: flex; gap: 4px;">
+          <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 7px; font-size: 12px; color: #d4d4d8;">‹</div>
+          <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 7px; font-size: 12px; color: #d4d4d8;">›</div>
+        </div>
+      </div>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isListes }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+          <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Brouillons</span>
+            <div style="display: flex; align-items: baseline; gap: 7px;">
+              <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">1</span>
+              <span style="font-size: 12px; color: #71717a;">à contrôler avant soumission</span>
+            </div>
+            <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 50%; height: 100%; background: #18181b;"></div></div>
+          </div>
+          <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Soumises</span>
+            <div style="display: flex; align-items: baseline; gap: 7px;">
+              <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">1</span>
+              <span style="font-size: 12px; color: #71717a;">BL générés</span>
+            </div>
+            <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 50%; height: 100%; background: #16a34a;"></div></div>
+          </div>
+          <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Articles restants</span>
+              <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fffbeb; color: #a16207; white-space: nowrap;">1 modifiée</span>
+            </div>
+            <div style="display: flex; align-items: baseline; gap: 7px;">
+              <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">27</span>
+              <span style="font-size: 12px; color: #71717a;">à prélever</span>
+            </div>
+            <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 0%; height: 100%; background: #18181b;"></div></div>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+            <input type="text" placeholder="Liste, commande, client…" style="height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 13px; width: 260px; color: #09090b;" style-focus="border-color: #a1a1aa;" />
+            <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; font-weight: 500; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #a1a1aa;"></span> Brouillon
+            </div>
+            <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; font-weight: 500; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #16a34a;"></span> Soumise
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+              <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap;">2 / 2 listes</span>
+              <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;">Colonnes</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 72px minmax(0, 1fr) minmax(0, 1.2fr) 140px 128px 34px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+            <div style="padding: 8px 0;">Liste · Entrepôt</div>
+            <div style="padding: 8px 0;">Client</div>
+            <div style="padding: 8px 0; text-align: center;">État</div>
+            <div style="padding: 8px 0;">Wilaya</div>
+            <div style="padding: 8px 0;">Commandes</div>
+            <div style="padding: 8px 0;">Prélevé</div>
+            <div style="padding: 8px 0 8px 14px;">Modifié</div>
+            <div style="padding: 8px 0;"></div>
+          </div>
+
+          <sc-for list="{{ pickLists }}" as="p" hint-placeholder-count="2">
+            <div style="display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 72px minmax(0, 1fr) minmax(0, 1.2fr) 140px 128px 34px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; cursor: pointer;" style-hover="background: #fafafa;">
+              <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.name }}</span>
+                <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.warehouse }}</span>
+              </div>
+              <div style="padding: 9px 8px 9px 0; font-size: 13px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.clients }}</div>
+              <div style="padding: 9px 0; display: flex; align-items: center; justify-content: center; gap: 4px;" title="{{ p.statusTitle }}">
+                <span style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700; border: 1.5px solid {{ p.iconBorder }}; background: {{ p.iconBg }}; color: {{ p.iconColor }};">{{ p.iconGlyph }}</span>
+                <span style="font-size: 12px; color: #d97706;">{{ p.changedMark }}</span>
+              </div>
+              <div style="padding: 9px 8px 9px 0; font-size: 12.5px; color: #52525b; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.wilaya }}</div>
+              <div style="padding: 9px 8px 9px 0; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #52525b; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ p.orders }}</div>
+              <div style="padding: 9px 8px 9px 0; display: flex; align-items: center; gap: 8px;">
+                <div style="flex: 1; min-width: 30px; height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;">
+                  <div style="height: 100%; width: {{ p.pct }}; background: {{ p.barColor }};"></div>
+                </div>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; white-space: nowrap; flex: 0 0 auto; color: {{ p.pickColor }};">{{ p.pickedLabel }}</span>
+              </div>
+              <div style="padding: 9px 0 9px 14px; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #a1a1aa; white-space: nowrap;">{{ p.modified }}</div>
+              <div style="padding: 9px 0; text-align: right; color: #a1a1aa; font-size: 15px;">⋯</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isRetours }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 18px;">
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #f4f4f5;">
+            <span style="font-size: 14px; font-weight: 600;">Retours à contrôler</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">0</span>
+            <div style="flex: 1;"></div>
+            <span style="font-size: 12px; color: #71717a;">Recomptage véhicule → entrepôt. Indépendant du contrôle de caisse.</span>
+          </div>
+          <div style="padding: 44px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+            <div style="width: 36px; height: 36px; border-radius: 10px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 15px;">✓</div>
+            <div style="font-size: 13px; font-weight: 600;">Aucun retour en attente</div>
+            <div style="font-size: 12.5px; color: #71717a; max-width: 380px; line-height: 1.55;">Un retour apparaît ici dès qu’un livreur le déclare depuis son mobile. Aucune tournée n’a de marchandise restante aujourd’hui.</div>
+            <div style="margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+              <div style="height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Voir les tournées du jour</div>
+              <div style="height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Historique des retours</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+          <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Retours déclarés · 30 j</span>
+            <div style="display: flex; align-items: baseline; gap: 7px;">
+              <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">14</span>
+              <span style="font-size: 12px; color: #71717a;">tournées</span>
+            </div>
+          </div>
+          <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Écarts de comptage</span>
+            <div style="display: flex; align-items: baseline; gap: 7px;">
+              <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">2</span>
+              <span style="font-size: 12px; color: #71717a;">exceptions responsable</span>
+            </div>
+          </div>
+          <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 6px;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Délai moyen de contrôle</span>
+            <div style="display: flex; align-items: baseline; gap: 7px;">
+              <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1;">42</span>
+              <span style="font-size: 12px; color: #71717a;">minutes après retour dépôt</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;alertStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compact&quot;,&quot;cartes&quot;],&quot;default&quot;:&quot;compact&quot;,&quot;tsType&quot;:&quot;'compact' | 'cartes'&quot;,&quot;section&quot;:&quot;Anomalies&quot;}}">
+const TODAY = '2026-09-05';
+
+const DATA = [
+  { ref: 'SAL-ORD-2026-00002', client: 'CLIENT 1', city: 'Mostaganem', wilaya: 'Mostaganem', due: '2026-08-26', date: '26/08/2026', articles: 12, picked: 12, total: 12, stock: 'OK', list: 'Liste soumise',
+    items: [{ name: 'Biomil 1 400 Gr', code: 'Article 1', remain: 0, available: 96, warehouse: 'Magasins - MP', state: 'OK' }] },
+  { ref: 'SAL-ORD-2026-00003', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-08-26', date: '26/08/2026', articles: 12, picked: 12, total: 12, stock: 'À compléter', list: 'Liste partielle',
+    items: [{ name: 'Biomil 2 400 Gr', code: 'Article 2', remain: 6, available: 102, warehouse: 'Magasins - MP', state: 'Sur liste' }] },
+  { ref: 'SAL-ORD-2026-00004', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-08-28', date: '28/08/2026', articles: 36, picked: 36, total: 36, stock: 'OK', list: 'Liste soumise',
+    items: [{ name: 'Biomil 1 400 Gr', code: 'Article 1', remain: 0, available: 96, warehouse: 'Magasins - MP', state: 'OK' }] },
+  { ref: 'SAL-ORD-2026-00005', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-08-30', date: '30/08/2026', articles: 12, picked: 12, total: 12, stock: 'OK', list: 'Liste soumise',
+    items: [{ name: 'Biomil 2 400 Gr', code: 'Article 2', remain: 0, available: 102, warehouse: 'Magasins - MP', state: 'OK' }] },
+  { ref: 'SAL-ORD-2026-00010', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-09-02', date: '02/09/2026', articles: 24, picked: 24, total: 24, stock: 'OK', list: 'Liste soumise',
+    items: [{ name: 'Biomil 1 400 Gr', code: 'Article 1', remain: 0, available: 96, warehouse: 'Magasins - MP', state: 'OK' }] },
+  { ref: 'SAL-ORD-2026-00007', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-09-03', date: '03/09/2026', articles: 3, picked: 2, total: 3, stock: 'À compléter', list: 'Liste partielle',
+    items: [{ name: 'Biomil 2 400 Gr', code: 'Article 2', remain: 1, available: 102, warehouse: 'Magasins - MP', state: 'Sur liste' }] },
+  { ref: 'SAL-ORD-2026-00008', client: 'CLIENT 1', city: 'Mostaganem', wilaya: 'Mostaganem', due: '2026-09-04', date: '04/09/2026', articles: 12, picked: 12, total: 12, stock: 'OK', list: 'Liste soumise',
+    items: [{ name: 'Biomil 1 400 Gr', code: 'Article 1', remain: 0, available: 96, warehouse: 'Magasins - MP', state: 'OK' }] },
+  { ref: 'SAL-ORD-2026-00009', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-09-05', date: '05/09/2026', articles: 1, picked: 1, total: 1, stock: 'OK', list: 'Liste soumise',
+    items: [{ name: 'Biomil 2 400 Gr', code: 'Article 2', remain: 0, available: 102, warehouse: 'Magasins - MP', state: 'OK' }] },
+  { ref: 'SAL-ORD-2026-00012', client: 'CLIENT 2', city: 'Oran', wilaya: 'Oran', due: '2026-09-07', date: '07/09/2026', articles: 24, picked: 0, total: 24, stock: 'OK', list: 'Liste brouillon',
+    items: [{ name: 'Biomil 1 400 Gr', code: 'Article 1', remain: 24, available: 96, warehouse: 'Magasins - MP', state: 'À prélever' }] },
+  { ref: 'SAL-ORD-2026-00011', client: 'CLIENT 1', city: 'Mostaganem', wilaya: 'Mostaganem', due: '2026-09-09', date: '09/09/2026', articles: 3, picked: 0, total: 3, stock: 'OK', list: 'Liste brouillon',
+    items: [{ name: 'Biomil 2 400 Gr', code: 'Article 2', remain: 3, available: 102, warehouse: 'Magasins - MP', state: 'À prélever' }] }
+];
+
+const TONES = {
+  'Liste soumise': { bg: '#f0fdf4', fg: '#15803d', dot: '#16a34a' },
+  'Liste partielle': { bg: '#fffbeb', fg: '#a16207', dot: '#d97706' },
+  'Liste brouillon': { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa' },
+  'OK': { bg: '#f0fdf4', fg: '#15803d', dot: '#16a34a' },
+  'Sur liste': { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa' },
+  'À prélever': { bg: '#fffbeb', fg: '#a16207', dot: '#d97706' }
+};
+
+const ICONS = {
+  'Liste soumise': { glyph: '✓', border: '#16a34a', bg: '#dcfce7', color: '#15803d' },
+  'Liste partielle': { glyph: '◐', border: '#d97706', bg: '#fef3c7', color: '#a16207' },
+  'Liste brouillon': { glyph: '○', border: '#d4d4d8', bg: '#ffffff', color: '#a1a1aa' },
+  'Soumise': { glyph: '✓', border: '#16a34a', bg: '#dcfce7', color: '#15803d' },
+  'Brouillon': { glyph: '○', border: '#d4d4d8', bg: '#ffffff', color: '#a1a1aa' }
+};
+
+const PICK_LISTS = [
+  { name: 'PICK-2026-00014', warehouse: 'Magasins - MP', status: 'Soumise', clients: 'CLIENT 2', wilaya: 'Oran',
+    orders: 'SAL-ORD-2026-00003', picked: 12, requested: 12, modified: '05/09/2026 14:02', changed: false },
+  { name: 'PICK-2026-00015', warehouse: 'Magasins - MP', status: 'Brouillon', clients: 'CLIENT 1 · CLIENT 2', wilaya: 'Mostaganem · Oran',
+    orders: 'SAL-ORD-2026-00012, 00011', picked: 0, requested: 27, modified: '05/09/2026 09:18', changed: true }
+];
+
+class Component extends DCLogic {
+  state = { tab: 'commandes', query: '', overdue: false, short: false, draft: false, sel: {}, open: {}, alerts: null };
+
+  filtered() {
+    const q = this.state.query.trim().toLowerCase();
+    return DATA.filter(d => {
+      if (q && ![d.ref, d.client, d.city].some(v => v.toLowerCase().includes(q))) return false;
+      if (this.state.overdue && !(d.due < TODAY)) return false;
+      if (this.state.short && d.stock !== 'À compléter') return false;
+      if (this.state.draft && d.picked !== 0) return false;
+      return true;
+    });
+  }
+
+  toggle(ref) {
+    this.setState(s => {
+      const sel = Object.assign({}, s.sel);
+      if (sel[ref]) delete sel[ref]; else sel[ref] = true;
+      return { sel };
+    });
+  }
+
+  expand(ref) {
+    this.setState(s => {
+      const open = Object.assign({}, s.open);
+      if (open[ref]) delete open[ref]; else open[ref] = true;
+      return { open };
+    });
+  }
+
+  renderVals() {
+    const list = this.filtered();
+    const sel = this.state.sel;
+    const selRefs = Object.keys(sel);
+    const selRows = DATA.filter(d => sel[d.ref]);
+    const remainOf = d => d.items.reduce((n, it) => n + it.remain, 0);
+    const selArticles = selRows.reduce((n, d) => n + remainOf(d), 0);
+    const alertsOpen = this.state.alerts === 'ouvert'
+      || (this.state.alerts === null && (this.props.alertStyle || 'compact') === 'cartes');
+
+    const rows = list.map(d => {
+      const on = !!sel[d.ref];
+      const open = !!this.state.open[d.ref];
+      const pct = Math.round((d.picked / d.total) * 100);
+      const late = d.due < TODAY;
+      const b = TONES[d.list];
+      return {
+        ref: d.ref, client: d.client, city: d.city, wilaya: d.wilaya, date: d.date, articles: d.articles,
+        picked: d.picked + ' / ' + d.total + ' · ' + pct + ' %',
+        pct: pct + '%',
+        barColor: pct === 100 ? '#16a34a' : (pct === 0 ? '#e4e4e7' : '#18181b'),
+        pickColor: pct === 0 ? '#a1a1aa' : '#52525b',
+        dateColor: late ? '#b91c1c' : '#52525b',
+        listState: d.list, badgeBg: b.bg, badgeFg: b.fg, badgeDot: b.dot,
+        iconGlyph: ICONS[d.list].glyph,
+        iconBorder: ICONS[d.list].border,
+        iconBg: ICONS[d.list].bg,
+        iconColor: ICONS[d.list].color,
+        bg: on ? '#f8f8f8' : '#ffffff',
+        boxBorder: on ? '#18181b' : '#d4d4d8',
+        boxBg: on ? '#18181b' : '#ffffff',
+        check: on ? '✓' : '',
+        caret: open ? '▾' : '▸',
+        open,
+        itemsLabel: d.items.length + ' ligne(s) · ' + remainOf(d) + ' restant(s)',
+        items: d.items.map(it => {
+          const ib = TONES[it.state];
+          return {
+            name: it.name, code: it.code, available: it.available, warehouse: it.warehouse, state: it.state,
+            remain: it.remain, remainColor: it.remain > 0 ? '#b91c1c' : '#a1a1aa',
+            badgeBg: ib.bg, badgeFg: ib.fg, badgeDot: ib.dot
+          };
+        }),
+        toggle: () => this.toggle(d.ref),
+        expand: (e) => { if (e && e.stopPropagation) e.stopPropagation(); this.expand(d.ref); }
+      };
+    });
+
+    const chip = on => on
+      ? { border: '#18181b', bg: '#18181b', color: '#ffffff' }
+      : { border: '#e4e4e7', bg: '#ffffff', color: '#52525b' };
+    const oc = chip(this.state.overdue);
+    const sc = chip(this.state.short);
+    const dc = chip(this.state.draft);
+    const allOn = list.length > 0 && list.every(d => sel[d.ref]);
+
+    const tab = this.state.tab;
+    const tabStyle = on => ({
+      weight: on ? 600 : 500,
+      color: on ? '#09090b' : '#71717a',
+      border: on ? '#18181b' : 'transparent',
+      chipBg: on ? '#18181b' : '#f4f4f5',
+      chipFg: on ? '#ffffff' : '#52525b'
+    });
+    const tc = tabStyle(tab === 'commandes');
+    const tl = tabStyle(tab === 'listes');
+    const tr = tabStyle(tab === 'retours');
+
+    const pickLists = PICK_LISTS.map(p => {
+      const pct = p.requested ? Math.round((p.picked / p.requested) * 100) : 0;
+      const ic = ICONS[p.status];
+      return {
+        name: p.name, warehouse: p.warehouse, clients: p.clients, wilaya: p.wilaya, orders: p.orders,
+        modified: p.modified,
+        statusTitle: p.status + (p.changed ? ' · commande modifiée' : ''),
+        iconGlyph: ic.glyph, iconBorder: ic.border, iconBg: ic.bg, iconColor: ic.color,
+        changedMark: p.changed ? '⚠' : '',
+        pct: pct + '%',
+        pickedLabel: p.picked + ' / ' + p.requested,
+        barColor: pct === 100 ? '#16a34a' : (pct === 0 ? '#e4e4e7' : '#18181b'),
+        pickColor: pct === 0 ? '#a1a1aa' : '#52525b'
+      };
+    });
+
+    return {
+      rows,
+      pickLists,
+      isCommandes: tab === 'commandes',
+      isListes: tab === 'listes',
+      isRetours: tab === 'retours',
+      goCommandes: () => this.setState({ tab: 'commandes' }),
+      goListes: () => this.setState({ tab: 'listes' }),
+      goRetours: () => this.setState({ tab: 'retours' }),
+      tabCmdWeight: tc.weight, tabCmdColor: tc.color, tabCmdBorder: tc.border, tabCmdChipBg: tc.chipBg, tabCmdChipFg: tc.chipFg,
+      tabListWeight: tl.weight, tabListColor: tl.color, tabListBorder: tl.border, tabListChipBg: tl.chipBg, tabListChipFg: tl.chipFg,
+      tabRetWeight: tr.weight, tabRetColor: tr.color, tabRetBorder: tr.border, tabRetChipBg: tr.chipBg, tabRetChipFg: tr.chipFg,
+      isEmpty: list.length === 0,
+      showAlerts: alertsOpen,
+      query: this.state.query,
+      resultLabel: list.length + ' / ' + DATA.length + ' commandes',
+      pageLabel: '1 – ' + list.length + ' sur ' + list.length,
+      hasSelection: selRefs.length > 0,
+      selectionLabel: selRefs.length + (selRefs.length > 1 ? ' commandes sélectionnées' : ' commande sélectionnée'),
+      selectionMeta: selArticles > 0 ? selArticles + ' article(s) à prélever' : 'rien à prélever',
+      overdueBorder: oc.border, overdueBg: oc.bg, overdueColor: oc.color,
+      shortBorder: sc.border, shortBg: sc.bg, shortColor: sc.color,
+      draftBorder: dc.border, draftBg: dc.bg, draftColor: dc.color,
+      allBorder: allOn ? '#18181b' : '#d4d4d8',
+      allBg: allOn ? '#18181b' : '#ffffff',
+      allCheck: allOn ? '✓' : '',
+      onQuery: e => this.setState({ query: e.target.value }),
+      toggleOverdue: () => this.setState(s => ({ overdue: !s.overdue })),
+      toggleShort: () => this.setState(s => ({ short: !s.short })),
+      toggleDraft: () => this.setState(s => ({ draft: !s.draft })),
+      resetFilters: () => this.setState({ query: '', overdue: false, short: false, draft: false }),
+      toggleAll: () => {
+        if (allOn) { this.setState({ sel: {} }); return; }
+        const next = {};
+        list.forEach(d => { next[d.ref] = true; });
+        this.setState({ sel: next });
+      },
+      clearSelection: () => this.setState({ sel: {} }),
+      toggleAlertDetail: () => this.setState({ alerts: alertsOpen ? 'ferme' : 'ouvert' }),
+      selectShort: () => {
+        const next = {};
+        DATA.filter(d => d.stock === 'À compléter').forEach(d => { next[d.ref] = true; });
+        this.setState({ sel: next, short: true });
+      },
+      filterDraft: () => this.setState({ draft: true, overdue: false, short: false }),
+      filterPartial: () => this.setState({ short: true, draft: false, overdue: false }),
+      filterReady: () => {
+        const next = {};
+        DATA.filter(d => d.list === 'Liste soumise').forEach(d => { next[d.ref] = true; });
+        this.setState({ sel: next, draft: false, short: false, overdue: false });
+      }
+    };
+  }
+}
+
+</script>
+</body>
+</html>

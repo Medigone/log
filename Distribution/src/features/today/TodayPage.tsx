@@ -202,12 +202,6 @@ export function TodayPage({ role }: { role: DistributionRole }) {
           />
         }
         description={description}
-        actions={
-          <>
-            <Button variant="outline" onClick={() => navigate("/preparation")}>Préparer</Button>
-            <Button onClick={() => navigate("/planning")}>Planifier une tournée</Button>
-          </>
-        }
       />
 
       {error ? (

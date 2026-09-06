@@ -36,6 +36,7 @@ import type {
   UnassignResult,
   VehicleStock,
   ActivityDashboardData,
+  ReturnHistoryRow,
 } from "@/shared/types/distribution";
 
 interface FrappeMessage<T> {
@@ -113,6 +114,29 @@ export function useReturnRoutes(dateFrom: string, dateTo: string) {
     "log.api.distribution.get_return_routes",
     { date_from: dateFrom, date_to: dateTo },
     `distribution-returns-${dateFrom}-${dateTo}`,
+  );
+}
+
+export function useReturnHistory(dateFrom: string, dateTo: string) {
+  return useFrappeGetCall<FrappeMessage<ReturnHistoryRow[]>>(
+    "log.api.distribution.get_return_history",
+    { date_from: dateFrom, date_to: dateTo },
+    `distribution-return-history-${dateFrom}-${dateTo}`,
+  );
+}
+
+export type ReturnControlMetrics = {
+  declared: number;
+  discrepancies: number;
+  averageControlDelay: number | null;
+  days: number;
+};
+
+export function useReturnMetrics(days = 30) {
+  return useFrappeGetCall<FrappeMessage<ReturnControlMetrics>>(
+    "log.api.distribution.get_return_metrics",
+    { days },
+    `distribution-return-metrics-${days}`,
   );
 }
 

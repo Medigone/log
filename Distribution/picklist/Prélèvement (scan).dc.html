@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 0; background: #fafafa; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #18181b; text-decoration: none; }
+  a:hover { color: #52525b; }
+  input { font-family: inherit; }
+  input:focus { outline: none; }
+  @keyframes omPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  @keyframes omScanLine { 0% { transform: translateY(0); } 100% { transform: translateY(104px); } }
+</style>
+</helmet>
+<div style="font-family: Geist, system-ui, -apple-system, sans-serif; color: #09090b; background: #fafafa; min-height: 100vh; font-size: 14px;">
+
+  <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 20px; background: #ffffff; border-bottom: 1px solid #e4e4e7; position: sticky; top: 0; z-index: 30;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+      <div style="width: 14px; height: 12px; border: 1.5px solid currentColor; border-radius: 2px; display: flex;"><div style="width: 5px; border-right: 1.5px solid currentColor;"></div></div>
+    </div>
+    <div style="width: 1px; height: 18px; background: #e4e4e7;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717a;">
+      <span style="cursor: pointer;" style-hover="color: #09090b;">Préparation</span><span style="color: #d4d4d8;">/</span><span style="color: #09090b; font-weight: 500; font-family: 'Geist Mono', monospace; font-size: 12.5px;">STO-PICK-2026-00011</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #71717a;">
+      <span style="display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; background: #f4f4f5; white-space: nowrap;">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: #16a34a; animation: omPulse 1.6s ease-in-out infinite;"></span>Douchette connectée
+      </span>
+    </div>
+    <div style="width: 28px; height: 28px; border-radius: 50%; background: #18181b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">MB</div>
+  </div>
+
+  <div style="padding: 20px 20px 56px; display: flex; flex-direction: column; gap: 14px;">
+
+    <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+        <div style="display: flex; align-items: center; gap: 6px; font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa; cursor: pointer;" style-hover="color: #52525b;">← Commandes · Entrepôt</div>
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 23px; font-weight: 500; letter-spacing: -0.01em;">STO-PICK-2026-00011</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; background: {{ stateBg }}; color: {{ stateFg }};">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: {{ stateDot }};"></span>{{ stateLabel }}
+          </span>
+        </div>
+        <div style="font-size: 13px; color: #71717a;">{{ headerHint }}</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="height: 34px; padding: 0 13px; display: flex; align-items: center; gap: 7px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;" onClick="{{ fillAll }}">Tout prélever</div>
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 7px; border-radius: 8px; font-size: 13px; font-weight: 500; white-space: nowrap; background: {{ reviewBg }}; color: {{ reviewFg }}; cursor: {{ reviewCursor }};" title="{{ reviewTitle }}">Contrôle final <span style="opacity: 0.6;">→</span></div>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid #e4e4e7; border-radius: 10px; background: #ffffff; width: fit-content;">
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="3">
+        <div style="height: 28px; padding: 0 12px; display: flex; align-items: center; gap: 7px; border-radius: 7px; font-size: 12.5px; white-space: nowrap; background: {{ s.bg }}; color: {{ s.fg }}; font-weight: {{ s.weight }};">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; opacity: 0.6;">{{ s.num }}</span>{{ s.label }}
+          <sc-if value="{{ s.done }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size: 11px;">✓</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 14px; align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 14px; min-width: 0;">
+
+        <div style="border: 1px solid {{ scanBorder }}; border-radius: 12px; background: #ffffff; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); gap: 0;">
+            <div style="padding: 14px; display: flex; flex-direction: column; gap: 9px; border-right: 1px solid #f4f4f5; min-width: 0;">
+              <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Scan article</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b; white-space: nowrap;">+{{ increment }} / scan</span>
+              </div>
+              <input type="text" placeholder="Code puis Entrée" value="{{ scanValue }}" onChange="{{ onScanChange }}" onKeyDown="{{ onScanKey }}" style="height: 52px; padding: 0 14px; border: 1.5px solid {{ inputBorder }}; border-radius: 10px; font-family: 'Geist Mono', monospace; font-size: 17px; letter-spacing: 0.02em; color: #09090b; background: {{ inputBg }}; width: 100%; min-width: 0;" style-focus="border-color: #18181b;" />
+              <span style="font-size: 12.5px; color: {{ feedbackColor }}; line-height: 1.45;">{{ feedback }}</span>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span style="font-size: 11.5px; color: #a1a1aa; white-space: nowrap;">Test :</span>
+                <sc-for list="{{ quickCodes }}" as="q" hint-placeholder-count="3">
+                  <div style="height: 24px; padding: 0 8px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 6px; font-family: 'Geist Mono', monospace; font-size: 11px; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;" onClick="{{ q.scan }}">{{ q.code }}</div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="padding: 14px; display: flex; flex-direction: column; gap: 8px; background: {{ lastBg }}; min-width: 0;">
+              <sc-if value="{{ hasLast }}" hint-placeholder-val="{{ false }}">
+                <div style="display: flex; flex-direction: column; gap: 7px; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 7px;">
+                    <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">Dernier scan</span>
+                    <div style="flex: 1;"></div>
+                    <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; white-space: nowrap; background: {{ lastChipBg }}; color: {{ lastChipFg }};">{{ lastChipLabel }}</span>
+                  </div>
+                  <span style="font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ lastItem }}</span>
+                  <div style="display: flex; align-items: baseline; gap: 6px;">
+                    <span style="font-family: 'Geist Mono', monospace; font-size: 28px; font-weight: 500; line-height: 1; white-space: nowrap;">{{ lastPicked }}</span>
+                    <span style="font-size: 13px; color: #71717a; white-space: nowrap;">/ {{ lastRequested }} {{ lastUnit }}</span>
+                  </div>
+                  <div style="height: 5px; border-radius: 999px; background: #ffffff; border: 1px solid #e4e4e7; overflow: hidden;"><div style="width: {{ lastPct }}; height: 100%; background: {{ lastBarColor }};"></div></div>
+                  <span style="font-size: 12px; font-weight: 500; color: {{ lastRestColor }};">{{ lastRest }}</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ noLast }}" hint-placeholder-val="{{ true }}">
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 8px 0;">
+                  <div style="display: flex; align-items: flex-end; gap: 2px; height: 26px;">
+                    <sc-for list="{{ bars }}" as="b" hint-placeholder-count="9">
+                      <div style="width: {{ b.w }}; height: 26px; background: #d4d4d8;"></div>
+                    </sc-for>
+                  </div>
+                  <span style="font-size: 12.5px; font-weight: 500; color: #52525b;">En attente d’un scan</span>
+                  <span style="font-size: 11.5px; color: #a1a1aa; line-height: 1.45;">Le compteur de la ligne se met à jour à chaque lecture.</span>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid #f4f4f5; background: #fafafa; flex-wrap: wrap;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap;">{{ totalLabel }}</span>
+            <div style="flex: 1; min-width: 120px; height: 6px; border-radius: 999px; background: #f4f4f5; overflow: hidden;">
+              <div style="width: {{ totalPct }}; height: 100%; background: {{ totalBarColor }};"></div>
+            </div>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #71717a; white-space: nowrap;">{{ totalPct }}</span>
+            <sc-if value="{{ hasGap }}" hint-placeholder-val="{{ false }}">
+              <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; color: #b91c1c; white-space: nowrap;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>{{ gapLabel }}
+              </span>
+            </sc-if>
+          </div>
+        </div>
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+            <span style="font-size: 13.5px; font-weight: 600;">Lignes à prélever</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">{{ lineCount }}</span>
+            <span style="font-size: 12px; color: #a1a1aa;">{{ orderLabel }}</span>
+            <div style="flex: 1;"></div>
+            <input type="text" placeholder="Article, entrepôt, commande…" value="{{ query }}" onChange="{{ onQuery }}" style="height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; width: 200px; color: #09090b;" style-focus="border-color: #a1a1aa;" />
+            <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid {{ pendingBorder }}; background: {{ pendingBg }}; color: {{ pendingColor }};" onClick="{{ togglePending }}">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span> Restants
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 30px minmax(0, 1.6fr) minmax(0, 1.1fr) 152px 64px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+            <div style="padding: 8px 0;"></div>
+            <div style="padding: 8px 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Article</div>
+            <div style="padding: 8px 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Entrepôt · Cde</div>
+            <div style="padding: 8px 0; text-align: center;">Prélevé / demandé</div>
+            <div style="padding: 8px 0; text-align: right;">Action</div>
+          </div>
+
+          <sc-for list="{{ lines }}" as="l" hint-placeholder-count="3">
+            <div style="display: grid; grid-template-columns: 30px minmax(0, 1.6fr) minmax(0, 1.1fr) 152px 64px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; background: {{ l.rowBg }}; opacity: {{ l.opacity }};">
+              <div style="padding: 10px 0;">
+                <span style="display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-size: 11px; font-weight: 700; border: 1.5px solid {{ l.iconBorder }}; background: {{ l.iconBg }}; color: {{ l.iconColor }};">{{ l.glyph }}</span>
+              </div>
+              <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+                <span style="font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ l.name }}</span>
+                <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                  <div style="flex: 1; min-width: 24px; height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;">
+                    <div style="width: {{ l.pct }}; height: 100%; background: {{ l.barColor }};"></div>
+                  </div>
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; white-space: nowrap; flex: 0 0 auto; color: {{ l.restColor }};">{{ l.restLabel }}</span>
+                </div>
+              </div>
+              <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="font-size: 12.5px; color: #52525b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ l.warehouse }}</span>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ l.order }}</span>
+              </div>
+              <div style="padding: 9px 8px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 7px; font-size: 13px; color: #52525b; cursor: pointer; background: #ffffff; flex: 0 0 auto;" style-hover="background: #f4f4f5;" onClick="{{ l.dec }}">−</div>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 13.5px; font-weight: 500; white-space: nowrap; color: {{ l.pickedColor }};">{{ l.picked }} / {{ l.requested }}</span>
+                <div style="width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 7px; font-size: 13px; color: #52525b; cursor: pointer; background: #ffffff; flex: 0 0 auto;" style-hover="background: #f4f4f5;" onClick="{{ l.inc }}">+</div>
+              </div>
+              <div style="padding: 9px 0; text-align: right;">
+                <span style="font-size: 11.5px; font-weight: 500; color: {{ l.actionColor }}; cursor: pointer; white-space: nowrap;" style-hover="text-decoration: underline;" onClick="{{ l.fill }}">{{ l.action }}</span>
+              </div>
+            </div>
+          </sc-for>
+
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+              <div style="width: 34px; height: 34px; border-radius: 9px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 14px;">✓</div>
+              <div style="font-size: 13px; font-weight: 600;">{{ emptyTitle }}</div>
+              <div style="font-size: 12.5px; color: #71717a; max-width: 320px; line-height: 1.5;">{{ emptyBody }}</div>
+              <div style="margin-top: 4px; height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser les filtres</div>
+            </div>
+          </sc-if>
+        </div>
+
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f4f4f5;">
+            <span style="font-size: 13px; font-weight: 600;">Journal des scans</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">{{ logCount }}</span>
+            <div style="flex: 1;"></div>
+            <span style="font-size: 12px; color: #a1a1aa;">Chaque scan est annulable jusqu’au contrôle final.</span>
+          </div>
+          <sc-for list="{{ log }}" as="e" hint-placeholder-count="2">
+            <div style="display: grid; grid-template-columns: 74px minmax(0, 1fr) 120px 96px 78px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5;">
+              <div style="padding: 8px 0; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #a1a1aa;">{{ e.time }}</div>
+              <div style="padding: 8px 8px 8px 0; font-size: 12.5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{ e.color }};">{{ e.text }}</div>
+              <div style="padding: 8px 0; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #71717a;">{{ e.code }}</div>
+              <div style="padding: 8px 0; font-family: 'Geist Mono', monospace; font-size: 11.5px; color: #52525b;">{{ e.delta }}</div>
+              <div style="padding: 8px 0; text-align: right;">
+                <sc-if value="{{ e.undoable }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 11.5px; font-weight: 500; color: #52525b; cursor: pointer;" style-hover="text-decoration: underline;" onClick="{{ e.undo }}">Annuler</span>
+                </sc-if>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ logEmpty }}" hint-placeholder-val="{{ true }}">
+            <div style="padding: 20px 12px; text-align: center; font-size: 12.5px; color: #a1a1aa;">Aucun scan pour l’instant.</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <sc-if value="{{ showMobile }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 10px; position: sticky; top: 66px; width: 100%; max-width: 340px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa;">Vue mobile magasinier</span>
+          <div style="flex: 1; height: 1px; background: #e4e4e7;"></div>
+        </div>
+        <div style="border: 1px solid #e4e4e7; border-radius: 20px; background: #ffffff; padding: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+          <div style="border-radius: 14px; background: #fafafa; border: 1px solid #f4f4f5; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #ffffff; border-bottom: 1px solid #f4f4f5;">
+              <span style="font-size: 12px; color: #a1a1aa;">←</span>
+              <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">PICK-00011</span>
+              <div style="flex: 1;"></div>
+              <span style="font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 999px; background: {{ mobileChipBg }}; color: {{ mobileChipFg }}; white-space: nowrap;">{{ mobileChip }}</span>
+            </div>
+
+            <div style="position: relative; height: 148px; background: #18181b; overflow: hidden;">
+              <div style="position: absolute; inset: 0; opacity: 0.28; background-image: linear-gradient(#3f3f46 1px, transparent 1px), linear-gradient(90deg, #3f3f46 1px, transparent 1px); background-size: 22px 22px;"></div>
+              <div style="position: absolute; left: 50%; top: 50%; width: 168px; height: 104px; margin: -52px 0 0 -84px; border-radius: 10px; border: 2px solid rgba(255,255,255,0.85);"></div>
+              <div style="position: absolute; left: 50%; top: 50%; width: 168px; height: 2px; margin: -52px 0 0 -84px; background: #16a34a; animation: omScanLine 1.9s ease-in-out infinite alternate;"></div>
+              <div style="position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 11px; color: rgba(255,255,255,0.7);">Cadrez le code-barres</div>
+            </div>
+
+            <div style="padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="border: 1px solid #e4e4e7; border-radius: 10px; background: #ffffff; padding: 11px; display: flex; flex-direction: column; gap: 6px;">
+                <span style="font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ mobileItem }}</span>
+                <div style="display: flex; align-items: baseline; gap: 5px;">
+                  <span style="font-family: 'Geist Mono', monospace; font-size: 30px; font-weight: 500; line-height: 1;">{{ mobilePicked }}</span>
+                  <span style="font-size: 13px; color: #71717a;">/ {{ mobileRequested }}</span>
+                </div>
+                <div style="height: 5px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: {{ mobilePct }}; height: 100%; background: {{ mobileBar }};"></div></div>
+                <span style="font-size: 11.5px; font-weight: 500; color: {{ mobileRestColor }};">{{ mobileRest }}</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <sc-for list="{{ mobileLines }}" as="m" hint-placeholder-count="3">
+                  <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid {{ m.border }}; border-radius: 9px; background: {{ m.bg }}; opacity: {{ m.opacity }};">
+                    <span style="display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 10px; font-weight: 700; flex: 0 0 auto; border: 1.5px solid {{ m.iconBorder }}; background: {{ m.iconBg }}; color: {{ m.iconColor }};">{{ m.glyph }}</span>
+                    <span style="font-size: 11.5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ m.name }}</span>
+                    <div style="flex: 1;"></div>
+                    <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; font-weight: 500; white-space: nowrap;">{{ m.count }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="height: 46px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 10px; background: #18181b; color: #ffffff; font-size: 13.5px; font-weight: 500;">Scanner</div>
+              <div style="height: 42px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 10px; font-size: 13px; font-weight: 500; color: #18181b; background: #ffffff;">Contrôle final</div>
+              <div style="text-align: center; font-size: 11.5px; color: #71717a; cursor: pointer;">Saisir un code manuellement</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size: 11.5px; color: #71717a; line-height: 1.5;">La caméra ne s’affiche qu’ici : sur poste fixe, la douchette écrit dans le champ de scan, qui garde le focus.</div>
+      </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;packSize&quot;:{&quot;editor&quot;:&quot;int&quot;,&quot;default&quot;:1,&quot;min&quot;:1,&quot;max&quot;:12,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Scan&quot;,&quot;unit&quot;:&quot;u / scan&quot;},&quot;showMobile&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Scan&quot;}}">
+const LINES = [
+  { key: 'a1', code: 'ART-1', barcode: '6112345000011', name: 'Article 1 · Biomil 1 400 Gr', warehouse: 'Magasins - MP', order: 'SAL-ORD-2026-00011', requested: 1, unit: 'u' },
+  { key: 'a3', code: 'ART-3', barcode: '6112345000035', name: 'Article 3 · Biomil 3 400 Gr', warehouse: 'Magasins - MP', order: 'SAL-ORD-2026-00011', requested: 1, unit: 'u' },
+  { key: 'a2', code: 'ART-2', barcode: '6112345000028', name: 'Article 2 · Biomil 2 400 Gr', warehouse: 'Magasins - MP', order: 'SAL-ORD-2026-00011', requested: 1, unit: 'u' }
+];
+
+const BAR_WIDTHS = ['3px', '1px', '2px', '1px', '4px', '1px', '2px', '3px', '1px'];
+
+function clock(offset) {
+  const d = new Date(Date.now() - offset * 1000);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':' + String(d.getSeconds()).padStart(2, '0');
+}
+
+function plural(n, singular, pluralForm) {
+  return n + ' ' + (n > 1 ? (pluralForm || singular + 's') : singular);
+}
+
+class Component extends DCLogic {
+  state = { picked: {}, scanValue: '', query: '', pendingOnly: false, last: null, feedback: '', tone: 'idle', log: [], seq: 0 };
+
+  find(text) {
+    const t = String(text || '').trim().toLowerCase();
+    if (!t) return null;
+    return LINES.find(l => l.barcode === t || l.code.toLowerCase() === t || l.name.toLowerCase().includes(t)) || null;
+  }
+
+  increment() {
+    return Math.max(1, Number(this.props.packSize || 1));
+  }
+
+  applyScan(text) {
+    const line = this.find(text);
+    const step = this.increment();
+    if (!line) {
+      this.setState(s => ({
+        scanValue: '', feedback: 'Code inconnu : ' + String(text).trim() + ' — aucune ligne de cette liste.', tone: 'error',
+        log: [{ id: 'e' + s.seq, time: clock(0), text: 'Code non reconnu', code: String(text).trim(), delta: '—', tone: 'error' }].concat(s.log).slice(0, 6),
+        seq: s.seq + 1
+      }));
+      return;
+    }
+    this.setState(s => {
+      const current = s.picked[line.key] || 0;
+      if (current >= line.requested) {
+        return {
+          scanValue: '', last: line.key, tone: 'warn',
+          feedback: 'Quantité déjà atteinte pour ' + line.code + ' — scan ignoré.',
+          log: [{ id: 'e' + s.seq, time: clock(0), text: line.name + ' · quantité déjà atteinte', code: line.barcode, delta: 'ignoré', tone: 'warn' }].concat(s.log).slice(0, 6),
+          seq: s.seq + 1
+        };
+      }
+      const next = Math.min(line.requested, current + step);
+      const picked = Object.assign({}, s.picked);
+      picked[line.key] = next;
+      return {
+        picked, scanValue: '', last: line.key, tone: 'ok',
+        feedback: line.code + ' · ' + next + ' / ' + line.requested + (next >= line.requested ? ' — ligne complète' : ''),
+        log: [{ id: 'e' + s.seq, key: line.key, amount: next - current, time: clock(0), text: line.name, code: line.barcode, delta: '+' + (next - current), tone: 'ok' }].concat(s.log).slice(0, 6),
+        seq: s.seq + 1
+      };
+    });
+  }
+
+  setQty(key, value) {
+    const line = LINES.find(l => l.key === key);
+    const next = Math.max(0, Math.min(line.requested, value));
+    this.setState(s => {
+      const picked = Object.assign({}, s.picked);
+      picked[key] = next;
+      return { picked, last: key, tone: 'ok', feedback: line.code + ' · ' + next + ' / ' + line.requested + ' (saisie manuelle)' };
+    });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const step = this.increment();
+    const pickedOf = l => s.picked[l.key] || 0;
+    const totalReq = LINES.reduce((n, l) => n + l.requested, 0);
+    const totalPicked = LINES.reduce((n, l) => n + pickedOf(l), 0);
+    const rest = totalReq - totalPicked;
+    const complete = rest === 0;
+    const gaps = LINES.filter(l => pickedOf(l) > 0 && pickedOf(l) < l.requested).length;
+
+    const q = s.query.trim().toLowerCase();
+    const visible = LINES.filter(l => {
+      if (q && ![l.name, l.code, l.barcode, l.warehouse, l.order].some(v => v.toLowerCase().includes(q))) return false;
+      if (s.pendingOnly && pickedOf(l) >= l.requested) return false;
+      return true;
+    }).slice().sort((a, b) => {
+      const ac = pickedOf(a) >= a.requested ? 1 : 0;
+      const bc = pickedOf(b) >= b.requested ? 1 : 0;
+      return ac - bc;
+    });
+
+    const lastLine = s.last ? LINES.find(l => l.key === s.last) : null;
+    const lastPicked = lastLine ? pickedOf(lastLine) : 0;
+    const lastDone = lastLine ? lastPicked >= lastLine.requested : false;
+
+    const lineVals = visible.map(l => {
+      const p = pickedOf(l);
+      const done = p >= l.requested;
+      const pct = Math.round((p / l.requested) * 100);
+      return {
+        name: l.name, barcode: l.barcode, warehouse: l.warehouse, order: l.order,
+        requested: l.requested, unit: l.unit, picked: p,
+        pickedColor: done ? '#15803d' : (p ? '#09090b' : '#a1a1aa'),
+        pct: pct + '%',
+        barColor: done ? '#16a34a' : (p ? '#d97706' : '#e4e4e7'),
+        restLabel: done ? 'complet' : 'reste ' + (l.requested - p),
+        restColor: done ? '#15803d' : '#a16207',
+        glyph: done ? '✓' : (p ? '◐' : '○'),
+        iconBorder: done ? '#16a34a' : (p ? '#d97706' : '#d4d4d8'),
+        iconBg: done ? '#dcfce7' : (p ? '#fef3c7' : '#ffffff'),
+        iconColor: done ? '#15803d' : (p ? '#a16207' : '#a1a1aa'),
+        rowBg: s.last === l.key ? '#f7fdf9' : '#ffffff',
+        opacity: done ? 0.62 : 1,
+        action: done ? 'Remettre à 0' : 'Tout',
+        actionColor: done ? '#71717a' : '#18181b',
+        inc: () => this.setQty(l.key, pickedOf(l) + step),
+        dec: () => this.setQty(l.key, pickedOf(l) - step),
+        fill: () => this.setQty(l.key, done ? 0 : l.requested)
+      };
+    });
+
+    const stepDefs = [
+      { num: '1', label: 'Sélection', done: true, active: false },
+      { num: '2', label: 'Prélèvement', done: false, active: true },
+      { num: '3', label: 'Contrôle', done: false, active: false }
+    ];
+
+    const feedbackColor = s.tone === 'error' ? '#b91c1c' : (s.tone === 'warn' ? '#a16207' : (s.tone === 'ok' ? '#15803d' : '#a1a1aa'));
+
+    return {
+      steps: stepDefs.map(d => ({
+        num: d.num, label: d.label, done: d.done,
+        bg: d.active ? '#18181b' : 'transparent',
+        fg: d.active ? '#ffffff' : (d.done ? '#15803d' : '#a1a1aa'),
+        weight: d.active ? 600 : 500
+      })),
+      stateLabel: complete ? 'Prêt pour le contrôle' : 'Prélèvement en cours',
+      stateBg: complete ? '#f0fdf4' : '#fffbeb',
+      stateFg: complete ? '#15803d' : '#a16207',
+      stateDot: complete ? '#16a34a' : '#d97706',
+      headerHint: complete
+        ? 'Toutes les lignes sont au complet — passez au contrôle final.'
+        : 'Scannez les articles : ' + plural(rest, 'unité') + ' encore à prélever.',
+      reviewBg: complete ? '#18181b' : '#f4f4f5',
+      reviewFg: complete ? '#ffffff' : '#a1a1aa',
+      reviewCursor: complete ? 'pointer' : 'not-allowed',
+      reviewTitle: complete ? 'Passer au contrôle final' : plural(rest, 'unité') + ' encore à prélever',
+
+      increment: step,
+      scanValue: s.scanValue,
+      onScanChange: e => this.setState({ scanValue: e.target.value }),
+      onScanKey: e => { if (e.key === 'Enter') this.applyScan(e.target.value); },
+      inputBorder: s.tone === 'error' ? '#fecaca' : '#e4e4e7',
+      inputBg: s.tone === 'error' ? '#fffafa' : '#ffffff',
+      scanBorder: s.tone === 'error' ? '#fecaca' : '#e4e4e7',
+      feedback: s.feedback || 'Chaque scan ajoute ' + step + ' unité' + (step > 1 ? 's' : '') + ' jusqu’à la quantité demandée.',
+      feedbackColor,
+      quickCodes: LINES.map(l => ({ code: l.barcode, scan: () => this.applyScan(l.barcode) })),
+      bars: BAR_WIDTHS.map(w => ({ w })),
+
+      hasLast: !!lastLine,
+      noLast: !lastLine,
+      lastBg: lastLine ? (lastDone ? '#f7fdf9' : '#fffdf7') : '#fafafa',
+      lastItem: lastLine ? lastLine.name : '—',
+      lastPicked: lastPicked,
+      lastRequested: lastLine ? lastLine.requested : 0,
+      lastUnit: lastLine ? lastLine.unit : '',
+      lastPct: lastLine ? Math.round((lastPicked / lastLine.requested) * 100) + '%' : '0%',
+      lastBarColor: lastDone ? '#16a34a' : '#d97706',
+      lastRest: lastLine ? (lastDone ? 'Quantité atteinte' : 'Reste ' + (lastLine.requested - lastPicked)) : '',
+      lastRestColor: lastDone ? '#15803d' : '#a16207',
+      lastChipLabel: lastDone ? 'complet' : 'en cours',
+      lastChipBg: lastDone ? '#dcfce7' : '#fef3c7',
+      lastChipFg: lastDone ? '#15803d' : '#a16207',
+
+      totalLabel: totalPicked + ' / ' + totalReq + ' unités prélevées',
+      totalPct: Math.round((totalPicked / totalReq) * 100) + '%',
+      totalBarColor: complete ? '#16a34a' : (totalPicked ? '#18181b' : '#e4e4e7'),
+      hasGap: gaps > 0,
+      gapLabel: plural(gaps, 'ligne') + ' partielle' + (gaps > 1 ? 's' : ''),
+
+      lines: lineVals,
+      lineCount: LINES.length,
+      orderLabel: '1 commande · SAL-ORD-2026-00011',
+      query: s.query,
+      onQuery: e => this.setState({ query: e.target.value }),
+      togglePending: () => this.setState(v => ({ pendingOnly: !v.pendingOnly })),
+      pendingBorder: s.pendingOnly ? '#18181b' : '#e4e4e7',
+      pendingBg: s.pendingOnly ? '#18181b' : '#ffffff',
+      pendingColor: s.pendingOnly ? '#ffffff' : '#52525b',
+      isEmpty: visible.length === 0,
+      emptyTitle: complete && s.pendingOnly ? 'Plus rien à prélever' : 'Aucune ligne ne correspond',
+      emptyBody: complete && s.pendingOnly
+        ? 'Toutes les lignes de cette liste sont au complet.'
+        : 'Aucune ligne pour cette recherche ou ce filtre.',
+      resetFilters: () => this.setState({ query: '', pendingOnly: false }),
+
+      log: s.log.map(e => ({
+        time: e.time, text: e.text, code: e.code, delta: e.delta,
+        color: e.tone === 'error' ? '#b91c1c' : (e.tone === 'warn' ? '#a16207' : '#09090b'),
+        undoable: e.tone === 'ok' && !!e.key,
+        undo: () => this.setQty(e.key, (s.picked[e.key] || 0) - (e.amount || 0))
+      })),
+      logCount: s.log.length,
+      logEmpty: s.log.length === 0,
+
+      showMobile: this.props.showMobile !== false,
+      railWidth: this.props.showMobile === false ? '0px' : 'minmax(272px, 316px)',
+      mobileChip: complete ? 'Complet' : plural(rest, 'restant'),
+      mobileChipBg: complete ? '#dcfce7' : '#fef3c7',
+      mobileChipFg: complete ? '#15803d' : '#a16207',
+      mobileItem: lastLine ? lastLine.name : 'Scannez un article',
+      mobilePicked: lastPicked,
+      mobileRequested: lastLine ? lastLine.requested : totalReq,
+      mobilePct: lastLine ? Math.round((lastPicked / lastLine.requested) * 100) + '%' : '0%',
+      mobileBar: lastDone ? '#16a34a' : '#d97706',
+      mobileRest: lastLine ? (lastDone ? 'Quantité atteinte' : 'Reste ' + (lastLine.requested - lastPicked)) : 'Le compteur suit chaque scan',
+      mobileRestColor: lastLine && lastDone ? '#15803d' : '#a16207',
+      mobileLines: LINES.map(l => {
+        const p = pickedOf(l);
+        const done = p >= l.requested;
+        return {
+          name: l.name, count: p + '/' + l.requested,
+          glyph: done ? '✓' : (p ? '◐' : '○'),
+          iconBorder: done ? '#16a34a' : (p ? '#d97706' : '#d4d4d8'),
+          iconBg: done ? '#dcfce7' : (p ? '#fef3c7' : '#ffffff'),
+          iconColor: done ? '#15803d' : (p ? '#a16207' : '#a1a1aa'),
+          border: s.last === l.key ? '#16a34a' : '#f4f4f5',
+          bg: s.last === l.key ? '#f7fdf9' : '#ffffff',
+          opacity: done ? 0.6 : 1
+        };
+      }),
+      fillAll: () => {
+        const picked = {};
+        LINES.forEach(l => { picked[l.key] = l.requested; });
+        this.setState({ picked, tone: 'ok', feedback: 'Toutes les lignes ont été prélevées manuellement.' });
+      }
+    };
+  }
+}
+
+</script>
+</body>
+</html>

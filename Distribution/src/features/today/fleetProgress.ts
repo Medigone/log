@@ -34,6 +34,35 @@ export function isLiveRoute(route: { lifecycle: RouteLifecycle | string }) {
   return LIVE_ROUTE_STATES.includes(route.lifecycle as RouteLifecycle);
 }
 
+export function routeStopCounts(routes: Array<{ stops: Array<{ status: string }> }>) {
+  const stops = routes.flatMap((route) => route.stops);
+  const state = (status: string) => getStopVisualStyle(status).state;
+  return {
+    total: stops.length,
+    delivered: stops.filter((stop) => state(stop.status) === "delivered").length,
+    failed: stops.filter((stop) => state(stop.status) === "failed").length,
+    pending: stops.filter((stop) => state(stop.status) === "pending").length,
+  };
+}
+
+function parseFrappeDate(value: string) {
+  return new Date(value.includes("T") ? value : value.replace(" ", "T"));
+}
+
+/** Tournée publiée dont l’heure de départ prévue est dépassée, sans passage « En cours ». */
+export function lateDeparture(
+  route: { lifecycle: RouteLifecycle | string; plannedStart?: string | null; startedAt?: string | null },
+  now = new Date(),
+) {
+  if (route.lifecycle !== "Publiée" || route.startedAt || !route.plannedStart) return false;
+  const planned = parseFrappeDate(route.plannedStart);
+  return !Number.isNaN(planned.getTime()) && planned.getTime() < now.getTime();
+}
+
+export function plural(count: number, singular: string, pluralForm?: string) {
+  return `${count} ${count > 1 ? pluralForm ?? `${singular}s` : singular}`;
+}
+
 export function fleetColor(index: number) {
   return FLEET_COLORS[index % FLEET_COLORS.length];
 }

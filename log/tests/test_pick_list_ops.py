@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 
 import frappe
 
+from log import pick_list_ops as pick_list_ops_mod
 from log.pick_list_ops import (
 	_active_pick_progress_for_orders,
 	_apply_order_pick_fields,
@@ -21,8 +22,10 @@ from log.pick_list_ops import (
 	ensure_open_order_pick_lists,
 	get_pick_session,
 	get_recent_pick_lists,
+	get_pick_list_queue_stats,
 	has_available_stock_for_items,
 	pick_list_covers_remaining_items,
+	pick_list_queue_stats,
 	serialize_sales_order_pick_detail,
 	scan_pick_item,
 	serialize_pick_list,
@@ -853,6 +856,27 @@ class TestRecentPickLists(unittest.TestCase):
 		self.assertEqual(result[0]["requested_qty"], 0)
 		get_doc.assert_not_called()
 		_role.assert_called_once()
+
+
+class TestPickListQueueStats(unittest.TestCase):
+	def test_aggregates_drafts_submitted_remaining_and_changed(self):
+		fake_db = Mock()
+		fake_db.has_column.return_value = True
+		fake_db.count.side_effect = [3, 8, 2]
+		fake_db.sql.return_value = ((27.0,),)
+		with patch.object(pick_list_ops_mod.frappe, "db", fake_db):
+			stats = pick_list_queue_stats()
+		self.assertEqual(stats["drafts"], 3)
+		self.assertEqual(stats["submitted"], 8)
+		self.assertEqual(stats["remainingQty"], 27)
+		self.assertEqual(stats["changed"], 2)
+
+	@patch("log.pick_list_ops._require_preparation_role")
+	@patch("log.pick_list_ops.pick_list_queue_stats", return_value={"drafts": 1, "submitted": 0, "remainingQty": 4, "changed": 0})
+	def test_get_pick_list_queue_stats_requires_role(self, stats, role):
+		self.assertEqual(get_pick_list_queue_stats()["drafts"], 1)
+		role.assert_called_once()
+		stats.assert_called_once()
 
 
 class TestUnreserveSalesOrderStock(unittest.TestCase):

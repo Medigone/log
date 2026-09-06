@@ -2,7 +2,6 @@ import { ChevronFirstIcon, ChevronLeftIcon, ChevronRightIcon, ChevronLastIcon } 
 import { useDataGrid } from "@/components/reui/data-grid/data-grid"
 import { Button } from "@/components/ui/button"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { Pagination, PaginationContent, PaginationItem } from "@/components/ui/pagination"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -46,73 +45,82 @@ export function Pagination12({
   const rangeLabel = paginationInfo ?? `${from} – ${to} sur ${recordCount}`
 
   return (
-    <Pagination data-slot="data-grid-pagination" className={cn("mx-0", className)}>
-      <PaginationContent className="w-full justify-between">
-        <PaginationItem className="flex items-center gap-2">
-          <span className="text-muted-foreground text-sm whitespace-nowrap">{rowsPerPageLabel}</span>
-          <div className="w-18">
-            <NativeSelect
-              size="sm"
-              aria-label={rowsPerPageLabel}
-              className="w-18"
-              value={`${pageSize}`}
-              onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            >
-              {sizes.map((size) => (
-                <NativeSelectOption key={size} value={`${size}`}>
-                  {size}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
-        </PaginationItem>
-        <PaginationItem className="flex items-center gap-3">
-          <span className="text-muted-foreground text-sm whitespace-nowrap">{rangeLabel}</span>
-          <div className="flex gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={firstPageLabel}
-              disabled={!canPrevious}
-              onClick={() => onPageIndexChange(0)}
-            >
-              <ChevronFirstIcon className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={previousPageLabel}
-              disabled={!canPrevious}
-              onClick={() => onPageIndexChange(pageIndex - 1)}
-            >
-              <ChevronLeftIcon className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={nextPageLabel}
-              disabled={!canNext}
-              onClick={() => onPageIndexChange(pageIndex + 1)}
-            >
-              <ChevronRightIcon className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={lastPageLabel}
-              disabled={!canNext}
-              onClick={() => onPageIndexChange(Math.max(pageCount - 1, 0))}
-            >
-              <ChevronLastIcon className="size-4" />
-            </Button>
-          </div>
-        </PaginationItem>
-      </PaginationContent>
-    </Pagination>
+    <nav
+      data-slot="data-grid-pagination"
+      aria-label="pagination"
+      className={cn(
+        "flex items-center justify-between gap-x-3 border-t px-3 py-1.5",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className="text-muted-foreground shrink-0 text-xs leading-none whitespace-nowrap">
+          {rowsPerPageLabel}
+        </span>
+        <div className="w-16 shrink-0">
+          <NativeSelect
+            size="sm"
+            aria-label={rowsPerPageLabel}
+            className="h-7 w-16 px-2 pr-7 text-xs leading-none"
+            value={`${pageSize}`}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {sizes.map((size) => (
+              <NativeSelectOption key={size} value={`${size}`}>
+                {size}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
+      </div>
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="text-muted-foreground shrink-0 text-xs leading-none whitespace-nowrap">
+          {rangeLabel}
+        </span>
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={firstPageLabel}
+            disabled={!canPrevious}
+            onClick={() => onPageIndexChange(0)}
+          >
+            <ChevronFirstIcon className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={previousPageLabel}
+            disabled={!canPrevious}
+            onClick={() => onPageIndexChange(pageIndex - 1)}
+          >
+            <ChevronLeftIcon className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={nextPageLabel}
+            disabled={!canNext}
+            onClick={() => onPageIndexChange(pageIndex + 1)}
+          >
+            <ChevronRightIcon className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={lastPageLabel}
+            disabled={!canNext}
+            onClick={() => onPageIndexChange(Math.max(pageCount - 1, 0))}
+          >
+            <ChevronLastIcon className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </nav>
   )
 }
 
@@ -126,9 +134,9 @@ export function DataGridPagination12() {
 
   if (isLoading) {
     return (
-      <div data-slot="data-grid-pagination" className="flex items-center justify-between gap-2 py-2">
-        <Skeleton className="h-8 w-44" />
-        <Skeleton className="h-8 w-60" />
+      <div data-slot="data-grid-pagination" className="flex items-center justify-between gap-2 border-t px-3 py-1.5">
+        <Skeleton className="h-7 w-44" />
+        <Skeleton className="h-7 w-60" />
       </div>
     )
   }

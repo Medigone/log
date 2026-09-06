@@ -188,7 +188,7 @@ export function WorkQueue({
 
   return (
     <Card className="gap-0 overflow-hidden py-0">
-      <div className="flex items-center gap-2.5 border-b border-hairline px-3 py-[11px]">
+      <div className="flex min-h-[53px] items-center gap-2.5 border-b border-hairline px-3 py-[11px]">
         <h2 className="text-sm font-semibold leading-none">File de travail</h2>
         <span className="num rounded-[5px] bg-muted px-1.5 py-px text-[11px] text-muted-foreground">
           {all.length} bons

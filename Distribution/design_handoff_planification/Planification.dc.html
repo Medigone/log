@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="" />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 0; background: #fafafa; -webkit-font-smoothing: antialiased; }
+  * { box-sizing: border-box; }
+  a { color: #18181b; text-decoration: none; }
+  a:hover { color: #52525b; }
+  input, select { font-family: inherit; }
+  input:focus, select:focus { outline: none; }
+</style>
+</helmet>
+<div style="font-family: Geist, system-ui, -apple-system, sans-serif; color: #09090b; background: #fafafa; min-height: 100vh; font-size: 14px;">
+
+  <div style="display: flex; align-items: center; gap: 12px; height: 52px; padding: 0 20px; background: #ffffff; border-bottom: 1px solid #e4e4e7; position: sticky; top: 0; z-index: 20;">
+    <div style="display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: #52525b; cursor: pointer;" style-hover="background: #f4f4f5;">
+      <div style="width: 14px; height: 12px; border: 1.5px solid currentColor; border-radius: 2px; display: flex;"><div style="width: 5px; border-right: 1.5px solid currentColor;"></div></div>
+    </div>
+    <div style="width: 1px; height: 18px; background: #e4e4e7;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #71717a;">
+      <span>Exploitation</span><span style="color: #d4d4d8;">/</span><span style="color: #09090b; font-weight: 500;">Planification</span>
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; background: #fafafa; color: #a1a1aa; font-size: 13px; min-width: 240px; cursor: pointer;" style-hover="background: #ffffff; border-color: #d4d4d8;">
+      <div style="width: 11px; height: 11px; border: 1.5px solid currentColor; border-radius: 50%;"></div>
+      <span>Rechercher un BL, un client, une tournée…</span>
+      <div style="flex: 1;"></div>
+      <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 5px; border: 1px solid #e4e4e7; border-radius: 4px; background: #ffffff;">⌘K</span>
+    </div>
+    <div style="width: 28px; height: 28px; border-radius: 50%; background: #18181b; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;">MB</div>
+  </div>
+
+  <div style="padding: 22px 20px 56px; display: flex; flex-direction: column; gap: 18px;">
+
+    <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap;">
+      <div style="display: flex; flex-direction: column; gap: 3px;">
+        <div style="font-family: 'Geist Mono', monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #a1a1aa;">Exploitation multi-jours</div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 26px; font-weight: 600; letter-spacing: -0.02em;">Planification</span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; background: #fef2f2; color: #b91c1c; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid #fecaca; white-space: nowrap;" style-hover="background: #fee2e2;" onClick="{{ toggleAlerts }}">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>{{ alertCount }} anomalies
+          </span>
+        </div>
+        <div style="font-size: 13px; color: #71717a;">Planifiez à l’avance et déplacez chaque BL sans rendre une tournée hétérogène.</div>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 7px; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;">Imprimer les QR</div>
+        <div style="height: 34px; padding: 0 14px; display: flex; align-items: center; gap: 6px; background: #18181b; color: #ffffff; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer;" style-hover="background: #27272a;">Nouvelle tournée <span style="opacity: 0.6;">→</span></div>
+      </div>
+    </div>
+
+    <sc-if value="{{ showAlerts }}" hint-placeholder-val="{{ false }}">
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+        <div style="border: 1px solid #fecaca; background: #fffafa; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #7f1d1d;">BL en retard, non planifiés</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c;">{{ lateCount }}</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">{{ lateSummary }}</div>
+          <div style="font-size: 12px; font-weight: 500; color: #b91c1c; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ selectLate }}">Sélectionner ces BL →</div>
+        </div>
+        <div style="border: 1px solid #fde68a; background: #fffdf7; border-radius: 10px; padding: 13px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span>
+            <span style="font-size: 13px; font-weight: 600; color: #78350f;">Données client incomplètes</span>
+            <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #fffbeb; color: #a16207;">{{ gpsCount }}</span>
+          </div>
+          <div style="font-size: 12px; color: #71717a; line-height: 1.5;">GPS client manquant : l’arrêt sera livré sans itinéraire calculé.</div>
+          <div style="font-size: 12px; font-weight: 500; color: #a16207; cursor: pointer; width: fit-content;" style-hover="text-decoration: underline;" onClick="{{ toggleGps }}">Filtrer ces BL →</div>
+        </div>
+      </div>
+    </sc-if>
+
+    <div style="display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #e4e4e7;">
+      <div style="display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13.5px; margin-bottom: -1px; cursor: pointer; font-weight: {{ tabBlWeight }}; color: {{ tabBlColor }}; border-bottom: 2px solid {{ tabBlBorder }};" onClick="{{ goBl }}">
+        BL à planifier <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: {{ tabBlChipBg }}; color: {{ tabBlChipFg }};">{{ backlogCount }}</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 7px; padding: 9px 12px; font-size: 13.5px; margin-bottom: -1px; cursor: pointer; font-weight: {{ tabRtWeight }}; color: {{ tabRtColor }}; border-bottom: 2px solid {{ tabRtBorder }};" onClick="{{ goRoutes }}">
+        Tournées <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: {{ tabRtChipBg }}; color: {{ tabRtChipFg }};">{{ routeCount }}</span>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid #e4e4e7; border-radius: 8px; background: #ffffff; margin-bottom: 6px;">
+        <div style="height: 26px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer; background: {{ kanbanBg }}; color: {{ kanbanFg }};" onClick="{{ goKanban }}">Kanban</div>
+        <div style="height: 26px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 6px; font-size: 12.5px; font-weight: 500; cursor: pointer; background: {{ tableBg }}; color: {{ tableFg }};" onClick="{{ goTable }}">Tableau</div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;">
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ resetFilters }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">1 · À planifier</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #fef2f2; color: #b91c1c; white-space: nowrap;">{{ lateCount }} en retard</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ backlogCount }}</span>
+          <span style="font-size: 12px; color: #71717a;">BL · {{ backlogArticles }} art.</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 100%; height: 100%; background: #dc2626;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ goRoutes }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">2 · Brouillons</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b; white-space: nowrap;">à publier</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ draftCount }}</span>
+          <span style="font-size: 12px; color: #71717a;">tournées · {{ draftBl }} BL</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 50%; height: 100%; background: #18181b;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer;" style-hover="border-color: #d4d4d8; box-shadow: 0 1px 3px rgba(0,0,0,0.05);" onClick="{{ goRoutes }}">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">3 · Publiées</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ publishedCount }}</span>
+          <span style="font-size: 12px; color: #71717a;">verrouillées, départ prêt</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: 50%; height: 100%; background: #16a34a;"></div></div>
+      </div>
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a; white-space: nowrap;">Charge du {{ dayShort }}</span>
+          <span style="font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b; white-space: nowrap;">{{ driverCount }} livreurs</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 7px;">
+          <span style="font-size: 30px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; white-space: nowrap;">{{ loadPctLabel }}</span>
+          <span style="font-size: 12px; color: #71717a;">{{ loadDetail }}</span>
+        </div>
+        <div style="height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;"><div style="width: {{ loadPct }}; height: 100%; background: #18181b;"></div></div>
+      </div>
+    </div>
+
+    <sc-if value="{{ isBl }}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+
+      <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 2px;">
+          <div style="width: 28px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 8px 0 0 8px; font-size: 13px; color: #52525b; cursor: pointer; background: #ffffff;" style-hover="background: #f4f4f5;" onClick="{{ prevDay }}">‹</div>
+          <div style="height: 30px; padding: 0 12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #e4e4e7; border-bottom: 1px solid #e4e4e7; background: #ffffff;">
+            <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap;">{{ dayLabel }}</span>
+            <span style="font-size: 11.5px; color: #a1a1aa; white-space: nowrap;">{{ dayRelative }}</span>
+          </div>
+          <div style="width: 28px; height: 30px; display: flex; align-items: center; justify-content: center; border: 1px solid #e4e4e7; border-radius: 0 8px 8px 0; font-size: 13px; color: #52525b; cursor: pointer; background: #ffffff;" style-hover="background: #f4f4f5;" onClick="{{ nextDay }}">›</div>
+        </div>
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; font-weight: 500; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;" onClick="{{ goToday }}">Aujourd’hui</div>
+        <div style="width: 1px; height: 20px; background: #e4e4e7;"></div>
+        <input type="text" placeholder="BL, client, commune…" value="{{ query }}" onChange="{{ onQuery }}" style="height: 30px; padding: 0 10px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 13px; width: 220px; color: #09090b;" style-focus="border-color: #a1a1aa;" />
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid {{ lateBorder }}; background: {{ lateBg }}; color: {{ lateColor }};" onClick="{{ toggleLate }}">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #dc2626;"></span> En retard
+        </div>
+        <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; gap: 6px; border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; border: 1px solid {{ gpsBorder }}; background: {{ gpsBg }}; color: {{ gpsColor }};" onClick="{{ toggleGps }}">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: #d97706;"></span> GPS manquant
+        </div>
+        <select value="{{ wilaya }}" onChange="{{ onWilaya }}" style="height: 30px; padding: 0 8px; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12px; color: #52525b; background: #ffffff; cursor: pointer;">
+          <option value="">Toutes wilayas</option>
+          <option value="Oran">Oran</option>
+          <option value="Mostaganem">Mostaganem</option>
+        </select>
+        <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #a1a1aa; white-space: nowrap;">{{ resultLabel }}</span>
+          <sc-if value="{{ hasFilters }}" hint-placeholder-val="{{ false }}">
+            <div style="height: 30px; padding: 0 10px; display: flex; align-items: center; border: 1px solid #e4e4e7; background: #ffffff; border-radius: 8px; font-size: 12px; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser</div>
+          </sc-if>
+        </div>
+      </div>
+
+      <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: #18181b; color: #ffffff; flex-wrap: wrap;">
+          <span style="font-size: 13px; font-weight: 500;">{{ selectionLabel }}</span>
+          <span style="font-size: 12px; color: #a1a1aa;">{{ selectionMeta }}</span>
+          <div style="flex: 1;"></div>
+          <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; background: #ffffff; color: #18181b; font-size: 12px; font-weight: 600; cursor: pointer;">Affecter à une tournée</div>
+          <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; border: 1px solid #3f3f46; font-size: 12px; cursor: pointer;" style-hover="background: #27272a;">Créer une tournée</div>
+          <div style="height: 28px; padding: 0 10px; display: flex; align-items: center; border-radius: 7px; color: #a1a1aa; font-size: 12px; cursor: pointer;" style-hover="color: #ffffff;" onClick="{{ clearSelection }}">Effacer</div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isKanban }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: flex-start; gap: 12px; overflow-x: auto; padding-bottom: 6px;">
+
+        <div style="flex: 0 0 268px; width: 268px; border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; display: flex; flex-direction: column; overflow: hidden;">
+          <div style="padding: 11px 12px; border-bottom: 1px solid #f4f4f5; display: flex; flex-direction: column; gap: 8px; background: #fafafa;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">À planifier</span>
+              <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #18181b; color: #ffffff;">{{ backlogShown }}</span>
+              <div style="flex: 1;"></div>
+              <span style="font-size: 11.5px; font-weight: 500; color: #52525b; cursor: pointer; white-space: nowrap;" style-hover="text-decoration: underline;" onClick="{{ toggleAll }}">{{ selectAllLabel }}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 11px; color: #a1a1aa;">Grouper</span>
+              <div style="height: 22px; padding: 0 8px; display: flex; align-items: center; border-radius: 6px; font-size: 11.5px; cursor: pointer; background: {{ grpNoneBg }}; color: {{ grpNoneFg }};" onClick="{{ groupNone }}">Aucun</div>
+              <div style="height: 22px; padding: 0 8px; display: flex; align-items: center; border-radius: 6px; font-size: 11.5px; cursor: pointer; background: {{ grpDateBg }}; color: {{ grpDateFg }};" onClick="{{ groupDate }}">Date</div>
+              <div style="height: 22px; padding: 0 8px; display: flex; align-items: center; border-radius: 6px; font-size: 11.5px; cursor: pointer; background: {{ grpWilBg }}; color: {{ grpWilFg }};" onClick="{{ groupWilaya }}">Wilaya</div>
+            </div>
+          </div>
+          <div style="padding: 8px; display: flex; flex-direction: column; gap: 8px;">
+            <sc-for list="{{ backlogGroups }}" as="g" hint-placeholder-count="2">
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <sc-if value="{{ g.showLabel }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; align-items: center; gap: 6px; padding: 0 2px;">
+                    <span style="font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #a1a1aa;">{{ g.label }}</span>
+                    <div style="flex: 1; height: 1px; background: #f4f4f5;"></div>
+                    <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #a1a1aa;">{{ g.count }}</span>
+                  </div>
+                </sc-if>
+                <sc-for list="{{ g.cards }}" as="c" hint-placeholder-count="3">
+                  <div style="display: flex; gap: 8px; padding: 9px 10px; border: 1px solid {{ c.cardBorder }}; border-left: 3px solid {{ c.accent }}; border-radius: 9px; background: {{ c.cardBg }}; cursor: grab;" style-hover="border-color: #d4d4d8;" onClick="{{ c.toggle }}">
+                    <div style="flex: 0 0 auto; width: 15px; height: 15px; margin-top: 1px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #ffffff; border: 1.5px solid {{ c.boxBorder }}; background: {{ c.boxBg }};">{{ c.check }}</div>
+                    <div style="min-width: 0; display: flex; flex-direction: column; gap: 3px;">
+                      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.dn }}</span>
+                      <span style="font-size: 11.5px; color: #52525b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.client }}</span>
+                      <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.place }}</span>
+                      <div style="display: flex; align-items: center; gap: 6px; margin-top: 1px;">
+                        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; white-space: nowrap; color: {{ c.dateColor }};">{{ c.date }}</span>
+                        <span style="color: #e4e4e7;">·</span>
+                        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #52525b; white-space: nowrap;">{{ c.articles }} art.</span>
+                      </div>
+                      <sc-if value="{{ c.hasAlert }}" hint-placeholder-val="{{ false }}">
+                        <div style="display: flex; align-items: center; gap: 5px; font-size: 11px; color: #a16207;">
+                          <span style="width: 5px; height: 5px; border-radius: 50%; background: #d97706;"></span>{{ c.alert }}
+                        </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+            <sc-if value="{{ backlogEmpty }}" hint-placeholder-val="{{ false }}">
+              <div style="padding: 28px 12px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;">
+                <div style="width: 30px; height: 30px; border-radius: 9px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 13px;">✓</div>
+                <div style="font-size: 12.5px; font-weight: 600;">Rien à planifier</div>
+                <div style="font-size: 11.5px; color: #71717a; line-height: 1.5;">Tous les BL de ce filtre sont affectés à une tournée.</div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <sc-for list="{{ columns }}" as="col" hint-placeholder-count="3">
+          <div style="flex: 0 0 268px; width: 268px; border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; display: flex; flex-direction: column; overflow: hidden;">
+            <div style="padding: 11px 12px; border-bottom: 1px solid #f4f4f5; display: flex; flex-direction: column; gap: 7px;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: #09090b; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ col.name }}</span>
+                <div style="flex: 1;"></div>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 11px; white-space: nowrap; color: {{ col.loadColor }};">{{ col.loadLabel }}</span>
+              </div>
+              <div style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ col.vehicle }}</div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="flex: 1; height: 4px; border-radius: 999px; background: #f4f4f5; overflow: hidden;">
+                  <div style="height: 100%; width: {{ col.pct }}; background: {{ col.barColor }};"></div>
+                </div>
+                <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #a1a1aa; white-space: nowrap;">{{ col.capLabel }}</span>
+              </div>
+            </div>
+
+            <div style="padding: 8px; display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{ col.routes }}" as="rt" hint-placeholder-count="1">
+                <div style="border: 1px solid #e4e4e7; border-radius: 10px; background: #fcfcfc; overflow: hidden;">
+                  <div style="padding: 8px 10px; display: flex; flex-direction: column; gap: 5px; border-bottom: 1px solid #f4f4f5;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rt.name }}</span>
+                      <div style="flex: 1;"></div>
+                      <span style="display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 500; white-space: nowrap; background: {{ rt.chipBg }}; color: {{ rt.chipFg }};">
+                        <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ rt.chipDot }};"></span>{{ rt.lifecycle }}
+                      </span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #71717a;">
+                      <span style="white-space: nowrap;">{{ rt.slot }}</span>
+                      <span style="color: #e4e4e7;">·</span>
+                      <span style="white-space: nowrap;">{{ rt.load }}</span>
+                    </div>
+                  </div>
+                  <div style="padding: 7px; display: flex; flex-direction: column; gap: 6px;">
+                    <sc-for list="{{ rt.cards }}" as="c" hint-placeholder-count="2">
+                      <div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 9px; border: 1px solid #f4f4f5; border-left: 3px solid {{ c.accent }}; border-radius: 8px; background: #ffffff; cursor: {{ c.cursor }};" style-hover="border-color: #e4e4e7;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                          <span style="font-family: 'Geist Mono', monospace; font-size: 11.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.dn }}</span>
+                          <div style="flex: 1;"></div>
+                          <span style="font-family: 'Geist Mono', monospace; font-size: 10.5px; color: #a1a1aa; white-space: nowrap;">#{{ c.seq }}</span>
+                        </div>
+                        <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ c.client }} · {{ c.articles }} art.</span>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 3px;">
+                          <span style="font-size: 11px; font-weight: 500; color: {{ c.actionColor }}; cursor: pointer;" style-hover="text-decoration: underline;">{{ c.action }}</span>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+
+              <div style="min-height: 38px; padding: 9px 10px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed #d4d4d8; border-radius: 9px; background: #fafafa; color: #71717a; font-size: 11.5px; font-weight: 500; cursor: pointer;" style-hover="border-color: #a1a1aa; background: #f4f4f5; color: #18181b;">
+                <span style="font-size: 13px; line-height: 1;">+</span> Nouvelle tournée
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+
+      <sc-if value="{{ isTable }}" hint-placeholder-val="{{ false }}">
+        <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+          <div style="display: grid; grid-template-columns: 36px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) 104px 74px 130px minmax(0, 1fr) 34px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+            <div style="padding: 8px 0;">
+              <div style="width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; cursor: pointer; color: #ffffff; border: 1.5px solid {{ allBorder }}; background: {{ allBg }};" onClick="{{ toggleAll }}">{{ allCheck }}</div>
+            </div>
+            <div style="padding: 8px 0;">BL · Client</div>
+            <div style="padding: 8px 0;">Lieu</div>
+            <div style="padding: 8px 0;">Livraison souhaitée</div>
+            <div style="padding: 8px 0;">Statut</div>
+            <div style="padding: 8px 0; text-align: right;">Art.</div>
+            <div style="padding: 8px 0 8px 14px;">Tournée</div>
+            <div style="padding: 8px 0 8px 14px;">Livreur · Créneau</div>
+            <div style="padding: 8px 0;"></div>
+          </div>
+          <sc-for list="{{ tableRows }}" as="r" hint-placeholder-count="8">
+            <div style="display: grid; grid-template-columns: 36px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) 104px 74px 130px minmax(0, 1fr) 34px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; cursor: pointer; background: {{ r.bg }};" style-hover="background: #fafafa;" onClick="{{ r.toggle }}">
+              <div style="padding: 9px 0;">
+                <div style="width: 15px; height: 15px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #ffffff; border: 1.5px solid {{ r.boxBorder }}; background: {{ r.boxBg }};">{{ r.check }}</div>
+              </div>
+              <div style="padding: 9px 8px 9px 0; display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+                <span style="font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.dn }}</span>
+                <span style="font-size: 11px; color: #a1a1aa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.client }}</span>
+              </div>
+              <div style="padding: 9px 8px 9px 0; font-size: 12.5px; color: #52525b; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.place }}</div>
+              <div style="padding: 9px 8px 9px 0; font-family: 'Geist Mono', monospace; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; color: {{ r.dateColor }};">{{ r.date }}</div>
+              <div style="padding: 9px 8px 9px 0;">
+                <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {{ r.chipBg }}; color: {{ r.chipFg }};">
+                  <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ r.chipDot }};"></span>{{ r.status }}
+                </span>
+              </div>
+              <div style="padding: 9px 0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 12px; color: #52525b;">{{ r.articles }}</div>
+              <div style="padding: 9px 0 9px 14px; font-family: 'Geist Mono', monospace; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{ r.routeColor }};">{{ r.route }}</div>
+              <div style="padding: 9px 0 9px 14px; font-size: 12px; color: #52525b; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.driver }}</div>
+              <div style="padding: 9px 0; text-align: right; color: #a1a1aa; font-size: 15px;">⋯</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ tableEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 42px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
+              <div style="width: 34px; height: 34px; border-radius: 9px; border: 1px dashed #d4d4d8; display: flex; align-items: center; justify-content: center; color: #a1a1aa; font-size: 14px;">✓</div>
+              <div style="font-size: 13px; font-weight: 600;">Aucun BL ne correspond</div>
+              <div style="font-size: 12.5px; color: #71717a; max-width: 320px; line-height: 1.5;">Réinitialisez les filtres pour retrouver tous les BL de la période.</div>
+              <div style="margin-top: 4px; height: 30px; padding: 0 12px; display: flex; align-items: center; border: 1px solid #e4e4e7; border-radius: 8px; font-size: 12.5px; font-weight: 500; cursor: pointer;" style-hover="background: #f4f4f5;" onClick="{{ resetFilters }}">Réinitialiser les filtres</div>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+    </sc-if>
+
+    <sc-if value="{{ isRoutes }}" hint-placeholder-val="{{ false }}">
+      <div style="border: 1px solid #e4e4e7; border-radius: 12px; background: #ffffff; overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid #f4f4f5; flex-wrap: wrap;">
+          <span style="font-size: 14px; font-weight: 600;">Tournées du {{ dayLabel }}</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; padding: 1px 6px; border-radius: 5px; background: #f4f4f5; color: #52525b;">{{ routeCount }}</span>
+          <div style="flex: 1;"></div>
+          <span style="font-size: 12px; color: #71717a;">Une tournée brouillon reste modifiable ; une tournée publiée exige un motif.</span>
+        </div>
+        <div style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr) 128px 64px 74px 112px 34px; padding: 0 12px; background: #fafafa; border-bottom: 1px solid #e4e4e7; font-family: 'Geist Mono', monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: #71717a;">
+          <div style="padding: 8px 0;">Tournée</div>
+          <div style="padding: 8px 0;">Livreur</div>
+          <div style="padding: 8px 0;">Véhicule</div>
+          <div style="padding: 8px 0;">Créneau</div>
+          <div style="padding: 8px 0; text-align: right;">BL</div>
+          <div style="padding: 8px 0; text-align: right;">Art.</div>
+          <div style="padding: 8px 0 8px 14px;">État</div>
+          <div style="padding: 8px 0;"></div>
+        </div>
+        <sc-for list="{{ routeRows }}" as="rt" hint-placeholder-count="2">
+          <div style="display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.2fr) 128px 64px 74px 112px 34px; align-items: center; padding: 0 12px; border-bottom: 1px solid #f4f4f5; cursor: pointer;" style-hover="background: #fafafa;">
+            <div style="padding: 10px 8px 10px 0; font-family: 'Geist Mono', monospace; font-size: 12.5px; font-weight: 500; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rt.name }}</div>
+            <div style="padding: 10px 8px 10px 0; font-size: 12.5px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rt.driver }}</div>
+            <div style="padding: 10px 8px 10px 0; font-size: 12.5px; color: #52525b; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ rt.vehicle }}</div>
+            <div style="padding: 10px 0; font-family: 'Geist Mono', monospace; font-size: 12px; color: #52525b; white-space: nowrap;">{{ rt.slot }}</div>
+            <div style="padding: 10px 0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 12px;">{{ rt.bl }}</div>
+            <div style="padding: 10px 0; text-align: right; font-family: 'Geist Mono', monospace; font-size: 12px; color: #52525b;">{{ rt.art }}</div>
+            <div style="padding: 10px 0 10px 14px;">
+              <span style="display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; white-space: nowrap; background: {{ rt.chipBg }}; color: {{ rt.chipFg }};">
+                <span style="width: 5px; height: 5px; border-radius: 50%; background: {{ rt.chipDot }};"></span>{{ rt.lifecycle }}
+              </span>
+            </div>
+            <div style="padding: 10px 0; text-align: right; color: #a1a1aa; font-size: 15px;">⋯</div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;kanban&quot;,&quot;tableau&quot;],&quot;default&quot;:&quot;kanban&quot;,&quot;tsType&quot;:&quot;'kanban' | 'tableau'&quot;,&quot;section&quot;:&quot;Affichage&quot;},&quot;alertStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compact&quot;,&quot;cartes&quot;],&quot;default&quot;:&quot;compact&quot;,&quot;tsType&quot;:&quot;'compact' | 'cartes'&quot;,&quot;section&quot;:&quot;Anomalies&quot;}}">
+const TODAY = '2026-09-05';
+const CAPACITY = 40;
+
+const DRIVERS = [
+  { name: 'LIVREUR 1', vehicle: 'Renault Traffic · 0001-320-31' },
+  { name: 'LIVREUR 2', vehicle: 'Renault Kangoo · 002-320-31' },
+  { name: 'LIVREUR 3', vehicle: 'Berlingo · 002-226-31' }
+];
+
+const ROUTES = [
+  { name: 'TR-2026-00021', driver: 'LIVREUR 1', slot: '08:00 – 12:00', lifecycle: 'Brouillon' },
+  { name: 'TR-2026-00019', driver: 'LIVREUR 3', slot: '07:30 – 11:30', lifecycle: 'Publiée' }
+];
+
+const BL = [
+  { dn: 'MAT-DN-2026-00005', client: 'CLIENT 2', commune: 'Oran', wilaya: 'Oran', date: '2026-08-30', articles: 12, route: null, alert: '' },
+  { dn: 'MAT-DN-2026-00006', client: 'CLIENT 2', commune: 'Oran', wilaya: 'Oran', date: '2026-09-02', articles: 24, route: null, alert: '' },
+  { dn: 'MAT-DN-2026-00009', client: 'CLIENT 2', commune: 'Oran', wilaya: 'Oran', date: '2026-09-03', articles: 2, route: null, alert: '' },
+  { dn: 'MAT-DN-2026-00007', client: 'CLIENT 1', commune: 'Mostaganem', wilaya: 'Mostaganem', date: '2026-09-04', articles: 12, route: null, alert: 'GPS client manquant' },
+  { dn: 'MAT-DN-2026-00008', client: 'CLIENT 2', commune: 'Oran', wilaya: 'Oran', date: '2026-09-05', articles: 1, route: null, alert: '' },
+  { dn: 'MAT-DN-2026-00003', client: 'CLIENT 2', commune: 'Oran', wilaya: 'Oran', date: '2026-09-05', articles: 12, route: 'TR-2026-00021', seq: 1, alert: '' },
+  { dn: 'MAT-DN-2026-00004', client: 'CLIENT 2', commune: 'Oran', wilaya: 'Oran', date: '2026-09-05', articles: 24, route: 'TR-2026-00021', seq: 2, alert: '' },
+  { dn: 'MAT-DN-2026-00002', client: 'CLIENT 1', commune: 'Mostaganem', wilaya: 'Mostaganem', date: '2026-09-05', articles: 12, route: 'TR-2026-00019', seq: 1, alert: '' }
+];
+
+const LIFECYCLE = {
+  'Brouillon': { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa' },
+  'Publiée': { bg: '#f0fdf4', fg: '#15803d', dot: '#16a34a' }
+};
+
+const STATUS = {
+  'En retard': { bg: '#fef2f2', fg: '#b91c1c', dot: '#dc2626' },
+  'Non planifié': { bg: '#eff6ff', fg: '#1d4ed8', dot: '#3b82f6' },
+  'Planifié': { bg: '#f4f4f5', fg: '#52525b', dot: '#a1a1aa' },
+  'Publié': { bg: '#f0fdf4', fg: '#15803d', dot: '#16a34a' }
+};
+
+const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
+const DAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
+
+function fmt(iso) {
+  const p = iso.split('-');
+  return p[2] + '/' + p[1] + '/' + p[0];
+}
+
+function shift(iso, days) {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+class Component extends DCLogic {
+  state = { tab: 'bl', view: null, date: TODAY, query: '', late: false, gps: false, wilaya: '', group: 'aucun', sel: {}, alerts: null };
+
+  statusOf(b) {
+    if (!b.route) return b.date < TODAY ? 'En retard' : 'Non planifié';
+    const rt = ROUTES.find(r => r.name === b.route);
+    return rt && rt.lifecycle === 'Publiée' ? 'Publié' : 'Planifié';
+  }
+
+  passes(b) {
+    const q = this.state.query.trim().toLowerCase();
+    if (q && ![b.dn, b.client, b.commune, b.wilaya].some(v => String(v).toLowerCase().includes(q))) return false;
+    if (this.state.late && !(b.date < TODAY && !b.route)) return false;
+    if (this.state.gps && !b.alert) return false;
+    if (this.state.wilaya && b.wilaya !== this.state.wilaya) return false;
+    return true;
+  }
+
+  toggle(dn) {
+    this.setState(s => {
+      const sel = Object.assign({}, s.sel);
+      if (sel[dn]) delete sel[dn]; else sel[dn] = true;
+      return { sel };
+    });
+  }
+
+  card(b, withBox) {
+    const sel = !!this.state.sel[b.dn];
+    const st = this.statusOf(b);
+    return {
+      dn: b.dn, client: b.client, place: b.commune + ', ' + b.wilaya, articles: b.articles,
+      date: fmt(b.date),
+      dateColor: st === 'En retard' ? '#b91c1c' : '#52525b',
+      accent: st === 'En retard' ? '#dc2626' : (b.alert ? '#d97706' : '#e4e4e7'),
+      hasAlert: !!b.alert, alert: b.alert,
+      cardBg: sel ? '#fafafa' : '#ffffff',
+      cardBorder: sel ? '#18181b' : '#f4f4f5',
+      boxBorder: sel ? '#18181b' : '#d4d4d8',
+      boxBg: sel ? '#18181b' : '#ffffff',
+      check: sel ? '✓' : '',
+      toggle: withBox ? () => this.toggle(b.dn) : undefined
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const view = s.view || this.props.defaultView || 'kanban';
+    const shown = BL.filter(b => this.passes(b));
+    const backlog = shown.filter(b => !b.route);
+    const allBl = BL.filter(b => !b.route);
+    const late = allBl.filter(b => b.date < TODAY);
+    const gpsList = BL.filter(b => b.alert);
+    const alertsOpen = s.alerts === 'ouvert' || (s.alerts === null && (this.props.alertStyle || 'compact') === 'cartes');
+
+    const groupOf = b => s.group === 'date' ? fmt(b.date) : (s.group === 'wilaya' ? b.wilaya : 'tous');
+    const keys = [];
+    backlog.forEach(b => { const k = groupOf(b); if (keys.indexOf(k) < 0) keys.push(k); });
+    const backlogGroups = keys.map(k => {
+      const items = backlog.filter(b => groupOf(b) === k);
+      return { label: k, count: items.length, showLabel: s.group !== 'aucun', cards: items.map(b => this.card(b, true)) };
+    });
+
+    const assigned = shown.filter(b => b.route);
+    const columns = DRIVERS.map(d => {
+      const rts = ROUTES.filter(r => r.driver === d.name);
+      const items = assigned.filter(b => rts.some(r => r.name === b.route));
+      const art = items.reduce((n, b) => n + b.articles, 0);
+      const pct = Math.min(100, Math.round((art / CAPACITY) * 100));
+      return {
+        name: d.name, vehicle: d.vehicle,
+        loadLabel: items.length + ' BL · ' + art + ' art.',
+        loadColor: items.length ? '#09090b' : '#a1a1aa',
+        pct: pct + '%',
+        capLabel: pct + ' %',
+        barColor: pct >= 90 ? '#dc2626' : (pct === 0 ? '#e4e4e7' : '#18181b'),
+        routes: rts.map(r => {
+          const rItems = assigned.filter(b => b.route === r.name);
+          const lc = LIFECYCLE[r.lifecycle];
+          const locked = r.lifecycle === 'Publiée';
+          return {
+            name: r.name, slot: r.slot, lifecycle: r.lifecycle,
+            chipBg: lc.bg, chipFg: lc.fg, chipDot: lc.dot,
+            load: rItems.length + ' BL · ' + rItems.reduce((n, b) => n + b.articles, 0) + ' art.',
+            cards: rItems.map(b => Object.assign(this.card(b, false), {
+              seq: b.seq,
+              cursor: locked ? 'default' : 'grab',
+              action: locked ? 'Reprogrammer' : 'Retirer',
+              actionColor: locked ? '#a16207' : '#52525b'
+            }))
+          };
+        })
+      };
+    });
+
+    const tableRows = shown.map(b => {
+      const st = this.statusOf(b);
+      const c = STATUS[st];
+      const on = !!s.sel[b.dn];
+      const rt = b.route ? ROUTES.find(r => r.name === b.route) : null;
+      return {
+        dn: b.dn, client: b.client, place: b.commune + ', ' + b.wilaya, articles: b.articles,
+        date: fmt(b.date), status: st,
+        dateNote: b.date < TODAY ? 'dépassée' : '',
+        dateColor: b.date < TODAY ? '#b91c1c' : '#52525b',
+        chipBg: c.bg, chipFg: c.fg, chipDot: c.dot,
+        route: b.route || '—',
+        routeColor: b.route ? '#09090b' : '#d4d4d8',
+        driver: rt ? rt.driver + ' · ' + rt.slot : '—',
+        bg: on ? '#f8f8f8' : '#ffffff',
+        boxBorder: on ? '#18181b' : '#d4d4d8',
+        boxBg: on ? '#18181b' : '#ffffff',
+        check: on ? '✓' : '',
+        toggle: () => this.toggle(b.dn)
+      };
+    });
+
+    const routeRows = ROUTES.map(r => {
+      const items = BL.filter(b => b.route === r.name);
+      const lc = LIFECYCLE[r.lifecycle];
+      const d = DRIVERS.find(x => x.name === r.driver);
+      return {
+        name: r.name, driver: r.driver, vehicle: d ? d.vehicle : '—', slot: r.slot, lifecycle: r.lifecycle,
+        bl: items.length, art: items.reduce((n, b) => n + b.articles, 0),
+        chipBg: lc.bg, chipFg: lc.fg, chipDot: lc.dot
+      };
+    });
+
+    const chip = on => on
+      ? { border: '#18181b', bg: '#18181b', color: '#ffffff' }
+      : { border: '#e4e4e7', bg: '#ffffff', color: '#52525b' };
+    const lc = chip(s.late);
+    const gc = chip(s.gps);
+    const tabStyle = on => ({
+      weight: on ? 600 : 500, color: on ? '#09090b' : '#71717a',
+      border: on ? '#18181b' : 'transparent',
+      chipBg: on ? '#18181b' : '#f4f4f5', chipFg: on ? '#ffffff' : '#52525b'
+    });
+    const tb = tabStyle(s.tab === 'bl');
+    const tr = tabStyle(s.tab === 'routes');
+    const grp = k => s.group === k
+      ? { bg: '#18181b', fg: '#ffffff' }
+      : { bg: '#f4f4f5', fg: '#52525b' };
+    const gn = grp('aucun'), gd = grp('date'), gw = grp('wilaya');
+
+    const selRefs = Object.keys(s.sel);
+    const selArt = BL.filter(b => s.sel[b.dn]).reduce((n, b) => n + b.articles, 0);
+    const allOn = backlog.length > 0 && backlog.every(b => s.sel[b.dn]);
+    const totalArt = assigned.reduce((n, b) => n + b.articles, 0);
+    const capTotal = DRIVERS.length * CAPACITY;
+    const loadPct = Math.round((totalArt / capTotal) * 100);
+    const d = new Date(s.date + 'T12:00:00');
+    const rel = s.date === TODAY ? 'aujourd’hui' : (s.date === shift(TODAY, 1) ? 'demain' : DAYS[d.getDay()]);
+
+    return {
+      backlogGroups,
+      backlogEmpty: backlog.length === 0,
+      backlogShown: backlog.length,
+      backlogCount: allBl.length,
+      backlogArticles: allBl.reduce((n, b) => n + b.articles, 0),
+      columns, tableRows, routeRows,
+      routeCount: ROUTES.length,
+      draftCount: ROUTES.filter(r => r.lifecycle === 'Brouillon').length,
+      draftBl: BL.filter(b => b.route && ROUTES.some(r => r.name === b.route && r.lifecycle === 'Brouillon')).length,
+      publishedCount: ROUTES.filter(r => r.lifecycle === 'Publiée').length,
+      lateCount: late.length,
+      gpsCount: gpsList.length,
+      alertCount: late.length + gpsList.length,
+      lateSummary: late.length + ' BL ont une date de livraison souhaitée antérieure à aujourd’hui, dont ' + late[0].dn.slice(-5) + '.',
+      showAlerts: alertsOpen,
+      toggleAlerts: () => this.setState({ alerts: alertsOpen ? 'ferme' : 'ouvert' }),
+      dayLabel: fmt(s.date),
+      dayShort: d.getDate() + ' ' + MONTHS[d.getMonth()],
+      dayRelative: rel,
+      loadPct: loadPct + '%',
+      loadPctLabel: loadPct + '\u00a0%',
+      loadDetail: totalArt + ' / ' + capTotal + ' art. affectés',
+      driverCount: DRIVERS.length,
+      isBl: s.tab === 'bl',
+      isRoutes: s.tab === 'routes',
+      isKanban: s.tab === 'bl' && view === 'kanban',
+      isTable: s.tab === 'bl' && view === 'tableau',
+      goBl: () => this.setState({ tab: 'bl' }),
+      goRoutes: () => this.setState({ tab: 'routes' }),
+      goKanban: () => this.setState({ view: 'kanban' }),
+      goTable: () => this.setState({ view: 'tableau' }),
+      kanbanBg: view === 'kanban' ? '#18181b' : 'transparent',
+      kanbanFg: view === 'kanban' ? '#ffffff' : '#52525b',
+      tableBg: view === 'tableau' ? '#18181b' : 'transparent',
+      tableFg: view === 'tableau' ? '#ffffff' : '#52525b',
+      tabBlWeight: tb.weight, tabBlColor: tb.color, tabBlBorder: tb.border, tabBlChipBg: tb.chipBg, tabBlChipFg: tb.chipFg,
+      tabRtWeight: tr.weight, tabRtColor: tr.color, tabRtBorder: tr.border, tabRtChipBg: tr.chipBg, tabRtChipFg: tr.chipFg,
+      query: s.query,
+      wilaya: s.wilaya,
+      onQuery: e => this.setState({ query: e.target.value }),
+      onWilaya: e => this.setState({ wilaya: e.target.value }),
+      toggleLate: () => this.setState(v => ({ late: !v.late })),
+      toggleGps: () => this.setState(v => ({ gps: !v.gps, tab: 'bl' })),
+      lateBorder: lc.border, lateBg: lc.bg, lateColor: lc.color,
+      gpsBorder: gc.border, gpsBg: gc.bg, gpsColor: gc.color,
+      hasFilters: !!(s.query || s.late || s.gps || s.wilaya),
+      resultLabel: shown.length + ' / ' + BL.length + ' BL',
+      resetFilters: () => this.setState({ query: '', late: false, gps: false, wilaya: '', tab: 'bl' }),
+      groupNone: () => this.setState({ group: 'aucun' }),
+      groupDate: () => this.setState({ group: 'date' }),
+      groupWilaya: () => this.setState({ group: 'wilaya' }),
+      grpNoneBg: gn.bg, grpNoneFg: gn.fg,
+      grpDateBg: gd.bg, grpDateFg: gd.fg,
+      grpWilBg: gw.bg, grpWilFg: gw.fg,
+      tableEmpty: shown.length === 0,
+      hasSelection: selRefs.length > 0,
+      selectionLabel: selRefs.length + (selRefs.length > 1 ? ' BL sélectionnés' : ' BL sélectionné'),
+      selectionMeta: selArt + ' articles · ' + (selArt > CAPACITY ? 'au-delà d’un véhicule' : 'tient dans un véhicule'),
+      clearSelection: () => this.setState({ sel: {} }),
+      selectLate: () => {
+        const next = {};
+        late.forEach(b => { next[b.dn] = true; });
+        this.setState({ sel: next, late: true, tab: 'bl' });
+      },
+      selectAllLabel: allOn ? 'Tout désélectionner' : 'Tout sélectionner',
+      allBorder: allOn ? '#18181b' : '#d4d4d8',
+      allBg: allOn ? '#18181b' : '#ffffff',
+      allCheck: allOn ? '✓' : '',
+      toggleAll: () => {
+        if (allOn) { this.setState({ sel: {} }); return; }
+        const next = {};
+        backlog.forEach(b => { next[b.dn] = true; });
+        this.setState({ sel: next });
+      },
+      prevDay: () => this.setState(v => ({ date: shift(v.date, -1) })),
+      nextDay: () => this.setState(v => ({ date: shift(v.date, 1) })),
+      goToday: () => this.setState({ date: TODAY })
+    };
+  }
+}
+
+</script>
+</body>
+</html>

@@ -3,6 +3,8 @@ import type { DistributionRoute, RouteStop } from "@/shared/types/distribution";
 import {
   collectDashboardAlerts,
   isLiveRoute,
+  lateDeparture,
+  routeStopCounts,
   stopProgress,
   vehiclePosition,
 } from "@/features/today/fleetProgress";
@@ -68,5 +70,21 @@ describe("fleetProgress", () => {
       [],
     );
     expect(alerts[0]).toMatchObject({ tone: "danger", title: "Échec · Client 9" });
+  });
+
+  it("compte les arrêts livrés et détecte un départ en retard", () => {
+    expect(routeStopCounts([route()])).toEqual({ total: 2, delivered: 1, failed: 0, pending: 1 });
+    expect(
+      lateDeparture(
+        route({ lifecycle: "Publiée", plannedStart: "2000-01-01T07:30:00", startedAt: undefined }),
+        new Date("2026-09-05T10:00:00"),
+      ),
+    ).toBe(true);
+    expect(
+      lateDeparture(
+        route({ lifecycle: "En cours", plannedStart: "2000-01-01T07:30:00" }),
+        new Date("2026-09-05T10:00:00"),
+      ),
+    ).toBe(false);
   });
 });

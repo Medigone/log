@@ -70,6 +70,18 @@ const mocks = vi.hoisted(() => {
     draftSession,
     pickListData: { message: structuredClone(draftSession) },
     returnRoutes: [] as Array<{ name: string; stock: { remainingQuantity: number; status: string; lines: unknown[] } }>,
+    returnHistory: [] as Array<{
+      name: string
+      date?: string
+      revision?: number
+      customers?: Array<{ name: string; customerName: string }>
+      status: string
+      remainingQuantity: number
+      returnedQuantity?: number
+      loadedQuantity?: number
+      deliveredQuantity?: number
+      lines: unknown[]
+    }>,
     recentPickLists: [] as Array<{
       name: string
       docstatus: number
@@ -126,6 +138,7 @@ vi.mock("@/shared/api/preparation", async (importOriginal) => {
     usePreparationQueue: () => ({ data: mocks.queueData, mutate: vi.fn(), error: undefined, isLoading: false }),
     usePickSession: () => ({ data: mocks.pickListData, mutate: vi.fn(), error: undefined, isLoading: false }),
     useRecentPickLists: () => ({ data: { message: mocks.recentPickLists }, error: undefined, isLoading: false, mutate: vi.fn() }),
+    usePickListQueueStats: () => ({ data: undefined, error: undefined, isLoading: false }),
     useSalesOrderPickDetail: () => ({ data: { message: mocks.salesOrderDetail }, error: undefined, isLoading: false, mutate: vi.fn() }),
     usePreparationMutations: () => ({
       createPickList: mocks.createPickList,
@@ -144,6 +157,8 @@ vi.mock("@/shared/api/preparation", async (importOriginal) => {
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
   useReturnRoutes: () => ({ data: { message: mocks.returnRoutes }, error: undefined, isLoading: false, mutate: vi.fn() }),
+  useReturnHistory: () => ({ data: { message: mocks.returnHistory }, error: undefined, isLoading: false, mutate: vi.fn() }),
+  useReturnMetrics: () => ({ data: undefined, error: undefined, isLoading: false }),
   useDistributionMutations: () => ({ confirmRouteReturn: vi.fn(), fulfillment: false }),
 }));
 
@@ -162,8 +177,8 @@ function renderWorkspace() {
   return renderPrep("/preparation?pick_lists=PL-1");
 }
 
-function qtyInput() {
-  return screen.getAllByRole("spinbutton", { name: /quantité prélevée/i })[0];
+function pickedQty(code = "ART-1") {
+  return screen.getByLabelText(`Quantité prélevée ${code}`);
 }
 
 describe("PreparationPage", () => {
@@ -191,6 +206,7 @@ describe("PreparationPage", () => {
       ],
     };
     mocks.returnRoutes = [];
+    mocks.returnHistory = [];
     mocks.recentPickLists = [];
     Element.prototype.scrollIntoView = vi.fn();
     Object.defineProperty(window, "innerWidth", { configurable: true, writable: true, value: 1024 });
@@ -200,6 +216,18 @@ describe("PreparationPage", () => {
     mocks.returnRoutes = [{
       name: "LIV-RET-1",
       stock: { remainingQuantity: 5, status: "Retour déclaré", lines: [] },
+    }];
+    mocks.returnHistory = [{
+      name: "LIV-RET-1",
+      date: "2026-09-05",
+      revision: 1,
+      customers: [],
+      status: "Retour déclaré",
+      remainingQuantity: 5,
+      returnedQuantity: 0,
+      loadedQuantity: 5,
+      deliveredQuantity: 0,
+      lines: [],
     }];
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
@@ -211,7 +239,7 @@ describe("PreparationPage", () => {
 
     await user.click(screen.getByRole("tab", { name: /retours/i }));
     expect(screen.getByText("LIV-RET-1")).toBeInTheDocument();
-    expect(within(screen.getByRole("row", { name: /LIV-RET-1/ })).getByText("5")).toBeInTheDocument();
+    expect(within(screen.getByRole("row", { name: /LIV-RET-1/ })).getByText(/5 à retourner/)).toBeInTheDocument();
     expect(screen.queryByText("Commandes (3)")).not.toBeInTheDocument();
   });
 
@@ -223,20 +251,19 @@ describe("PreparationPage", () => {
     };
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
-    await user.click(screen.getAllByRole("button", { name: "Ouvrir la liste PL-1" })[0]);
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner SO-1" }));
+    await user.click(screen.getByRole("button", { name: "Ouvrir la liste" }));
     await waitFor(() => expect(screen.getByRole("heading", { name: "PL-1" })).toBeInTheDocument());
-    const quantity = qtyInput();
-    await user.clear(quantity);
-    await user.type(quantity, "1");
+    await user.click(screen.getByRole("button", { name: /^tout$/i }));
     await user.click(screen.getByRole("button", { name: /contrôle final/i }));
-    expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /confirmer et créer les BL/i })).toBeInTheDocument();
   });
 
   it("demande confirmation avant de créer les BL puis affiche le succès", async () => {
     const user = userEvent.setup();
     renderWorkspace();
-    await user.click(await screen.findByRole("button", { name: /contrôle final/i }));
+    await user.click(await screen.findByRole("button", { name: /tout prélever/i }));
+    await user.click(screen.getByRole("button", { name: /contrôle final/i }));
     await user.click(screen.getByRole("button", { name: /confirmer et créer les BL/i }));
     expect(screen.getByRole("dialog", { name: /confirmer la création des BL/i })).toBeInTheDocument();
     expect(screen.getByText(/un bon de livraison sera créé/i)).toBeInTheDocument();
@@ -251,11 +278,21 @@ describe("PreparationPage", () => {
     expect(screen.getAllByText("DN-1").length).toBeGreaterThan(0);
   });
 
-  it("n’expose plus de création manuelle de liste", () => {
+  it("permet de sélectionner des commandes pour ouvrir les listes", async () => {
+    mocks.queueData.message[0] = {
+      ...mocks.queueData.message[0],
+      draft_pick_list: "PL-1",
+      pick_lists: [{ name: "PL-1", docstatus: 0 }],
+    };
+    const user = userEvent.setup();
     renderPrep();
-    expect(screen.queryByRole("button", { name: /créer la liste de prélèvement/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /tout sélectionner/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: /sélectionner so-/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /sélectionner so-1/i })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /tout sélectionner/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^ouvrir la liste$/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /sélectionner so-1/i }));
+    expect(screen.getByRole("button", { name: /^ouvrir la liste$/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /^ouvrir la liste$/i }));
+    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
   });
 
   it("signale une rupture sans proposer de créer une liste", () => {
@@ -266,7 +303,6 @@ describe("PreparationPage", () => {
     };
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
     expect(screen.getAllByText("Stock insuffisant").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
     expect(mocks.createPickList).not.toHaveBeenCalled();
   });
 
@@ -278,7 +314,6 @@ describe("PreparationPage", () => {
     };
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
     expect(screen.getAllByText("Stock insuffisant").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
     expect(mocks.createPickList).not.toHaveBeenCalled();
   });
 
@@ -286,6 +321,7 @@ describe("PreparationPage", () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
 
+    await user.click(screen.getByRole("button", { name: /plus de filtres/i }));
     await chooseOption(user, screen.getByRole("combobox", { name: "Échéance" }), /demain/i);
     await chooseOption(user, screen.getByRole("combobox", { name: "Wilaya" }), "Alger");
     expect(screen.getByText("Commandes (2)")).toBeInTheDocument();
@@ -293,14 +329,24 @@ describe("PreparationPage", () => {
     await user.click(screen.getByRole("combobox", { name: "Commune" }));
     expect(await screen.findByRole("option", { name: "Alger Centre" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "COM-0001" })).not.toBeInTheDocument();
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("button", { name: /tout sélectionner/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /créer la liste de prélèvement/i })).not.toBeInTheDocument();
   });
 
   it("filtre les commandes en retard depuis l’URL", () => {
     mocks.queueData.message[0] = { ...mocks.queueData.message[0], name: "SO-LATE", delivery_date: "2020-01-01" };
     renderPrep("/preparation?dateScope=overdue");
+    expect(screen.getAllByText("SO-LATE").length).toBeGreaterThan(0);
+    expect(screen.queryByText("SO-2")).not.toBeInTheDocument();
+    expect(screen.queryByText("SO-3")).not.toBeInTheDocument();
+  });
+
+  it("filtre les commandes en retard depuis l’alerte", async () => {
+    mocks.queueData.message[0] = { ...mocks.queueData.message[0], name: "SO-LATE", delivery_date: "2020-01-01" };
+    const user = userEvent.setup();
+    renderPrep();
+    expect(screen.getByRole("row", { name: /SO-2/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /anomalie/i }));
+    await user.click(screen.getByRole("button", { name: /filtrer sur les retards/i }));
+    expect(screen.queryByRole("button", { name: /filtrer sur les retards/i })).not.toBeInTheDocument();
     expect(screen.getAllByText("SO-LATE").length).toBeGreaterThan(0);
     expect(screen.queryByText("SO-2")).not.toBeInTheDocument();
     expect(screen.queryByText("SO-3")).not.toBeInTheDocument();
@@ -330,18 +376,14 @@ describe("PreparationPage", () => {
     expect(screen.getByRole("row", { name: /SO-3/ })).toBeInTheDocument();
   });
 
-  it("masque la colonne Wilaya et la rétablit depuis Colonnes", async () => {
+  it("affiche le lieu et permet de masquer la colonne", async () => {
     const user = userEvent.setup();
     renderPrep();
     expect(screen.getByText("Alger Centre")).toBeInTheDocument();
-    expect(screen.queryByText("Actions")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Liste" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Désépingler Liste" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Wilaya" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Colonnes" }));
-    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Wilaya" }));
-    expect(screen.getByRole("button", { name: "Wilaya" })).toBeInTheDocument();
     expect(screen.getAllByText("Alger").length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Colonnes" }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Lieu" }));
+    expect(screen.queryByText("Alger Centre")).not.toBeInTheDocument();
   });
 
   it("pagine les commandes et affiche la page suivante", async () => {
@@ -365,6 +407,7 @@ describe("PreparationPage", () => {
   it("filtre les commandes par client", async () => {
     const user = userEvent.setup();
     renderPrep();
+    await user.click(screen.getByRole("button", { name: /plus de filtres/i }));
     await chooseOption(user, screen.getByRole("combobox", { name: "Client" }), "Client Test 1");
     expect(screen.getByText("Commandes (1)")).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /SO-1/ })).toBeInTheDocument();
@@ -375,9 +418,9 @@ describe("PreparationPage", () => {
   it("initialise les quantités prélevées à 0", async () => {
     renderWorkspace();
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
-    expect(qtyInput()).toHaveValue(0);
-    expect(screen.getByRole("button", { name: /quantité à prélever/i })).toBeInTheDocument();
-    expect(screen.getAllByText("Restant").length).toBeGreaterThan(0);
+    expect(pickedQty()).toHaveTextContent("0 / 2");
+    expect(screen.getByText(/0 \/ 2 unités prélevées/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /restants/i })).toBeInTheDocument();
   });
 
   it("incrémente la quantité au scan d’un code-barres de la session", async () => {
@@ -385,9 +428,9 @@ describe("PreparationPage", () => {
     renderWorkspace();
     const scan = await screen.findByLabelText(/code-barres article/i);
     await user.type(scan, "123456{Enter}");
-    await waitFor(() => expect(qtyInput()).toHaveValue(1));
+    await waitFor(() => expect(pickedQty()).toHaveTextContent("1 / 2"));
     expect(mocks.scanPickItem).toHaveBeenCalledWith("123456", ["PL-1"]);
-    expect(screen.getByText(/article test · \+1/i)).toBeInTheDocument();
+    expect(screen.getByText(/ART-1 · 1 \/ 2/i)).toBeInTheDocument();
   });
 
   it("refuse un scan au-delà de la quantité demandée", async () => {
@@ -395,12 +438,12 @@ describe("PreparationPage", () => {
     renderWorkspace();
     const scan = await screen.findByLabelText(/code-barres article/i);
     await user.type(scan, "123456{Enter}");
-    await waitFor(() => expect(qtyInput()).toHaveValue(1));
+    await waitFor(() => expect(pickedQty()).toHaveTextContent("1 / 2"));
     await user.type(scan, "123456{Enter}");
-    await waitFor(() => expect(qtyInput()).toHaveValue(2));
+    await waitFor(() => expect(pickedQty()).toHaveTextContent("2 / 2"));
     await user.type(scan, "123456{Enter}");
-    expect(await screen.findByText(/quantité demandée déjà atteinte/i)).toBeInTheDocument();
-    expect(qtyInput()).toHaveValue(2);
+    expect((await screen.findAllByText(/quantité déjà atteinte/i)).length).toBeGreaterThan(0);
+    expect(pickedQty()).toHaveTextContent("2 / 2");
   });
 
   it("signale un article hors session de préparation", async () => {
@@ -415,17 +458,18 @@ describe("PreparationPage", () => {
     const scan = await screen.findByLabelText(/code-barres article/i);
     await user.type(scan, "999{Enter}");
     expect(await screen.findByText(/n'est pas dans la session de préparation/i)).toBeInTheDocument();
-    expect(qtyInput()).toHaveValue(0);
+    expect(pickedQty()).toHaveTextContent("0 / 2");
   });
 
-  it("filtre les lignes restantes via le KPI", async () => {
+  it("filtre les lignes restantes", async () => {
     const user = userEvent.setup();
     renderWorkspace();
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
-    await chooseOption(user, screen.getByRole("combobox", { name: "État" }), "Complet");
-    expect(screen.getByText(/aucun article ne correspond à la recherche/i)).toBeInTheDocument();
-    expect(screen.queryByText(/article test/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /encore à scanner/i }));
+    await user.click(screen.getByRole("button", { name: /restants/i }));
+    expect(screen.getAllByText(/article test/i).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: /^tout$/i }));
+    expect(screen.getByText(/plus rien à prélever/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /réinitialiser les filtres/i }));
     expect(screen.getAllByText(/article test/i).length).toBeGreaterThan(0);
   });
 
@@ -444,7 +488,7 @@ describe("PreparationPage", () => {
     renderWorkspace();
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
     expect(screen.getByText(/liste soumise/i)).toBeInTheDocument();
-    expect(screen.getAllByText("Complet").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/complet/i).length).toBeGreaterThan(0);
     expect(screen.getByText("DN-1")).toBeInTheDocument();
     expect(screen.queryByLabelText(/code-barres article/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Ouvrir la caméra" })).not.toBeInTheDocument();
@@ -452,13 +496,11 @@ describe("PreparationPage", () => {
     expect(screen.queryByRole("button", { name: /contrôle final/i })).not.toBeInTheDocument();
   });
 
-  it("ouvre la caméra pour scanner un code-barres", async () => {
-    const user = userEvent.setup();
+  it("ne propose pas la caméra sur le poste fixe", async () => {
     renderWorkspace();
-    expect(await screen.findByRole("button", { name: "Ouvrir la caméra" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Ouvrir la caméra" }));
-    expect(screen.getByRole("dialog", { name: /scanner un code-barres/i })).toBeInTheDocument();
-    expect(screen.getByText(/cadrez le code dans le cadre/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/code-barres article/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Ouvrir la caméra" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^scanner$/i })).not.toBeInTheDocument();
   });
 
   it("sur mobile, priorise le bouton Scanner et met à jour le compteur en direct", async () => {
@@ -503,19 +545,19 @@ describe("PreparationPage", () => {
       warehouses: ["DEPOT"],
       delivery_notes: [],
     }];
+    const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
 
     expect(screen.getByText("Commandes (3)")).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /SO-1/ })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Sélectionner SO-1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Sélectionner SO-1" })).toBeInTheDocument();
     expect(screen.getAllByText("Liste brouillon").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("À livrer").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar", { name: /prélèvement 1 sur 2/i })[0]).toHaveAttribute("aria-valuenow", "50");
-    expect(screen.getAllByRole("button", { name: "Ouvrir la liste PL-COVER" }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /créer la liste/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner SO-1" }));
+    expect(screen.getByRole("button", { name: "Ouvrir la liste" })).toBeEnabled();
   });
 
-  it("affiche une liste soumise, le statut Desk Terminée et la barre à 100 %", () => {
+  it("affiche une liste soumise, le statut Desk Terminée et la barre à 100 %", async () => {
     mocks.queueData.message[0] = {
       ...mocks.queueData.message[0],
       status: "Completed",
@@ -524,13 +566,14 @@ describe("PreparationPage", () => {
       picked_qty: 2,
       requested_qty: 2,
     };
+    const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
 
-    expect(screen.getAllByText("Terminée").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Liste soumise").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("progressbar", { name: /prélèvement 2 sur 2/i })[0]).toHaveAttribute("aria-valuenow", "100");
-    expect(screen.getAllByRole("button", { name: "Ouvrir la liste PL-DONE" }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("checkbox", { name: "Sélectionner SO-1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Sélectionner SO-1" })).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner SO-1" }));
+    expect(screen.getByRole("button", { name: "Ouvrir la liste" })).toBeEnabled();
   });
 
   it("affiche une barre à 0 % sans liste de prélèvement", () => {
@@ -547,6 +590,8 @@ describe("PreparationPage", () => {
     };
     const user = userEvent.setup();
     renderPrep();
+    expect(screen.queryByRole("button", { name: /^sans liste$/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /plus de filtres/i }));
     await chooseOption(user, screen.getByRole("combobox", { name: "Liste" }), "Brouillon");
     expect(screen.getByText("Commandes (1)")).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /SO-1/ })).toBeInTheDocument();
@@ -562,13 +607,14 @@ describe("PreparationPage", () => {
       has_available_stock: true,
       stock_shortages: [{ item_code: "ART-2", item_name: "Rupture", warehouse: "DEPOT", required: 1, available: 0 }],
     };
+    const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
 
     expect(screen.getAllByText("SO-1").length).toBeGreaterThan(0);
     expect(screen.getByText("Commandes (3)")).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: "Sélectionner SO-1" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Ouvrir la liste PL-PARTIAL" }).length).toBeGreaterThan(0);
-    expect(screen.queryByRole("button", { name: /tout sélectionner/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Sélectionner SO-1" })).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner SO-1" }));
+    expect(screen.getByRole("button", { name: "Ouvrir la liste" })).toBeEnabled();
   });
 
   it("ouvre toutes les listes en brouillon d’une commande", async () => {
@@ -581,9 +627,8 @@ describe("PreparationPage", () => {
     const user = userEvent.setup();
     render(<MemoryRouter initialEntries={["/preparation"]}><PreparationPage /></MemoryRouter>);
 
-    const openButtons = screen.getAllByRole("button", { name: "Ouvrir les 2 listes de prélèvement" });
-    expect(openButtons.length).toBeGreaterThan(0);
-    await user.click(openButtons[0]);
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner SO-1" }));
+    await user.click(screen.getByRole("button", { name: "Ouvrir les listes" }));
     expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
   });
 
@@ -673,6 +718,7 @@ describe("PreparationPage", () => {
     render(<MemoryRouter initialEntries={["/preparation?tab=listes"]}><PreparationPage /></MemoryRouter>);
 
     expect(screen.getByText("Listes de prélèvement (2)")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /plus de filtres/i }));
     await chooseOption(user, screen.getByRole("combobox", { name: "Client" }), "Client Test 1");
     expect(screen.getByText("Listes de prélèvement (1)")).toBeInTheDocument();
     expect(screen.getByText("PL-1")).toBeInTheDocument();
@@ -681,6 +727,7 @@ describe("PreparationPage", () => {
     await user.click(screen.getByRole("button", { name: /réinitialiser/i }));
     expect(screen.getByText("Listes de prélèvement (2)")).toBeInTheDocument();
 
+    await user.click(screen.getByRole("button", { name: /plus de filtres/i }));
     await chooseOption(user, screen.getByRole("combobox", { name: "Wilaya" }), "Oran");
     expect(screen.getByText("Listes de prélèvement (1)")).toBeInTheDocument();
     expect(screen.getByText("PL-2")).toBeInTheDocument();
@@ -713,6 +760,54 @@ describe("PreparationPage", () => {
     }];
     render(<MemoryRouter initialEntries={["/preparation?tab=listes"]}><PreparationPage /></MemoryRouter>);
     expect(screen.getByLabelText("Commande modifiée")).toBeInTheDocument();
+  });
+
+  it("explique que les listes se créent à la soumission quand la file est vide", () => {
+    renderPrep("/preparation?tab=listes");
+    expect(
+      screen.getByText("Les listes apparaissent automatiquement à la soumission d’une commande."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/créez une liste depuis l’onglet commandes/i)).not.toBeInTheDocument();
+  });
+
+  it("filtre les listes par chip Brouillon et ouvre la sélection", async () => {
+    mocks.recentPickLists = [
+      {
+        name: "PL-1",
+        docstatus: 0,
+        status: "Draft",
+        modified: "2026-09-01 10:00:00",
+        sales_order_count: 1,
+        sales_orders: ["SO-1"],
+        customer_names: ["Client Test 1"],
+        requested_qty: 2,
+        picked_qty: 0,
+        warehouses: ["DEPOT"],
+        delivery_notes: [],
+      },
+      {
+        name: "PL-2",
+        docstatus: 1,
+        status: "Completed",
+        modified: "2026-09-01 11:00:00",
+        sales_order_count: 1,
+        sales_orders: ["SO-2"],
+        customer_names: ["Client Test 2"],
+        requested_qty: 3,
+        picked_qty: 3,
+        warehouses: ["DEPOT"],
+        delivery_notes: ["DN-2"],
+      },
+    ];
+    const user = userEvent.setup();
+    renderPrep("/preparation?tab=listes");
+    await user.click(screen.getByRole("button", { name: /^brouillon$/i }));
+    expect(screen.getByText("Listes de prélèvement (1)")).toBeInTheDocument();
+    expect(screen.getByText("PL-1")).toBeInTheDocument();
+    expect(screen.queryByText("PL-2")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /sélectionner pl-1/i }));
+    await user.click(screen.getByRole("button", { name: /^ouvrir la liste$/i }));
+    expect(await screen.findByRole("heading", { name: "PL-1" })).toBeInTheDocument();
   });
 
   it("affiche une alerte si la session signale une commande modifiée", async () => {
@@ -771,13 +866,15 @@ describe("PreparationPage", () => {
       draft_pick_list: "PL-1",
       stock_shortages: [],
     };
+    const user = userEvent.setup();
     renderPrep("/preparation?complete=1");
     expect(screen.getByText("Commandes (1)")).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /SO-1/ })).toBeInTheDocument();
     expect(screen.queryByRole("row", { name: /SO-2/ })).not.toBeInTheDocument();
     expect(screen.getAllByText("À compléter").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Liste incomplète").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: "Ouvrir la liste PL-1" }).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("checkbox", { name: "Sélectionner SO-1" }));
+    expect(screen.getByRole("button", { name: "Ouvrir la liste" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: /compléter la liste/i })).not.toBeInTheDocument();
   });
 });

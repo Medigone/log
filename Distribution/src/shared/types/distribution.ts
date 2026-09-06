@@ -97,6 +97,8 @@ export interface RouteStop {
   qrCode?: string;
   packageCount?: number;
   postingDate?: string;
+  /** Horodatage terrain (`custom_date_livraison`) quand l’arrêt est livré ou en échec. */
+  completedAt?: string;
   sequence: number;
   address?: string;
   phone?: string;
@@ -144,6 +146,9 @@ export interface DistributionRoute {
   lifecycle: RouteLifecycle;
   plannedStart?: string;
   plannedEnd?: string;
+  publishedAt?: string;
+  startedAt?: string;
+  finishedAt?: string;
   revision: number;
   publishedRevision: number;
   acknowledgedRevision: number;
@@ -395,6 +400,33 @@ export interface RouteLoadLine {
   remainingQuantity: number;
   returnedQuantity: number;
   uom?: string;
+  customer?: string;
+  customerName?: string;
+}
+
+export interface ReturnHistoryCustomer {
+  name: string;
+  customerName: string;
+}
+
+export interface ReturnHistoryRow {
+  name: string;
+  date: string;
+  declaredAt?: string | null;
+  confirmedAt?: string | null;
+  revision: number;
+  driver?: string;
+  driverName?: string;
+  vehicle?: string;
+  vehicleLabel?: string;
+  customers: ReturnHistoryCustomer[];
+  status: string;
+  remainingQuantity: number;
+  returnedQuantity: number;
+  loadedQuantity: number;
+  deliveredQuantity: number;
+  returnStockEntry?: string;
+  lines: RouteLoadLine[];
 }
 
 export interface RouteStockSummary {

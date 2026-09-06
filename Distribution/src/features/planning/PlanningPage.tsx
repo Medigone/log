@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AlertTriangle, Check, Columns3, LoaderCircle, Table2 } from "lucide-react";
 import { FormSelect } from "@/components/FilterSelect";
@@ -18,9 +18,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { DeliveryNotesBoard } from "@/features/planning/DeliveryNotesBoard";
 import { DeleteDraftRouteDialog } from "@/features/planning/DeleteDraftRouteDialog";
+import { PlanningAlertsSummary, PlanningAnomalyChip } from "@/features/planning/PlanningAlertsSummary";
 import { PlanningKanban } from "@/features/planning/PlanningKanban";
+import { PlanningStageKpis } from "@/features/planning/PlanningStageKpis";
 import { isoDateWithOffset, nextFreeSlot, timePart } from "@/features/planning/planningHelpers";
-import { parseNewRouteColumnId, parseRouteColumnId } from "@/features/planning/kanbanHelpers";
+import { parseNewRouteColumnId, parseRouteColumnId, resourceCapacity } from "@/features/planning/kanbanHelpers";
 import { RoutesBoard } from "@/features/planning/RoutesBoard";
 import { apiErrorMessage, useDistributionMutations, usePlanningBoard } from "@/shared/api/distribution";
 import type { AssignmentChange, DeliveryNoteAssignment, DistributionRoute } from "@/shared/types/distribution";
@@ -313,10 +315,15 @@ export function PlanningPage() {
   const kanbanDate = searchParams.get("date") || isoDateWithOffset();
   const blDate = searchParams.get("blDate") || "";
   const status = searchParams.get("status") || "";
+  const routeState = searchParams.get("routeState") || "";
   const selectParam = searchParams.get("select") || "";
   const [editing, setEditing] = useState<DeliveryNoteAssignment>();
   const [notice, setNotice] = useState("");
   const [failure, setFailure] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lateOnly, setLateOnly] = useState(false);
+  const [gpsOnly, setGpsOnly] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [bulkTarget, setBulkTarget] = useState<{
     deliveryNotes: string[];
     driverId?: string;
@@ -373,12 +380,43 @@ export function PlanningPage() {
   const routes = board?.routes || [];
   const drivers = board?.drivers || [];
   const vehicles = board?.vehicles || [];
-  const unplannedCount = rows.filter((row) => !row.route).length;
-  const draftRouteCount = routes.filter((route) => route.lifecycle === "Brouillon").length;
+  const today = isoDateWithOffset();
+  const unplanned = rows.filter((row) => !row.route);
+  const unplannedCount = unplanned.length;
+  const lateAssignments = unplanned.filter((row) => row.requestedDate != null && row.requestedDate < today);
+  const alertAssignments = rows.filter((row) => Boolean(row.planningAlert || row.requiresCustomerGeolocation));
+  const anomalyCount = new Set([...lateAssignments, ...alertAssignments].map((row) => row.deliveryNote)).size;
+  const draftRoutes = routes.filter((route) => route.lifecycle === "Brouillon");
+  const publishedRoutes = routes.filter((route) => route.lifecycle === "Publiée");
+  const draftRouteCount = draftRoutes.length;
+  const draftBlCount = rows.filter((row) => draftRoutes.some((route) => route.name === row.route)).length;
+  const dayRoutes = routes.filter((route) => route.date === kanbanDate);
+  const assignedArticles = dayRoutes.reduce((sum, route) => sum + (Number(route.totalQuantity) || 0), 0);
+  const dayRouteNames = new Set(dayRoutes.map((route) => route.name));
+  const scheduledDriverIds = new Set(
+    [
+      ...rows
+        .filter((row) => Boolean(row.driver && row.route && dayRouteNames.has(row.route)))
+        .map((row) => row.driver as string),
+      ...dayRoutes
+        .filter((route) => (route.stops?.length ?? 0) > 0 && route.driver)
+        .map((route) => route.driver as string),
+    ],
+  );
+  const scheduledDrivers = drivers.filter((driver) => scheduledDriverIds.has(driver.name));
+  const capacities = scheduledDrivers.map((driver) => resourceCapacity(driver, vehicles));
+  const capacityArticles =
+    capacities.length > 0 && capacities.every((value) => value != null)
+      ? capacities.reduce((sum, value) => sum + (value || 0), 0)
+      : 0;
+  const dayLabel = useMemo(() => {
+    const [, month, day] = kanbanDate.split("-");
+    return `${day}/${month}`;
+  }, [kanbanDate]);
   const description =
     tab === "tournees"
-      ? "Ouvrez une tournée pour vérifier ses détails avant de la publier."
-      : "Planifiez à l'avance et modifiez chaque BL sans rendre une tournée hétérogène.";
+      ? "Ouvrez une tournée pour vérifier ses détails avant de la publier. Une tournée publiée exige un motif de reprogrammation."
+      : "Affectez les BL aux tournées du jour. Les colonnes se dimensionnent à leur contenu.";
 
   const updateParams = (overrides: Record<string, string | undefined>) => {
     const base: Record<string, string> = {};
@@ -392,7 +430,14 @@ export function PlanningPage() {
     if (nextBl) base.blDate = nextBl;
     const nextStatus = overrides.status !== undefined ? overrides.status : status;
     if (nextStatus) base.status = nextStatus;
+    const nextRouteState = overrides.routeState !== undefined ? overrides.routeState : nextTab === "tournees" ? routeState : "";
+    if (nextRouteState) base.routeState = nextRouteState;
     setSearchParams(base);
+  };
+
+  const openBulkAssign = (deliveryNotes: string[], mode?: "existing" | "new") => {
+    setBulkError("");
+    setBulkTarget({ deliveryNotes, mode });
   };
 
   const reprepare = async (row: DeliveryNoteAssignment) => {
@@ -535,6 +580,7 @@ export function PlanningPage() {
       setNotice(`${result.count} BL affecté${result.count > 1 ? "s" : ""} à ${result.route.name}.`);
       if (result.warning) setFailure(result.warning);
       setBulkTarget(null);
+      setSelected(new Set());
       if (payload.forceNew && payload.plannedDate && payload.plannedDate !== kanbanDate) {
         updateParams({ date: payload.plannedDate });
       }
@@ -573,7 +619,36 @@ export function PlanningPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader eyebrow="Exploitation multi-jours" title="Planification" description={description} />
+      <PageHeader
+        eyebrow="Exploitation multi-jours"
+        title="Planification"
+        meta={
+          <PlanningAnomalyChip
+            count={anomalyCount}
+            open={alertsOpen}
+            onToggle={() => setAlertsOpen((open) => !open)}
+          />
+        }
+        description={description}
+      />
+
+      {alertsOpen && (
+        <PlanningAlertsSummary
+          lateAssignments={lateAssignments}
+          alertAssignments={alertAssignments}
+          onSelectLate={() => {
+            setSelected(new Set(lateAssignments.map((row) => row.deliveryNote)));
+            setLateOnly(true);
+            setAlertsOpen(false);
+            updateParams({ tab: "bl" });
+          }}
+          onFilterAlerts={() => {
+            setGpsOnly(true);
+            setAlertsOpen(false);
+            updateParams({ tab: "bl" });
+          }}
+        />
+      )}
 
       {(failure || error) && (
         <div role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -593,13 +668,13 @@ export function PlanningPage() {
 
       <Tabs
         value={tab}
-        onValueChange={(value) => updateParams({ tab: String(value || "bl") })}
+        onValueChange={(value) => updateParams({ tab: String(value || "bl"), routeState: "" })}
         aria-label="Sections planification"
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3">
           <TabsList variant="line">
             <TabsTrigger value="bl">
-              BL
+              BL à planifier
               <Badge variant={unplannedCount > 0 ? "default" : "secondary"} aria-label={`${unplannedCount} non planifié${unplannedCount > 1 ? "s" : ""}`}>
                 {unplannedCount}
               </Badge>
@@ -634,6 +709,29 @@ export function PlanningPage() {
             </div>
           )}
         </div>
+
+        <div className="pt-5">
+          <PlanningStageKpis
+            backlogCount={unplannedCount}
+            backlogArticles={unplanned.reduce((sum, row) => sum + (Number(row.totalQuantity) || 0), 0)}
+            lateCount={lateAssignments.length}
+            draftRouteCount={draftRouteCount}
+            draftBlCount={draftBlCount}
+            publishedRouteCount={publishedRoutes.length}
+            assignedArticles={assignedArticles}
+            capacityArticles={capacityArticles}
+            driverCount={scheduledDriverIds.size}
+            dayLabel={dayLabel}
+            onShowBacklog={() => {
+              setLateOnly(false);
+              setGpsOnly(false);
+              updateParams({ tab: "bl", status: "", routeState: "" });
+            }}
+            onShowDrafts={() => updateParams({ tab: "tournees", routeState: "Brouillon" })}
+            onShowPublished={() => updateParams({ tab: "tournees", routeState: "Publiée" })}
+          />
+        </div>
+
         <TabsContent value="bl" className="pt-5">
           {view === "kanban" ? (
             <PlanningKanban
@@ -645,30 +743,39 @@ export function PlanningPage() {
               routes={routes}
               drivers={drivers}
               vehicles={vehicles}
+              selected={selected}
+              onSelectedChange={setSelected}
+              lateOnly={lateOnly}
+              onLateOnlyChange={setLateOnly}
+              gpsOnly={gpsOnly}
+              onGpsOnlyChange={setGpsOnly}
               onMoveItem={handleKanbanMove}
-              onBulkAssign={(dns: string[]) => {
-                setBulkError("");
-                setBulkTarget({ deliveryNotes: dns });
-              }}
+              onBulkAssign={(dns: string[]) => openBulkAssign(dns)}
+              onCreateRoute={(dns: string[]) => openBulkAssign(dns, "new")}
               onUnassign={handleUnassign}
               onReprogrammer={setEditing}
               onDeleteRoute={(route) => {
                 setDeleteFailure("");
                 setDeletingRoute(route);
               }}
-              isLoading={isLoading}
               statusFilter={status}
               onStatusFilterChange={(value: string) => updateParams({ status: value })}
             />
           ) : (
             <DeliveryNotesBoard
               rows={rows}
+              routes={routes}
               drivers={drivers}
               vehicles={vehicles}
               isLoading={isLoading}
               onEdit={setEditing}
               onReprepare={(row) => void reprepare(row)}
               statusFilter={status}
+              selected={selected}
+              onSelectedChange={setSelected}
+              onBulkAssign={(dns) => openBulkAssign(dns)}
+              onCreateRoute={(dns) => openBulkAssign(dns, "new")}
+              alertsOnly={gpsOnly}
             />
           )}
         </TabsContent>
@@ -678,6 +785,7 @@ export function PlanningPage() {
             drivers={drivers}
             vehicles={vehicles}
             isLoading={isLoading}
+            lifecycleFilter={routeState}
             onDeleteRoute={(route) => {
               setDeleteFailure("");
               setDeletingRoute(route);

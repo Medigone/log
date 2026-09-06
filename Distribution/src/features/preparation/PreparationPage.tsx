@@ -6,36 +6,29 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import {
   OrderItemsList,
   OrderItemsSubGrid,
   PreparationSubTableGrid,
-  namedHeader,
 } from "@/features/preparation/PreparationSubTableGrid";
-import type { ColumnDef } from "@tanstack/react-table";
-import type { DataGridFeatures } from "@/components/reui/data-grid/data-grid";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
-import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
-import { KpiTile } from "@/components/ui/kpi-tile";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar";
 import {
   AlertTriangle,
   ArrowLeft,
-  Camera,
   CheckCircle,
   ClipboardList,
   Package,
   Printer,
   QrCode,
-  RotateCcw,
-  ScanBarcode,
-  Search,
 } from "lucide-react";
+import { ScanConsole } from "@/features/preparation/ScanConsole";
+import { PickLinesTable } from "@/features/preparation/pickLineRows";
+import { ScanJournal } from "@/features/preparation/ScanJournal";
+import { scanClock, type PickLine, type ScanLogEntry, type ScanTone } from "@/features/preparation/pickScan";
 import { apiErrorMessage } from "@/shared/api/distribution";
 import {
   usePickSession,
@@ -49,7 +42,6 @@ import {
   usePickListOrderChanged,
   type DeliveryNoteResult,
   type PickGroup,
-  type PickLocation,
   type SalesOrderRow,
 } from "@/shared/api/preparation";
 import { PickListQueue } from "@/features/preparation/PickListQueue";
@@ -69,9 +61,25 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { pickLineTone, salesOrderDeskStatus, orderPickListState, orderPickListStatus } from "@/shared/design/statusTone";
+import { AlertsChip } from "@/features/today/AlertsSummary";
+import { ListStateIcon } from "@/features/preparation/ListStateIcon";
+import {
+  PreparationMoreFilters,
+  PreparationQueueShell,
+  PreparationSelectionBar,
+  preparationChipClass,
+} from "@/features/preparation/PreparationQueueShell";
+import { PreparationStageKpis, type PreparationStage } from "@/features/preparation/PreparationStageKpis";
+import {
+  listStateForOrder,
+  orderPickListNames,
+  orderPickProgress,
+  preparationOrderColumns,
+  remainingOf,
+} from "@/features/preparation/preparationOrderColumns";
+import { salesOrderDeskStatus, orderPickListState } from "@/shared/design/statusTone";
 import { cn } from "@/lib/utils";
-import { formatQuantity, formatShortDate } from "@/shared/format";
+import { formatLongDate, formatQuantity, formatShortDate } from "@/shared/format";
 
 const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
 
@@ -99,8 +107,6 @@ function localIsoDate(date: Date) {
 
 const formatQty = formatQuantity;
 
-type LineFocus = "all" | "remaining" | "complete" | "variance";
-
 function groupPickedQty(group: PickGroup, picked: Record<string, number>) {
   return getPickGroupLocations(group).reduce(
     (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
@@ -108,102 +114,44 @@ function groupPickedQty(group: PickGroup, picked: Record<string, number>) {
   );
 }
 
-function pickLineLabel(pickedQty: number, requested: number) {
-  if (pickedQty === requested) return "Complet";
-  if (pickedQty > requested) return "Écart";
-  return "Restant";
-}
-
-function matchesLineFocus(pickedQty: number, requested: number, focus: LineFocus) {
-  if (focus === "remaining") return pickedQty < requested;
-  if (focus === "complete") return pickedQty === requested;
-  if (focus === "variance") return pickedQty !== requested;
-  return true;
-}
-
-function matchesLineSearch(group: PickGroup, query: string) {
-  if (!query) return true;
-  return [
-    group.item_code,
-    group.item_name,
-    group.warehouse,
-    ...getPickGroupLocations(group).map((location) => location.sales_order),
-  ]
-    .filter(Boolean)
-    .some((value) => String(value).toLocaleLowerCase("fr").includes(query));
+function PreparationStepBar({ current }: { current: (typeof PREPARATION_STEPS)[number] }) {
+  const currentIndex = PREPARATION_STEPS.indexOf(current);
+  return (
+    <div className="flex w-fit items-center gap-0.5 rounded-[10px] border bg-card p-0.5" aria-label="Étapes de préparation">
+      {PREPARATION_STEPS.map((step, index) => {
+        const active = index === currentIndex;
+        const done = index < currentIndex;
+        return (
+          <div
+            key={step}
+            className={cn(
+              "flex h-7 items-center gap-1.5 rounded-md px-3 text-[12.5px]",
+              active && "bg-muted font-medium",
+              !active && "text-muted-foreground",
+            )}
+          >
+            <span className="num text-[11px] text-muted-foreground">{index + 1}</span>
+            {step}
+            {done ? <span className="text-[11px]" aria-hidden>✓</span> : null}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function PickSessionSkeleton() {
   return (
     <div className="space-y-4" aria-hidden="true">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-[92px] w-full rounded-lg" />
-        ))}
-      </div>
-      <Skeleton className="h-14 w-full rounded-lg" />
-      <Skeleton className="h-48 w-full rounded-lg" />
+      <Skeleton className="h-[148px] w-full rounded-xl" />
+      <Skeleton className="h-48 w-full rounded-xl" />
+      <Skeleton className="h-24 w-full rounded-xl" />
     </div>
   );
 }
 
 function stockShortages(order: SalesOrderRow) {
   return order.stock_shortages || [];
-}
-
-function StockStatusBadge({ order }: { order: SalesOrderRow }) {
-  const shortage = stockShortages(order).length > 0;
-  const ready = orderReadyToComplete(order);
-  if (!shortage && !ready) {
-    return <span className="whitespace-nowrap text-muted-foreground">OK</span>;
-  }
-  return (
-    <span className="flex flex-wrap items-center gap-1">
-      {shortage ? <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge> : null}
-      {ready ? <StatusBadge tone="warning" size="sm">À compléter</StatusBadge> : null}
-    </span>
-  );
-}
-
-function orderPickListNames(order: SalesOrderRow): string[] {
-  if (order.pick_lists?.length) {
-    return Array.from(new Set(order.pick_lists.map((pickList) => pickList.name).filter(Boolean)));
-  }
-  if (order.draft_pick_lists?.length) return order.draft_pick_lists;
-  if (order.draft_pick_list) return [order.draft_pick_list];
-  if (order.existing_pick_list) return [order.existing_pick_list];
-  return [];
-}
-
-function orderPickProgress(order: SalesOrderRow) {
-  const requested = order.requested_qty ?? order.total_qty ?? 0;
-  let picked = order.picked_qty ?? 0;
-  if (!orderPickListNames(order).length && (order.per_picked || 0) > 0 && picked === 0) {
-    picked = requested * ((order.per_picked || 0) / 100);
-  }
-  const percent = requested > 0 ? Math.min(100, Math.round((picked / requested) * 100)) : 0;
-  return { picked, requested, percent };
-}
-
-function PickProgressBar({ order }: { order: SalesOrderRow }) {
-  const { picked, requested, percent } = orderPickProgress(order);
-  return (
-    <div className="flex min-w-[11rem] items-center gap-2 whitespace-nowrap">
-      <div
-        role="progressbar"
-        aria-label={`Prélèvement ${formatQuantity(picked)} sur ${formatQuantity(requested)}`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={percent}
-        className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-muted"
-      >
-        <div className="h-full rounded-full bg-brand-600 transition-[width]" style={{ width: `${percent}%` }} />
-      </div>
-      <span className="num t-meta text-muted-foreground">
-        {formatQuantity(picked)} / {formatQuantity(requested)} · {percent} %
-      </span>
-    </div>
-  );
 }
 
 function OpenDraftListsButton({
@@ -258,9 +206,13 @@ function printQr(note: DeliveryNoteResult) {
 function SalesOrderPicker({
   onOpenPickLists,
   onShowPickLists,
+  presetSelection,
+  requestedDateScope,
 }: {
   onOpenPickLists: (names: string[], created?: boolean) => void;
   onShowPickLists: () => void;
+  presetSelection?: string[];
+  requestedDateScope?: DateScope;
 }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -274,8 +226,11 @@ function SalesOrderPicker({
   const [listFilter, setListFilter] = useState<ListFilter>("all");
   const [stockFilter, setStockFilter] = useState<StockFilter>(() => stockFilterFromParam(searchParams));
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [selection, setSelection] = useState<Record<string, true>>({});
+  const [activeStage, setActiveStage] = useState<PreparationStage["id"] | null>(null);
 
   const { data, error, isLoading } = usePreparationQueue();
+  const isMobile = useIsMobile();
 
   const orders = useMemo(() => data?.message || [], [data?.message]);
   const visible = orders;
@@ -332,7 +287,68 @@ function SalesOrderPicker({
     });
   }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, stockFilter, visible, search, wilaya]);
 
-  const filtersActive = Boolean(search || dateScope !== "all" || dateFrom || dateTo || wilaya || commune || customer || listFilter !== "all" || stockFilter !== "all");
+  const filtersActive = Boolean(
+    search ||
+      dateScope !== "all" ||
+      dateFrom ||
+      dateTo ||
+      wilaya ||
+      commune ||
+      customer ||
+      listFilter !== "all" ||
+      stockFilter !== "all",
+  );
+
+  const today = isoDateWithOffset(0);
+  const stages = useMemo((): PreparationStage[] => {
+    const toPick = visible.filter((row) => orderPickListState(row) === "none").length;
+    const inProgress = visible.filter((row) => orderPickListState(row) === "draft").length;
+    const toComplete = visible.filter((row) => orderReadyToComplete(row)).length;
+    const ready = visible.filter(
+      (row) => orderPickListState(row) === "submitted" && !row.pick_incomplete,
+    ).length;
+    const shortage = visible.filter((row) => stockShortages(row).length > 0).length;
+    const total = Math.max(1, toPick + inProgress + toComplete + ready);
+    return [
+      { id: "toPick", step: 1, title: "Sans liste", value: toPick, unit: "commandes", ratio: toPick / total },
+      { id: "inProgress", step: 2, title: "En cours", value: inProgress, unit: "listes brouillon", ratio: inProgress / total },
+      {
+        id: "toComplete",
+        step: 3,
+        title: "À compléter",
+        value: toComplete,
+        unit: "reliquats",
+        ratio: toComplete / total,
+        exception: shortage ? { label: `${shortage} rupture`, tone: "danger" } : undefined,
+        barTone: toComplete ? "danger" : "default",
+      },
+      {
+        id: "ready",
+        step: 4,
+        title: "Prêtes à livrer",
+        value: ready,
+        unit: "listes soumises",
+        ratio: ready / total,
+        barTone: "success",
+      },
+    ];
+  }, [visible]);
+
+  const presetKey = (presetSelection ?? []).join("|");
+  useEffect(() => {
+    if (!presetSelection?.length) return;
+    setSelection(Object.fromEntries(presetSelection.map((id) => [id, true as const])));
+    setStockFilter("complete");
+    setActiveStage("toComplete");
+  }, [presetKey, presetSelection]);
+
+  useEffect(() => {
+    if (!requestedDateScope) return;
+    setDateScope(requestedDateScope);
+    setDateFrom("");
+    setDateTo("");
+    setActiveStage(null);
+  }, [requestedDateScope]);
 
   const openDetail = (order: SalesOrderRow) => {
     navigate(`/preparation/commandes/${encodeURIComponent(order.name)}`);
@@ -348,6 +364,8 @@ function SalesOrderPicker({
     setCustomer("");
     setListFilter("all");
     setStockFilter("all");
+    setNotPicked(false);
+    setActiveStage(null);
   };
 
   const emptyOrders = (
@@ -386,296 +404,292 @@ function SalesOrderPicker({
     });
   };
 
-  const orderColumns: Array<ColumnDef<DataGridFeatures, SalesOrderRow>> = [
-    {
-      id: "name",
-      accessorKey: "name",
-      ...namedHeader("Commande"),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          className="truncate text-left font-medium hover:underline"
-          onClick={() => openDetail(row.original)}
-        >
-          {row.original.name}
-        </button>
-      ),
-      size: 170,
-      enableHiding: false,
-    },
-    {
-      id: "qty",
-      accessorKey: "total_qty",
-      ...namedHeader("Articles"),
-      cell: ({ row }) => <span className="num tabular-nums">{row.original.total_qty || 0}</span>,
-      size: 80,
-    },
-    {
-      id: "customer",
-      accessorFn: (row) => row.customer_name || row.customer || "",
-      ...namedHeader("Client"),
-      cell: ({ row }) => <span className="truncate">{row.original.customer_name || row.original.customer || "—"}</span>,
-      size: 130,
-    },
-    {
-      id: "place",
-      accessorFn: (row) => row.custom_commune_nom || row.custom_commune || "",
-      ...namedHeader("Lieu"),
-      cell: ({ row }) => (
-        <span className="truncate">{row.original.custom_commune_nom || row.original.custom_commune || "—"}</span>
-      ),
-      size: 130,
-    },
-    {
-      id: "wilaya",
-      accessorFn: (row) => row.custom_wilaya || "",
-      ...namedHeader("Wilaya"),
-      cell: ({ row }) => <span className="truncate">{row.original.custom_wilaya || "—"}</span>,
-      size: 110,
-    },
-    {
-      id: "status",
-      accessorFn: (row) => row.status || "",
-      ...namedHeader("Statut"),
-      cell: ({ row }) => {
-        const desk = salesOrderDeskStatus(row.original.status);
-        return <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>;
-      },
-      size: 120,
-    },
-    {
-      id: "due",
-      accessorFn: (row) => row.delivery_date || row.transaction_date || "",
-      ...namedHeader("Échéance"),
-      cell: ({ row }) => (
-        <span className="num whitespace-nowrap text-muted-foreground">
-          {formatShortDate(row.original.delivery_date || row.original.transaction_date)}
-        </span>
-      ),
-      size: 100,
-    },
-    {
-      id: "progress",
-      accessorFn: (row) => orderPickProgress(row).percent,
-      ...namedHeader("Prélevé"),
-      cell: ({ row }) => <PickProgressBar order={row.original} />,
-      size: 180,
-    },
-    {
-      id: "stock",
-      accessorFn: (row) => stockShortages(row).length || (row.ready_to_complete ? 0.5 : 0),
-      ...namedHeader("Stock"),
-      cell: ({ row }) => <StockStatusBadge order={row.original} />,
-      size: 130,
-    },
-    {
-      id: "pickList",
-      accessorFn: (row) => orderPickListState(row),
-      ...namedHeader("Liste"),
-      cell: ({ row }) => {
-        const lists = orderPickListNames(row.original);
-        const pick = orderPickListStatus(orderPickListState(row.original), row.original);
-        return (
-          <div className="flex h-full items-center justify-end gap-1.5 whitespace-nowrap">
-            <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
-            {orderIsModified(row.original) ? (
-              <span title="Commande modifiée">
-                <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-label="Commande modifiée" />
-              </span>
-            ) : null}
-            {lists.length ? (
-              <OpenDraftListsButton icon names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row.original)} />
-            ) : null}
-          </div>
-        );
-      },
-      size: 168,
-      minSize: 168,
-      enableHiding: false,
-    },
-  ];
+  const selectedIds = Object.keys(selection).filter((id) => filtered.some((row) => row.name === id));
+  const selectedOrders = filtered.filter((row) => selection[row.name]);
+  const remainingSelected = selectedOrders.reduce((sum, row) => sum + remainingOf(row), 0);
+  const selectedListNames = Array.from(
+    new Set(
+      selectedOrders
+        .filter((row) => !orderIsModified(row))
+        .flatMap((row) => orderPickListNames(row)),
+    ),
+  );
+  const allFilteredSelected = filtered.length > 0 && filtered.every((row) => selection[row.name]);
+
+  const toggle = (id: string) =>
+    setSelection((prev) => {
+      const next = { ...prev };
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return next;
+    });
+
+  const toggleAll = () => {
+    if (allFilteredSelected) {
+      setSelection({});
+      return;
+    }
+    setSelection(Object.fromEntries(filtered.map((row) => [row.name, true as const])));
+  };
+
+  const pickStage = (id: PreparationStage["id"]) => {
+    setDateScope("all");
+    setStockFilter("all");
+    setListFilter("all");
+    setActiveStage(id);
+    if (id === "toPick") {
+      setListFilter("none");
+    } else if (id === "inProgress") {
+      setListFilter("draft");
+    } else if (id === "toComplete") {
+      setStockFilter("complete");
+      const names = visible.filter((row) => orderReadyToComplete(row)).map((row) => row.name);
+      setSelection(Object.fromEntries(names.map((name) => [name, true as const])));
+    } else {
+      setListFilter("submitted");
+      const names = visible
+        .filter((row) => orderPickListState(row) === "submitted" && !row.pick_incomplete)
+        .map((row) => row.name);
+      setSelection(Object.fromEntries(names.map((name) => [name, true as const])));
+    }
+  };
+
+  const orderColumns = preparationOrderColumns({
+    today,
+    selection,
+    allFilteredSelected,
+    onToggle: toggle,
+    onToggleAll: toggleAll,
+    onOpenDetail: openDetail,
+  });
 
   return (
     <div className="flex flex-col gap-5">
-      {(error) && (
+      {error && (
         <Alert>
-          <AlertDescription>
-            Impossible de charger les commandes à préparer.
-          </AlertDescription>
+          <AlertDescription>Impossible de charger les commandes à préparer.</AlertDescription>
         </Alert>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">Commandes ({filtered.length})</h2>
-      </div>
+      <PreparationStageKpis stages={stages} active={activeStage} onPick={pickStage} />
 
-      <Toolbar>
-        <InputGroup className="min-w-48 flex-1 bg-background">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Rechercher une commande…"
-            aria-label="Rechercher une commande"
-          />
-        </InputGroup>
-        <FilterSelect
-          label="Échéance"
-          value={dateScope}
-          onChange={(value) => {
-            setDateScope(value as DateScope);
-            setDateFrom("");
-            setDateTo("");
-          }}
-          options={[
-            { value: "all", label: "Toutes" },
-            { value: "today", label: "Aujourd’hui" },
-            { value: "tomorrow", label: "Demain" },
-            { value: "overdue", label: "En retard" },
-          ]}
-        />
-        <FilterSelect
-          label="Stock"
-          value={stockFilter}
-          onChange={(value) => setStockFilter(value as StockFilter)}
-          options={[
-            { value: "all", label: "Tous" },
-            { value: "shortage", label: "Rupture" },
-            { value: "complete", label: "À compléter" },
-          ]}
-        />
-        <FilterSelect
-          label="Liste"
-          value={listFilter}
-          onChange={(value) => setListFilter(value as ListFilter)}
-          options={[
-            { value: "all", label: "Toutes" },
-            { value: "none", label: "Sans liste" },
-            { value: "draft", label: "Brouillon" },
-            { value: "submitted", label: "Soumise" },
-          ]}
-        />
-        <FilterSelect
-          label="Wilaya"
-          value={wilaya || "all"}
-          onChange={(value) => {
-            setWilaya(value === "all" ? "" : value);
-            setCommune("");
-          }}
-          options={[{ value: "all", label: "Toutes" }, ...wilayas.map((value) => ({ value, label: value }))]}
-        />
-        <FilterSelect
-          label="Commune"
-          value={commune || "all"}
-          onChange={(value) => setCommune(value === "all" ? "" : value)}
-          options={[{ value: "all", label: "Toutes" }, ...communes.map((option) => ({ value: option.value, label: option.label }))]}
-        />
-        <FilterSelect
-          label="Client"
-          value={customer || "all"}
-          onChange={(value) => setCustomer(value === "all" ? "" : value)}
-          options={[{ value: "all", label: "Tous" }, ...customers.map((value) => ({ value, label: value }))]}
-        />
-        <DateRangeFilter
-          from={dateFrom}
-          to={dateTo}
-          onChange={(range) => {
-            setDateFrom(range.from);
-            setDateTo(range.to);
-            setDateScope("all");
-          }}
-        />
-        {filtersActive ? (
+      <PreparationQueueShell
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Rechercher une commande, un client, une ville…"
+        searchAriaLabel="Rechercher une commande"
+        chips={
           <>
-            <ToolbarSpacer />
-            <Button type="button" variant="ghost" size="sm" onClick={resetFilters}>
-              <RotateCcw data-icon="inline-start" />
-              Réinitialiser
-            </Button>
+            <button
+              type="button"
+              className={preparationChipClass(dateScope === "overdue")}
+              onClick={() => {
+                setDateScope((current) => (current === "overdue" ? "all" : "overdue"));
+                setActiveStage(null);
+              }}
+            >
+              <span className="size-1.5 rounded-full bg-destructive" /> Échéance dépassée
+            </button>
+            <button
+              type="button"
+              className={preparationChipClass(stockFilter === "complete")}
+              onClick={() => {
+                setStockFilter((current) => (current === "complete" ? "all" : "complete"));
+                setActiveStage((current) => (current === "toComplete" ? null : current));
+              }}
+            >
+              <span className="size-1.5 rounded-full bg-[#d97706]" /> À compléter
+            </button>
           </>
-        ) : null}
-      </Toolbar>
-
-      {isLoading && !orders.length ? (
-        <Skeleton className="h-72 w-full rounded-lg" aria-hidden="true" />
-      ) : !filtered.length ? (
-        emptyOrders
-      ) : (
-        <>
-          <div className="hidden md:block">
-            <PreparationSubTableGrid
-              label="Commandes"
-              columns={orderColumns}
-              rows={filtered}
-              getRowId={(row) => row.name}
-              expandContent={(row) => <OrderItemsSubGrid items={row.items || []} />}
-              canExpand={(row) => (row.items?.length ?? 0) > 0}
-              isLoading={isLoading && !orders.length}
+        }
+        moreFilters={
+          <PreparationMoreFilters>
+            <FilterSelect
+              label="Échéance"
+              value={dateScope}
+              onChange={(value) => {
+                setDateScope(value as DateScope);
+                setDateFrom("");
+                setDateTo("");
+              }}
+              options={[
+                { value: "all", label: "Toutes" },
+                { value: "today", label: "Aujourd’hui" },
+                { value: "tomorrow", label: "Demain" },
+                { value: "overdue", label: "En retard" },
+              ]}
             />
-          </div>
-          <div className="flex flex-col gap-2 md:hidden">
-            {filtered.map((row) => {
-              const lists = orderPickListNames(row);
-              const desk = salesOrderDeskStatus(row.status);
-              const pick = orderPickListStatus(orderPickListState(row), row);
-              const items = row.items || [];
-              const itemsOpen = expandedOrders.has(row.name);
-              return (
-              <div
-                key={row.name}
-                className="flex flex-col gap-3 rounded-lg border p-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <button type="button" className="min-w-0 text-left" onClick={() => openDetail(row)}>
-                      <div className="text-sm font-medium">{row.name}</div>
-                      <div className="truncate text-xs text-muted-foreground">
-                        {row.customer_name || row.customer} · {row.custom_commune_nom || row.custom_commune || "—"} ·{" "}
-                        {formatShortDate(row.delivery_date || row.transaction_date)} · {row.total_qty || 0} art.
-                      </div>
-                    </button>
-                  </div>
-                  {lists.length ? (
-                    <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
-                  ) : null}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
-                  <StatusBadge tone={pick.tone} size="sm">{pick.label}</StatusBadge>
-                  {orderIsModified(row) && <StatusBadge tone="warning" size="sm">Modifiée</StatusBadge>}
-                  {stockShortages(row).length > 0 ? (
-                    <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
-                  ) : null}
-                  {orderReadyToComplete(row) ? (
-                    <StatusBadge tone="warning" size="sm">À compléter</StatusBadge>
-                  ) : null}
-                </div>
-                <PickProgressBar order={row} />
-                {items.length ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-expanded={itemsOpen}
-                      onClick={() => toggleMobileItems(row.name)}
-                    >
-                      {itemsOpen ? "Masquer les articles" : `Afficher les articles (${items.length})`}
-                    </Button>
-                    {itemsOpen ? <OrderItemsList items={items} /> : null}
-                  </>
-                ) : null}
+            <FilterSelect
+              label="Stock"
+              value={stockFilter}
+              onChange={(value) => setStockFilter(value as StockFilter)}
+              options={[
+                { value: "all", label: "Tous" },
+                { value: "shortage", label: "Rupture" },
+                { value: "complete", label: "À compléter" },
+              ]}
+            />
+            <FilterSelect
+              label="Liste"
+              value={listFilter}
+              onChange={(value) => setListFilter(value as ListFilter)}
+              options={[
+                { value: "all", label: "Toutes" },
+                { value: "draft", label: "Brouillon" },
+                { value: "submitted", label: "Soumise" },
+              ]}
+            />
+            <FilterSelect
+              label="Wilaya"
+              value={wilaya || "all"}
+              onChange={(value) => {
+                setWilaya(value === "all" ? "" : value);
+                setCommune("");
+              }}
+              options={[{ value: "all", label: "Toutes" }, ...wilayas.map((value) => ({ value, label: value }))]}
+            />
+            <FilterSelect
+              label="Commune"
+              value={commune || "all"}
+              onChange={(value) => setCommune(value === "all" ? "" : value)}
+              options={[{ value: "all", label: "Toutes" }, ...communes.map((option) => ({ value: option.value, label: option.label }))]}
+            />
+            <FilterSelect
+              label="Client"
+              value={customer || "all"}
+              onChange={(value) => setCustomer(value === "all" ? "" : value)}
+              options={[{ value: "all", label: "Tous" }, ...customers.map((value) => ({ value, label: value }))]}
+            />
+            <DateRangeFilter
+              from={dateFrom}
+              to={dateTo}
+              onChange={(range) => {
+                setDateFrom(range.from);
+                setDateTo(range.to);
+                setDateScope("all");
+              }}
+            />
+          </PreparationMoreFilters>
+        }
+        countLabel={`${filtered.length} / ${visible.length} commandes`}
+        heading={<h2 className="sr-only">Commandes ({filtered.length})</h2>}
+        filtersActive={filtersActive}
+        onReset={resetFilters}
+        selectionBar={
+          selectedIds.length > 0 ? (
+            <PreparationSelectionBar
+              summary={`${selectedIds.length} commande${selectedIds.length > 1 ? "s" : ""} sélectionnée${selectedIds.length > 1 ? "s" : ""}`}
+              hint={
+                remainingSelected > 0
+                  ? `${formatQuantity(remainingSelected)} article(s) à prélever`
+                  : "rien à prélever"
+              }
+              actionLabel={selectedListNames.length > 1 ? "Ouvrir les listes" : "Ouvrir la liste"}
+              actionDisabled={selectedListNames.length === 0}
+              onAction={() => onOpenPickLists(selectedListNames)}
+              onClear={() => setSelection({})}
+            />
+          ) : undefined
+        }
+      >
+        {isLoading && !orders.length ? (
+          <Skeleton className="h-72 w-full rounded-none" aria-hidden="true" />
+        ) : !filtered.length ? (
+          <div className="p-4">{emptyOrders}</div>
+        ) : (
+          <>
+            {!isMobile ? (
+              <div>
+                <PreparationSubTableGrid
+                  label="Commandes"
+                  columns={orderColumns}
+                  rows={filtered}
+                  getRowId={(row) => row.name}
+                  expandContent={(row) => <OrderItemsSubGrid items={row.items || []} />}
+                  canExpand={(row) => (row.items?.length ?? 0) > 0}
+                  isLoading={isLoading && !orders.length}
+                />
               </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+            ) : (
+              <div className="flex flex-col gap-2 p-3">
+              {filtered.map((row) => {
+                const lists = orderPickListNames(row);
+                const desk = salesOrderDeskStatus(row.status);
+                const items = row.items || [];
+                const itemsOpen = expandedOrders.has(row.name);
+                const { picked, requested, percent } = orderPickProgress(row);
+                return (
+                  <div key={row.name} className="flex flex-col gap-3 rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <Checkbox
+                          checked={Boolean(selection[row.name])}
+                          onCheckedChange={() => toggle(row.name)}
+                          aria-label={`Sélectionner ${row.name}`}
+                        />
+                        <button type="button" className="min-w-0 text-left" onClick={() => openDetail(row)}>
+                          <div className="num text-sm font-medium">{row.name}</div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {row.customer_name || row.customer} · {row.custom_commune_nom || row.custom_commune || "—"} ·{" "}
+                            {formatShortDate(row.delivery_date || row.transaction_date)} · {row.total_qty || 0} art.
+                          </div>
+                        </button>
+                      </div>
+                      {lists.length ? (
+                        <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ListStateIcon state={listStateForOrder(row)} orderChanged={orderIsModified(row)} />
+                      <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
+                      {stockShortages(row).length > 0 ? (
+                        <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
+                      ) : null}
+                      {orderReadyToComplete(row) ? (
+                        <StatusBadge tone="warning" size="sm">À compléter</StatusBadge>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div
+                        role="progressbar"
+                        aria-label={`Prélèvement ${formatQuantity(picked)} sur ${formatQuantity(requested)}`}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-valuenow={percent}
+                        className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-muted"
+                      >
+                        <div className="h-full rounded-full bg-foreground" style={{ width: `${percent}%` }} />
+                      </div>
+                      <span className="num t-meta text-muted-foreground">
+                        {formatQuantity(picked)} / {formatQuantity(requested)} · {percent} %
+                      </span>
+                    </div>
+                    {items.length ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-expanded={itemsOpen}
+                          onClick={() => toggleMobileItems(row.name)}
+                        >
+                          {itemsOpen ? "Masquer les articles" : `Afficher les articles (${items.length})`}
+                        </Button>
+                        {itemsOpen ? <OrderItemsList items={items} /> : null}
+                      </>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            )}
+          </>
+        )}
+      </PreparationQueueShell>
     </div>
   );
 }
+
 
 function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickListNames: string[]; creationConfirmed: boolean; onBack: () => void }) {
   const [picked, setPicked] = useState<Record<string, number>>({});
@@ -686,16 +700,19 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const [scanValue, setScanValue] = useState("");
   const [scanMessage, setScanMessage] = useState("");
   const [scanError, setScanError] = useState("");
+  const [scanTone, setScanTone] = useState<ScanTone>("idle");
+  const [scanIncrement, setScanIncrement] = useState(1);
+  const [scanLog, setScanLog] = useState<ScanLogEntry[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [lastScan, setLastScan] = useState<ScanSnapshot | null>(null);
-  const [lastScannedKey, setLastScannedKey] = useState("");
+  const [lastScannedKey, setLastScannedKey] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [focus, setFocus] = useState<LineFocus>("all");
+  const [pendingOnly, setPendingOnly] = useState(false);
   const [orderChangedNotice, setOrderChangedNotice] = useState("");
   const scanInputRef = useRef<HTMLInputElement>(null);
   const confirmBlButtonRef = useRef<HTMLButtonElement>(null);
-  const groupRefs = useRef<Record<string, HTMLElement | null>>({});
   const pickedRef = useRef<Record<string, number>>({});
+  const scanSeq = useRef(0);
 
   const isMobile = useIsMobile();
   const { data, mutate, error, isLoading } = usePickSession(pickListNames);
@@ -735,7 +752,18 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const grouped = session?.grouped || [];
   const blCount = session?.sales_orders?.length || pickLists.length;
   const submitted = pickLists.length > 0 && pickLists.every((item) => item.docstatus === 1);
-  const query = search.trim().toLocaleLowerCase("fr");
+  const locations = pickLists.flatMap((pickList) => pickList.locations || []);
+  const pickLines: PickLine[] = grouped.flatMap((group) =>
+    getPickGroupLocations(group).map((location) => ({
+      key: location.name,
+      itemCode: location.item_code,
+      itemName: location.item_name || location.item_code,
+      warehouse: location.warehouse,
+      salesOrder: location.sales_order,
+      requested: location.stock_qty,
+      uom: location.stock_uom || location.uom,
+    })),
+  );
   const varianceGroups = grouped.filter((group) => groupPickedQty(group, picked) !== group.stock_qty);
   const totals = {
     requested: grouped.reduce((sum, group) => sum + group.stock_qty, 0),
@@ -743,10 +771,17 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     remaining: grouped.reduce((sum, group) => sum + Math.max(0, group.stock_qty - groupPickedQty(group, picked)), 0),
     variance: varianceGroups.length,
   };
-  const filteredGroups = grouped.filter((group) => {
-    const pickedQty = groupPickedQty(group, picked);
-    return matchesLineFocus(pickedQty, group.stock_qty, focus) && matchesLineSearch(group, query);
-  });
+  const scanTotals = {
+    picked: totals.picked,
+    requested: totals.requested,
+    percent: totals.requested ? Math.round((totals.picked / totals.requested) * 100) : 0,
+    complete: totals.requested > 0 && totals.remaining === 0,
+    partialLines: pickLines.filter((line) => {
+      const value = picked[line.key] ?? 0;
+      return value > 0 && value < line.requested;
+    }).length,
+  };
+  const reviewBlocked = totals.remaining > 0;
   const notes = createdNotes.length
     ? createdNotes
     : session?.delivery_notes?.length
@@ -828,11 +863,17 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     }
   };
 
+  const pushLog = (entry: Omit<ScanLogEntry, "id" | "time">) => {
+    scanSeq.current += 1;
+    setScanLog((current) => [{ ...entry, id: `scan-${scanSeq.current}`, time: scanClock() }, ...current].slice(0, 20));
+  };
+
   const applyScan = async (raw: string, restoreFocus = true) => {
     const value = raw.trim();
     if (!value || reviewing || scanning || !draftOpen || modificationPending) return;
     setScanMessage("");
     setScanError("");
+    setScanTone("idle");
     const snapshotFor = (
       itemCode: string,
       itemName: string,
@@ -857,32 +898,57 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     };
     try {
       const result = await scanPickItem(value, pickListNames);
-      const locations = pickLists.flatMap((pickList) => pickList.locations || []);
       const increment = result.increment || 1;
+      setScanIncrement(increment);
       const applied = applyBarcodeScan(locations, pickedRef.current, result.item_code, increment);
       const itemName = result.item_name || result.item_code;
       if (!applied.ok) {
+        const matched = locations.find((location) => location.item_code === result.item_code);
+        if (matched) setLastScannedKey(matched.name);
         if (applied.reason === "already_complete") {
-          setLastScan(snapshotFor(result.item_code, itemName, undefined, pickedRef.current, increment));
+          setLastScan(snapshotFor(result.item_code, itemName, matched?.warehouse, pickedRef.current, increment));
+          setScanMessage(`Quantité déjà atteinte pour ${result.item_code} — scan ignoré.`);
+          setScanTone("warn");
+          pushLog({
+            key: matched?.name,
+            code: value,
+            label: `${itemName} · quantité déjà atteinte`,
+            amount: 0,
+            tone: "warn",
+          });
+        } else {
+          setScanError("Cet article n'est pas dans la session de préparation.");
+          setScanTone("error");
+          pushLog({ code: value, label: "Code non reconnu", amount: 0, tone: "error" });
         }
-        setScanError(
-          applied.reason === "already_complete"
-            ? `Quantité demandée déjà atteinte pour ${itemName}.`
-            : "Cet article n'est pas dans la session de préparation.",
-        );
         return;
       }
+      const previous = pickedRef.current[applied.locationName] ?? 0;
       const next = { ...pickedRef.current, [applied.locationName]: applied.nextQty };
       pickedRef.current = next;
       setPicked(next);
-      const groupKey = `${applied.itemCode}-${applied.warehouse || ""}`;
-      setLastScannedKey(groupKey);
+      setLastScannedKey(applied.locationName);
       const snapshot = snapshotFor(applied.itemCode, itemName, applied.warehouse, next, increment);
       setLastScan(snapshot);
-      setScanMessage(`${itemName} · +${increment}`);
-      groupRefs.current[groupKey]?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const complete = applied.nextQty >= (locations.find((location) => location.name === applied.locationName)?.stock_qty ?? snapshot.requested);
+      setScanMessage(`${applied.itemCode} · ${applied.nextQty} / ${snapshot.requested}${complete ? " — ligne complète" : ""}`);
+      setScanTone("ok");
+      pushLog({
+        key: applied.locationName,
+        code: value,
+        label: itemName,
+        amount: applied.nextQty - previous,
+        tone: "ok",
+      });
     } catch (scanException) {
-      setScanError(apiErrorMessage(scanException));
+      const detail = apiErrorMessage(scanException);
+      setScanError(
+        !detail || detail === "There was an error." || detail === "Une erreur inattendue est survenue."
+          ? `Code inconnu : ${value} — aucune ligne de cette liste.`
+          : detail,
+      );
+      setScanTone("error");
+      pushLog({ code: value, label: "Code non reconnu", amount: 0, tone: "error" });
     } finally {
       setScanValue("");
       if (restoreFocus) scanInputRef.current?.focus();
@@ -898,123 +964,23 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     await applyScan(scanValue);
   };
 
-  const pickLineRows = filteredGroups.flatMap((group) => {
-    const groupKey = `${group.item_code}-${group.warehouse || ""}`;
-    return getPickGroupLocations(group).map((location) => ({ groupKey, group, location }));
-  });
-
   const setLocationQty = (name: string, value: number) => {
+    const location = locations.find((item) => item.name === name);
+    const requested = location?.stock_qty ?? 0;
+    const nextQty = Math.max(0, Math.min(requested, value));
     setPicked((prev) => {
-      const next = { ...prev, [name]: value };
+      const next = { ...prev, [name]: nextQty };
       pickedRef.current = next;
       return next;
     });
+    setLastScannedKey(name);
   };
 
-  const renderPickedQtyControl = (loc: PickLocation) => {
-    const locationDraft = pickLists.find((item) => item.name === loc.pick_list)?.docstatus === 0;
-    const locationQty = picked[loc.name] ?? loc.picked_qty ?? 0;
-    return (
-      <div key={loc.name} className="flex items-center justify-between gap-3 text-sm">
-        <span className="truncate text-muted-foreground">{loc.sales_order}</span>
-        <div className="flex items-center gap-2">
-          <span className="num text-xs text-muted-foreground">
-            {formatQty(loc.stock_qty)} {loc.stock_uom || loc.uom}
-          </span>
-          {locationDraft && !modificationPending ? (
-            <Input
-              type="number"
-              min={0}
-              max={loc.stock_qty}
-              step="any"
-              className="h-8 w-24"
-              aria-label={`Quantité prélevée ${loc.item_code}`}
-              value={locationQty}
-              onChange={(event) => setLocationQty(loc.name, Number(event.target.value))}
-            />
-          ) : (
-            <span className="num w-24 text-right font-semibold">{formatQty(locationQty)}</span>
-          )}
-        </div>
-      </div>
-    );
+  const undoScan = (entry: ScanLogEntry) => {
+    if (!entry.key || entry.amount <= 0) return;
+    setLocationQty(entry.key, (pickedRef.current[entry.key] ?? 0) - entry.amount);
+    setScanLog((current) => current.filter((item) => item.id !== entry.id));
   };
-
-  const pickLineColumns: Array<DataTableColumn<(typeof pickLineRows)[number]>> = [
-    {
-      id: "item",
-      header: "Article",
-      sortValue: (row) => row.location.item_code,
-      cell: (row) => (
-        <span
-          ref={(node) => {
-            groupRefs.current[row.groupKey] = node;
-          }}
-          className="font-medium"
-        >
-          {row.location.item_code} · {row.location.item_name}
-        </span>
-      ),
-    },
-    {
-      id: "warehouse",
-      header: "Entrepôt",
-      hideBelow: "md",
-      sortValue: (row) => row.location.warehouse || "",
-      cell: (row) => row.location.warehouse || "—",
-    },
-    {
-      id: "order",
-      header: "Commande",
-      hideBelow: "md",
-      sortValue: (row) => row.location.sales_order || "",
-      cell: (row) => row.location.sales_order || "—",
-    },
-    {
-      id: "requested",
-      header: "Demandé",
-      numeric: true,
-      width: "100px",
-      sortValue: (row) => row.location.stock_qty,
-      cell: (row) => `${formatQty(row.location.stock_qty)} ${row.location.stock_uom || row.location.uom || ""}`,
-    },
-    {
-      id: "picked",
-      header: "Prélevé",
-      width: "120px",
-      cell: (row) => {
-        const locationDraft = pickLists.find((item) => item.name === row.location.pick_list)?.docstatus === 0;
-        const locationQty = picked[row.location.name] ?? row.location.picked_qty ?? 0;
-        if (!locationDraft || modificationPending) return <span className="num font-semibold">{formatQty(locationQty)}</span>;
-        return (
-          <Input
-            type="number"
-            min={0}
-            max={row.location.stock_qty}
-            step="any"
-            className="h-8 w-24"
-            aria-label={`Quantité prélevée ${row.location.item_code}`}
-            value={locationQty}
-            onChange={(event) => setLocationQty(row.location.name, Number(event.target.value))}
-            onClick={(event) => event.stopPropagation()}
-          />
-        );
-      },
-    },
-    {
-      id: "status",
-      header: "État",
-      width: "110px",
-      cell: (row) => {
-        const locationQty = picked[row.location.name] ?? row.location.picked_qty ?? 0;
-        return (
-          <StatusBadge tone={pickLineTone(locationQty, row.location.stock_qty)} size="sm">
-            {pickLineLabel(locationQty, row.location.stock_qty)}
-          </StatusBadge>
-        );
-      },
-    },
-  ];
 
   const reviewColumns: Array<DataTableColumn<PickGroup>> = [
     {
@@ -1126,7 +1092,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
             onApplyScan={(text) => void applyScan(text, false)}
             onBack={onBack}
             onReview={() => {
-              if (!modificationPending) setReviewing(true);
+              if (!modificationPending && totals.remaining === 0) setReviewing(true);
             }}
             onFillRequested={fillRequested}
             busy={scanning || submitting || saving || modificationPending}
@@ -1162,7 +1128,12 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               <Button variant="outline" size="sm" onClick={fillRequested} disabled={modificationPending}>
                 Tout prélever
               </Button>
-              <Button size="sm" onClick={() => setReviewing(true)} disabled={submitting || saving || isLoading || modificationPending}>
+              <Button
+                size="sm"
+                onClick={() => setReviewing(true)}
+                disabled={submitting || saving || isLoading || modificationPending || reviewBlocked}
+                title={reviewBlocked ? `Encore ${formatQty(totals.remaining)} unité${totals.remaining > 1 ? "s" : ""} à prélever` : undefined}
+              >
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Contrôle final
               </Button>
@@ -1171,16 +1142,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         }
       />
 
-      <Tabs value={currentStep} aria-label="Étapes de préparation">
-        <TabsList variant="segmented" className="grid w-full grid-cols-3">
-          {PREPARATION_STEPS.map((step, index) => (
-            <TabsTrigger key={step} value={step} variant="segmented" disabled className="disabled:opacity-100">
-              <span className="num mr-1 text-muted-foreground">{index + 1}.</span>
-              {step}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <PreparationStepBar current={currentStep} />
 
       {creationConfirmed && (
         <Alert role="status" className="border-emerald-200 bg-emerald-50 text-emerald-900">
@@ -1227,118 +1189,25 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
 
       {(!isLoading || grouped.length > 0) && (
         <>
-          <section aria-label="Progression du prélèvement" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <KpiTile
-              icon={Package}
-              tone="neutral"
-              label="Demandé"
-              value={isLoading && !grouped.length ? "—" : formatQty(totals.requested)}
-              hint="Quantité à prélever →"
-              onClick={() => setFocus("all")}
-              className={focus === "all" ? "border-brand-300 bg-brand-50/50" : undefined}
+          {!reviewing && draftOpen ? (
+            <ScanConsole
+              lines={pickLines}
+              picked={picked}
+              lastKey={lastScannedKey}
+              feedback={{
+                text: scanning ? "Lecture…" : scanError || scanMessage,
+                tone: scanning ? "idle" : scanTone,
+              }}
+              scanValue={scanValue}
+              onScanValueChange={setScanValue}
+              onScan={(code) => void applyScan(code)}
+              step={scanIncrement}
+              totals={scanTotals}
+              inputRef={scanInputRef}
+              disabled={scanning || submitting || saving || modificationPending}
             />
-            <KpiTile
-              icon={CheckCircle}
-              tone={totals.picked > 0 ? "success" : "neutral"}
-              label="Prélevé"
-              value={isLoading && !grouped.length ? "—" : formatQty(totals.picked)}
-              hint="Déjà scannée →"
-              onClick={() => setFocus("complete")}
-              className={focus === "complete" ? "border-brand-300 bg-brand-50/50" : undefined}
-            />
-            <KpiTile
-              icon={ScanBarcode}
-              tone={totals.remaining > 0 ? "warning" : "neutral"}
-              label="Restant"
-              value={isLoading && !grouped.length ? "—" : formatQty(totals.remaining)}
-              hint="Encore à scanner →"
-              onClick={() => setFocus("remaining")}
-              className={focus === "remaining" ? "border-brand-300 bg-brand-50/50" : undefined}
-            />
-            <KpiTile
-              icon={AlertTriangle}
-              tone={totals.variance ? "warning" : "neutral"}
-              label="Écarts"
-              value={isLoading && !grouped.length ? "—" : totals.variance}
-              hint={totals.variance ? "Lignes à vérifier →" : "Aucun écart →"}
-              onClick={() => setFocus("variance")}
-              className={focus === "variance" ? "border-brand-300 bg-brand-50/50" : undefined}
-            />
-          </section>
+          ) : null}
 
-          <Toolbar>
-            <InputGroup className="min-w-48 flex-1 bg-background">
-              <InputGroupAddon>
-                <Search />
-              </InputGroupAddon>
-              <InputGroupInput
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Article, entrepôt ou commande…"
-                aria-label="Rechercher un article"
-              />
-            </InputGroup>
-            <FilterSelect
-              label="État"
-              value={focus}
-              onChange={(value) => setFocus(value as LineFocus)}
-              options={[
-                { value: "all", label: "Tous" },
-                { value: "remaining", label: "Restant" },
-                { value: "complete", label: "Complet" },
-                { value: "variance", label: "Écart" },
-              ]}
-            />
-          </Toolbar>
-
-          <h2 className="text-base font-semibold">
-            {submitted ? "Lignes prélevées" : "Lignes à prélever"} ({session?.sales_orders?.length || 0} commande
-            {(session?.sales_orders?.length || 0) > 1 ? "s" : ""})
-          </h2>
-          {!reviewing && draftOpen && (
-            <form onSubmit={handleScan} className="sticky top-0 z-10 flex flex-col gap-2 rounded-lg border border-brand-200 bg-brand-50/80 p-3 backdrop-blur">
-              <label htmlFor="pick-scan-barcode" className="flex items-center gap-2 text-sm font-medium text-slate-800">
-                <ScanBarcode className="h-4 w-4" />
-                Code-barres article
-              </label>
-              <InputGroup className="h-10 bg-background">
-                <InputGroupInput
-                  id="pick-scan-barcode"
-                  ref={scanInputRef}
-                  value={scanValue}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  autoFocus
-                  disabled={scanning || submitting || saving || modificationPending}
-                  placeholder="Scanner puis Entrée"
-                  onChange={(event) => setScanValue(event.target.value)}
-                />
-                <InputGroupAddon align="inline-end">
-                  <InputGroupButton
-                    type="button"
-                    size="icon-sm"
-                    aria-label="Ouvrir la caméra"
-                    disabled={scanning || submitting || saving || modificationPending}
-                    onClick={openCamera}
-                  >
-                    <Camera />
-                  </InputGroupButton>
-                </InputGroupAddon>
-              </InputGroup>
-              <p className={`text-xs ${scanError ? "text-red-700" : "text-slate-600"}`} aria-live="polite">
-                {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack) jusqu’à la quantité demandée."}
-              </p>
-              <BarcodeScannerDialog
-                open={cameraOpen}
-                onOpenChange={setCameraOpen}
-                onScan={(text) => void applyScan(text, false)}
-                feedback={scanning ? "Lecture…" : scanError || scanMessage}
-                feedbackTone={scanError ? "error" : scanMessage ? "success" : undefined}
-                scanResult={lastScan}
-              />
-            </form>
-          )}
           {!isLoading && grouped.length === 0 && (
             <EmptyState
               icon={Package}
@@ -1346,62 +1215,24 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               description="Cette liste de prélèvement ne contient aucun article."
             />
           )}
-          {!reviewing && !filteredGroups.length && grouped.length > 0 && (
-            <p className="rounded-lg border border-dashed border-hairline-strong bg-card p-4 t-body text-muted-foreground">
-              Aucun article ne correspond à la recherche.
-            </p>
-          )}
-          {!reviewing && filteredGroups.length > 0 && (
-            <>
-              <div className="hidden md:block">
-                <DataTable
-                  label="Lignes à prélever"
-                  columns={pickLineColumns}
-                  rows={pickLineRows}
-                  rowKey={(row) => row.location.name}
-                  isRowActive={(row) => lastScannedKey === row.groupKey}
-                  rowClassName={(row) =>
-                    lastScannedKey === row.groupKey
-                      ? "bg-emerald-50 ring-inset ring-1 ring-emerald-300"
-                      : undefined
-                  }
-                />
-              </div>
-              <div className="space-y-2 md:hidden">
-                {filteredGroups.map((group) => {
-                  const pickedQty = groupPickedQty(group, picked);
-                  const groupKey = `${group.item_code}-${group.warehouse || ""}`;
-                  return (
-                    <div
-                      key={`${group.item_code}-${group.warehouse}`}
-                      ref={(node) => {
-                        groupRefs.current[groupKey] = node;
-                      }}
-                      className={cn(
-                        "space-y-2 rounded-lg border p-3",
-                        lastScannedKey === groupKey && "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-300",
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            {group.item_code} · {group.item_name}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {group.warehouse || "Entrepôt non défini"} · {formatQty(pickedQty)} / {formatQty(group.stock_qty)} {group.uom || ""}
-                          </div>
-                        </div>
-                        <StatusBadge tone={pickLineTone(pickedQty, group.stock_qty)} size="sm">
-                          {pickLineLabel(pickedQty, group.stock_qty)}
-                        </StatusBadge>
-                      </div>
-                      {getPickGroupLocations(group).map((loc) => renderPickedQtyControl(loc))}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+
+          {!reviewing && grouped.length > 0 ? (
+            <PickLinesTable
+              lines={pickLines}
+              picked={picked}
+              lastKey={lastScannedKey}
+              step={scanIncrement}
+              query={search}
+              onQueryChange={setSearch}
+              pendingOnly={pendingOnly}
+              onPendingOnlyChange={setPendingOnly}
+              onSetQuantity={setLocationQty}
+              readOnly={submitted || modificationPending}
+            />
+          ) : null}
+
+          {!reviewing && draftOpen ? <ScanJournal log={scanLog} onUndo={undoScan} /> : null}
+
           {reviewing && (
             <div className="space-y-4">
               <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
@@ -1543,8 +1374,20 @@ export function PreparationPage() {
   const tab = tabParam === "listes" || tabParam === "retours" ? tabParam : "commandes";
   const { routes: pendingReturns } = usePendingReturnRoutes();
   const { data: recentPickLists } = useRecentPickLists();
+  const { data: queueData } = usePreparationQueue();
   const returnCount = pendingReturns.length;
   const draftListCount = (recentPickLists?.message || []).filter((row) => row.docstatus === 0).length;
+  const orders = queueData?.message || [];
+  const today = isoDateWithOffset(0);
+  const shortageOrders = orders.filter((order) => (order.stock_shortages || []).length > 0);
+  const overdueOrders = orders.filter((order) => {
+    const due = order.delivery_date || order.transaction_date || "";
+    return Boolean(due && due < today);
+  });
+  const alertCount = (shortageOrders.length ? 1 : 0) + (overdueOrders.length ? 1 : 0);
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [presetSelection, setPresetSelection] = useState<string[]>();
+  const [requestedDateScope, setRequestedDateScope] = useState<DateScope>();
 
   const openPickLists = (names: string[], created = false) => {
     setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
@@ -1568,15 +1411,72 @@ export function PreparationPage() {
       ? "Recomptage et retour du véhicule vers l’entrepôt, indépendant du contrôle de caisse."
       : tab === "listes"
         ? "Rouvrez une liste de prélèvement en brouillon ou consultez les listes déjà soumises."
-        : "Commande client → Liste de prélèvement → Bon de livraison. Sélectionnez les commandes à prélever.";
+        : "Les listes se créent à la soumission. Ouvrez-les pour prélever, puis générez les BL.";
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       <PageHeader
-        eyebrow="Entrepôt"
+        eyebrow={`Entrepôt · ${formatLongDate(today)}`}
         title="Préparation"
+        meta={
+          tab === "commandes" ? (
+            <AlertsChip count={alertCount} open={alertsOpen} onToggle={() => setAlertsOpen((open) => !open)} />
+          ) : undefined
+        }
         description={description}
       />
+      {tab === "commandes" && alertsOpen && alertCount > 0 && (
+        <section aria-label="Anomalies" className="grid gap-3 sm:grid-cols-2">
+          {shortageOrders.length > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-destructive/25 bg-destructive/5 p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-3.5 text-destructive" />
+                <p className="text-sm font-semibold text-destructive">Stock manquant</p>
+                <span className="num rounded bg-destructive/10 px-1.5 py-px text-[11px] text-destructive">
+                  {shortageOrders.length}
+                </span>
+              </div>
+              <p className="t-meta text-muted-foreground">
+                {shortageOrders.length} commande{shortageOrders.length > 1 ? "s" : ""} avec rupture de stock.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto w-fit p-0 text-xs font-medium text-destructive"
+                onClick={() => setPresetSelection(shortageOrders.map((order) => order.name))}
+              >
+                Sélectionner ces commandes
+              </Button>
+            </div>
+          )}
+          {overdueOrders.length > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-warning/30 bg-warning/5 p-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-3.5 text-warning-foreground" />
+                <p className="text-sm font-semibold text-warning-foreground">Échéances dépassées</p>
+                <span className="num rounded bg-warning/10 px-1.5 py-px text-[11px] text-warning-foreground">
+                  {overdueOrders.length}
+                </span>
+              </div>
+              <p className="t-meta text-muted-foreground">
+                {overdueOrders.length} commande{overdueOrders.length > 1 ? "s" : ""} dont l’échéance est passée.
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto w-fit p-0 text-xs font-medium"
+                onClick={() => {
+                  setRequestedDateScope("overdue");
+                  setAlertsOpen(false);
+                  setSearchParams({ dateScope: "overdue" });
+                }}
+              >
+                Filtrer sur les retards
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
       <Tabs
         value={tab}
         onValueChange={(value) => {
@@ -1603,11 +1503,13 @@ export function PreparationPage() {
           <SalesOrderPicker
             onOpenPickLists={openPickLists}
             onShowPickLists={() => setSearchParams({ tab: "listes" })}
+            presetSelection={presetSelection}
+            requestedDateScope={requestedDateScope}
           />
         </TabsContent>
         <TabsContent value="listes" className="pt-5">
           <PickListQueue
-            onOpenPickList={(name) => openPickLists([name])}
+            onOpenPickLists={openPickLists}
             onGoToOrders={() => setSearchParams({})}
           />
         </TabsContent>

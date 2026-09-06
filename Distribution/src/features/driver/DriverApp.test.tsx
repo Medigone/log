@@ -377,4 +377,79 @@ describe("DriverApp", () => {
     await user.click(screen.getByRole("button", { name: /confirmer le chargement/i }));
     expect(mocks.loadRoute).toHaveBeenCalledWith("LIV-1", 3, expect.arrayContaining(["DN-1", "DN-2"]));
   });
+
+  it("affiche le retour déclaré sans bouton après une tournée clôturée avec reliquat", async () => {
+    mocks.current = structuredClone(
+      makeRoute({
+        lifecycle: "Retour dépôt",
+        stock: {
+          status: "Retour déclaré",
+          loadedQuantity: 4,
+          deliveredQuantity: 2,
+          remainingQuantity: 2,
+          returnedQuantity: 0,
+          lines: [],
+        },
+        stops: [
+          stop({
+            deliveryNote: "DN-1",
+            customerName: "Client A",
+            status: "Livré",
+            planningStatus: "Terminé",
+            sequence: 1,
+          }),
+          stop({
+            deliveryNote: "DN-8",
+            customerName: "Épicerie Nord",
+            status: "Partiellement Livré",
+            planningStatus: "Terminé",
+            sequence: 8,
+          }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await openListedRoute(user);
+    expect(screen.getByRole("heading", { name: /retour au dépôt requis/i })).toBeInTheDocument();
+    expect(screen.getByText(/retour déclaré · contrôle entrepôt en attente/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /déclarer mon retour/i })).not.toBeInTheDocument();
+  });
+
+  it("conserve le bouton de rattrapage si le retour est encore requis", async () => {
+    mocks.current = structuredClone(
+      makeRoute({
+        lifecycle: "Retour dépôt",
+        stock: {
+          status: "Retour requis",
+          loadedQuantity: 4,
+          deliveredQuantity: 2,
+          remainingQuantity: 2,
+          returnedQuantity: 0,
+          lines: [],
+        },
+        stops: [
+          stop({
+            deliveryNote: "DN-1",
+            customerName: "Client A",
+            status: "Livré",
+            planningStatus: "Terminé",
+            sequence: 1,
+          }),
+          stop({
+            deliveryNote: "DN-8",
+            customerName: "Épicerie Nord",
+            status: "Partiellement Livré",
+            planningStatus: "Terminé",
+            sequence: 8,
+          }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await openListedRoute(user);
+    expect(screen.getByRole("heading", { name: /retour au dépôt requis/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /déclarer mon retour/i })).toBeEnabled();
+  });
 });

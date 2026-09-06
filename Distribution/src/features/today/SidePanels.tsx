@@ -96,12 +96,13 @@ export function DeliveryMapCard({
   const bounds = points.map((cluster) => [cluster.latitude, cluster.longitude] as MapPoint);
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex-row items-center gap-2 border-b border-hairline">
-        <CardTitle>Carte des livraisons</CardTitle>
-        <div className="flex-1" />
-        <span className="t-meta text-muted-foreground">{total} points</span>
-      </CardHeader>
+    <Card className="gap-0 overflow-hidden py-0">
+      <div className="flex min-h-[53px] items-center gap-2.5 border-b border-hairline px-3 py-[11px]">
+        <h2 className="text-sm font-semibold leading-none">Carte des livraisons</h2>
+        <span className="num rounded-[5px] bg-muted px-1.5 py-px text-[11px] text-muted-foreground">
+          {total} points
+        </span>
+      </div>
       <div className="relative h-[210px] bg-muted">
         <MapContainer
           center={bounds[0] || ALGIERS}

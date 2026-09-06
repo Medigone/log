@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { createPortal } from "react-dom"
 import {
   useTable,
   type Column,
@@ -7,6 +8,7 @@ import {
   type ExpandedState,
   type PaginationState,
   type SortingState,
+  type Table,
 } from "@tanstack/react-table"
 import { Columns3 } from "lucide-react"
 import { DataGridPagination12 } from "@/components/examples/c-pagination-12"
@@ -23,14 +25,22 @@ import { DataGridScrollArea } from "@/components/reui/data-grid/data-grid-scroll
 import { DataGridTable, DataGridTableRowExpand } from "@/components/reui/data-grid/data-grid-table"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { cn } from "@/lib/utils"
 import { formatQuantity } from "@/shared/format"
 import type { RecentPickListItem, SalesOrderPickLine } from "@/shared/api/preparation"
 import { pickLineState } from "@/shared/api/preparation"
+import { usePreparationToolbarEnd } from "@/features/preparation/PreparationQueueShell"
 
 /** Même hauteur de ligne pour Commandes, Listes, Retours et sous-grilles d’articles.
  *  Cibler `[data-row-id]` évite d’écraser la cellule dépliée (colspan) qui contient le sous-tableau. */
 const PREPARATION_TABLE_ROWS =
   "[&_thead_tr]:h-8 [&_thead_th]:h-8 [&_thead_th]:py-0 [&_tbody_tr[data-row-id]]:h-10 [&_tbody_tr[data-row-id]>td]:h-10 [&_tbody_tr[data-row-id]>td]:py-0 [&_tbody_tr[data-row-id]>td]:box-border [&_tbody_tr[data-row-id]>td]:overflow-hidden"
+
+const NESTED_TABLE_ROWS = cn(
+  PREPARATION_TABLE_ROWS,
+  "text-[12.5px] [&_th]:text-[12.5px] [&_th]:font-normal [&_button]:text-[12.5px] [&_button]:font-normal",
+  "[&_[data-slot=data-grid-table-resize-handle]]:hidden",
+)
 
 export const DATA_GRID_I18N_FR: DataGridI18nOverrides = {
   labels: {
@@ -75,10 +85,10 @@ export function gridHeader(title: string) {
 }
 
 /** En-tête triable + libellé pour le menu Colonnes (`meta.headerTitle`). */
-export function namedHeader(title: string) {
+export function namedHeader(title: string, extra?: { fillWidth?: boolean; autoSize?: boolean }) {
   return {
     header: gridHeader(title),
-    meta: { headerTitle: title },
+    meta: { headerTitle: title, ...extra },
   }
 }
 
@@ -127,20 +137,32 @@ export function NestedItemsGrid<T extends object>({
     columns,
     data: rows,
     getRowId,
+    enableSorting: false,
+    defaultColumn: { enableResizing: false },
     state: { pagination },
   })
 
   return (
-    <div className={className ?? "bg-muted/50 p-2"} role="region" aria-label={label}>
+    <div className={cn("block w-full min-w-0", className ?? "bg-muted/50 p-2")} role="region" aria-label={label}>
       <DataGrid
         table={table}
         recordCount={rows.length}
         emptyMessage={empty ?? "Aucun article."}
         i18n={DATA_GRID_I18N_FR}
-        tableLayout={{ dense: true, rowBorder: true, headerSticky: false, width: "auto" }}
-        tableClassNames={{ base: PREPARATION_TABLE_ROWS, headerRow: "h-8", bodyRow: "h-10" }}
+        tableLayout={{
+          dense: true,
+          rowBorder: true,
+          headerSticky: false,
+          width: "fixed",
+          columnsResizable: true,
+        }}
+        tableClassNames={{
+          base: NESTED_TABLE_ROWS,
+          headerRow: "h-8",
+          bodyRow: "h-10",
+        }}
       >
-        <DataGridContainer className="overflow-hidden rounded-md border bg-background">
+        <DataGridContainer className="w-full overflow-hidden rounded-md border bg-background">
           <DataGridTable />
         </DataGridContainer>
       </DataGrid>
@@ -150,7 +172,13 @@ export function NestedItemsGrid<T extends object>({
 
 function TruncateCell({ value, muted }: { value?: string | null; muted?: boolean }) {
   return (
-    <span className={muted ? "truncate whitespace-nowrap text-muted-foreground" : "truncate whitespace-nowrap"}>
+    <span
+      className={
+        muted
+          ? "truncate whitespace-nowrap text-[11px] text-muted-foreground"
+          : "truncate whitespace-nowrap text-[12.5px] font-medium"
+      }
+    >
       {value || "—"}
     </span>
   )
@@ -162,7 +190,7 @@ export function OrderItemsSubGrid({ items }: { items: SalesOrderPickLine[] }) {
       {
         id: "item",
         accessorFn: (row) => row.item_name || row.item_code,
-        ...namedHeader("Article"),
+        ...namedHeader("Article", { fillWidth: true }),
         cell: ({ row }) => <TruncateCell value={row.original.item_name || row.original.item_code} />,
         size: 180,
       },
@@ -178,7 +206,7 @@ export function OrderItemsSubGrid({ items }: { items: SalesOrderPickLine[] }) {
         accessorKey: "required",
         ...namedHeader("Demandé restant"),
         cell: ({ row }) => (
-          <span className="num tabular-nums">
+          <span className="num tabular-nums text-[12.5px]">
             {formatQuantity(row.original.required)}
             {row.original.uom ? ` ${row.original.uom}` : ""}
           </span>
@@ -189,14 +217,14 @@ export function OrderItemsSubGrid({ items }: { items: SalesOrderPickLine[] }) {
         id: "available",
         accessorKey: "available",
         ...namedHeader("Disponible"),
-        cell: ({ row }) => <span className="num tabular-nums">{formatQuantity(row.original.available)}</span>,
+        cell: ({ row }) => <span className="num tabular-nums text-[12.5px]">{formatQuantity(row.original.available)}</span>,
         size: 110,
       },
       {
         id: "warehouse",
         accessorKey: "warehouse",
         ...namedHeader("Entrepôt"),
-        cell: ({ row }) => <span className="truncate whitespace-nowrap">{row.original.warehouse || "—"}</span>,
+        cell: ({ row }) => <span className="truncate whitespace-nowrap text-[13px]">{row.original.warehouse || "—"}</span>,
         size: 140,
       },
       {
@@ -234,7 +262,7 @@ export function PickListItemsSubGrid({ items }: { items: RecentPickListItem[] })
       {
         id: "item",
         accessorFn: (row) => row.item_name || row.item_code,
-        ...namedHeader("Article"),
+        ...namedHeader("Article", { fillWidth: true }),
         cell: ({ row }) => <TruncateCell value={row.original.item_name || row.original.item_code} />,
         size: 180,
       },
@@ -250,7 +278,7 @@ export function PickListItemsSubGrid({ items }: { items: RecentPickListItem[] })
         accessorKey: "requested_qty",
         ...namedHeader("Demandé"),
         cell: ({ row }) => (
-          <span className="num tabular-nums">
+          <span className="num tabular-nums text-[12.5px]">
             {formatQuantity(row.original.requested_qty)}
             {row.original.uom ? ` ${row.original.uom}` : ""}
           </span>
@@ -261,21 +289,23 @@ export function PickListItemsSubGrid({ items }: { items: RecentPickListItem[] })
         id: "picked",
         accessorKey: "picked_qty",
         ...namedHeader("Prélevé"),
-        cell: ({ row }) => <span className="num tabular-nums">{formatQuantity(row.original.picked_qty)}</span>,
+        cell: ({ row }) => <span className="num tabular-nums text-[12.5px]">{formatQuantity(row.original.picked_qty)}</span>,
         size: 110,
       },
       {
         id: "warehouse",
         accessorKey: "warehouse",
         ...namedHeader("Entrepôt"),
-        cell: ({ row }) => <span className="truncate whitespace-nowrap">{row.original.warehouse || "—"}</span>,
+        cell: ({ row }) => <span className="truncate whitespace-nowrap text-[13px]">{row.original.warehouse || "—"}</span>,
         size: 140,
       },
       {
         id: "order",
         accessorKey: "sales_order",
         ...namedHeader("Commande"),
-        cell: ({ row }) => <span className="truncate whitespace-nowrap">{row.original.sales_order || "—"}</span>,
+        cell: ({ row }) => (
+          <span className="num truncate whitespace-nowrap text-[12.5px] font-medium">{row.original.sales_order || "—"}</span>
+        ),
         size: 140,
       },
     ],
@@ -325,19 +355,39 @@ export function OrderItemsList({ items }: { items: SalesOrderPickLine[] }) {
 }
 
 const DEFAULT_PAGE_SIZE = 10
-const HIDDEN_BY_DEFAULT: Record<string, boolean> = { wilaya: false }
 
 function pinningFor(columns: Array<{ id?: string }>): ColumnPinningState {
   const ids = new Set(columns.map((column) => column.id).filter(Boolean))
   const start = ["expand"]
   if (ids.has("select")) start.push("select")
-  if (ids.has("name")) start.push("name")
-  const end = ids.has("pickList") ? ["pickList"] : ids.has("actions") ? ["actions"] : []
-  return { start, end }
+  return { start, end: [] }
 }
 
-function visibilityFor(columns: Array<{ id?: string }>): Record<string, boolean> {
-  return columns.some((column) => column.id === "wilaya") ? { ...HIDDEN_BY_DEFAULT } : {}
+function visibilityFor(_columns: Array<{ id?: string }>): Record<string, boolean> {
+  return {}
+}
+
+function PreparationColumnsMenu<T extends object>({ table }: { table: Table<DataGridFeatures, T> }) {
+  const toolbarEnd = usePreparationToolbarEnd()
+  const menu = (
+    <DataGridColumnVisibility
+      table={table}
+      trigger={
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-[30px] rounded-lg text-xs"
+          aria-label="Colonnes"
+        />
+      }
+    >
+      <Columns3 data-icon="inline-start" />
+      Colonnes
+    </DataGridColumnVisibility>
+  )
+  if (!toolbarEnd) return null
+  return createPortal(menu, toolbarEnd)
 }
 
 export function PreparationSubTableGrid<T extends object>({
@@ -429,21 +479,13 @@ export function PreparationSubTableGrid<T extends object>({
           width: "fixed",
           columnsPinnable: true,
           columnsVisibility: true,
-          columnsResizable: true,
+          columnsResizable: false,
         }}
         tableClassNames={{ base: PREPARATION_TABLE_ROWS, headerRow: "h-8", bodyRow: "h-10" }}
       >
-        <div className="mb-3 flex justify-end">
-          <DataGridColumnVisibility
-            table={table}
-            trigger={<Button type="button" variant="outline" size="sm" aria-label="Colonnes" />}
-          >
-            <Columns3 data-icon="inline-start" />
-            Colonnes
-          </DataGridColumnVisibility>
-        </div>
-        <DataGridContainer className="overflow-hidden rounded-xl border bg-card">
-          <DataGridScrollArea className="[&_[data-slot=scroll-area-content]]:pb-2">
+        <PreparationColumnsMenu table={table} />
+        <DataGridContainer className="overflow-hidden bg-card">
+          <DataGridScrollArea>
             <DataGridTable />
           </DataGridScrollArea>
         </DataGridContainer>

@@ -96,6 +96,7 @@ vi.mock("@/shared/api/preparation", async (importOriginal) => {
     usePreparationQueue: () => ({ data: { message: [] }, mutate: vi.fn(), error: undefined, isLoading: false }),
     usePickSession: () => ({ data: mocks.pickListData, mutate: vi.fn(), error: undefined, isLoading: false }),
     useRecentPickLists: () => ({ data: { message: [] }, error: undefined, isLoading: false, mutate: vi.fn() }),
+    usePickListQueueStats: () => ({ data: undefined, error: undefined, isLoading: false }),
     useSalesOrderPickDetail: () => ({ data: { message: mocks.detail }, error: undefined, isLoading: false, mutate: vi.fn() }),
     usePreparationMutations: () => ({
       createPickList: mocks.createPickList,
@@ -115,6 +116,8 @@ vi.mock("@/shared/api/preparation", async (importOriginal) => {
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
   useReturnRoutes: () => ({ data: { message: [] }, error: undefined, isLoading: false, mutate: vi.fn() }),
+  useReturnHistory: () => ({ data: { message: [] }, error: undefined, isLoading: false, mutate: vi.fn() }),
+  useReturnMetrics: () => ({ data: undefined, error: undefined, isLoading: false }),
   useDistributionMutations: () => ({ confirmRouteReturn: vi.fn(), fulfillment: false }),
 }));
 

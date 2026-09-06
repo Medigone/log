@@ -4,6 +4,7 @@ import {
   buildKanbanValue,
   canDeleteDraftRoute,
   columnLoad,
+  driverLoad,
   isItemDraggable,
   listActiveDrivers,
   newRouteColumnId,
@@ -11,6 +12,7 @@ import {
   parseNewRouteColumnId,
   parseRouteColumnId,
   preferNewRouteCollisions,
+  resourceCapacity,
   routeColumnId,
   type KanbanBLItem,
 } from "./kanbanHelpers";
@@ -140,6 +142,22 @@ describe("preferNewRouteCollisions", () => {
 describe("listActiveDrivers", () => {
   it("omits inactive drivers and sorts by label", () => {
     expect(listActiveDrivers(drivers).map((driver) => driver.name)).toEqual(["DRV-1", "DRV-2"]);
+  });
+});
+
+describe("resourceCapacity", () => {
+  it("uses the vehicle capacity when the API exposes it", () => {
+    expect(
+      resourceCapacity(
+        { name: "DRV-1", label: "Ali", active: true, vehicle: "VEH-1" },
+        [{ name: "VEH-1", label: "Camion", active: true, capacity: 40 }],
+      ),
+    ).toBe(40);
+  });
+
+  it("does not invent a default when capacity is missing", () => {
+    expect(resourceCapacity({ name: "DRV-1", label: "Ali", active: true, vehicle: "VEH-1" }, [{ name: "VEH-1", label: "Camion", active: true }])).toBeUndefined();
+    expect(driverLoad([], undefined).pct).toBeUndefined();
   });
 });
 

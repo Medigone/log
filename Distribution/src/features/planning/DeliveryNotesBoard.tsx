@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { CalendarDays, CalendarPlus, LocateFixed, Pencil, RefreshCw, RotateCcw, Search } from "lucide-react"
+import { CalendarDays, CalendarPlus, LocateFixed, Pencil, RefreshCw, RotateCcw, Search, Square, SquareCheck } from "lucide-react"
 import { DateRangeFilter } from "@/components/DateRangeFilter"
 import { FilterSelect } from "@/components/FilterSelect"
 import { Button } from "@/components/ui/button"
@@ -9,9 +9,10 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { ListPagination, usePagedList } from "@/components/ui/list-pagination"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar"
+import { cn } from "@/lib/utils"
 import { planningStatusTone } from "@/shared/design/statusTone"
 import { formatQuantity } from "@/shared/format"
-import type { DeliveryNoteAssignment, PlanningResource, PlanningStatus } from "@/shared/types/distribution"
+import type { DeliveryNoteAssignment, DistributionRoute, PlanningResource, PlanningStatus } from "@/shared/types/distribution"
 import {
   canReprogramAssignment,
   PLANNING_STATUSES,
@@ -22,25 +23,38 @@ import {
   timePart,
   type DateScope,
 } from "@/features/planning/planningHelpers"
+import { PlanningSelectionBar } from "@/features/planning/PlanningKanban"
 
 interface DeliveryNotesBoardProps {
   rows: DeliveryNoteAssignment[]
+  routes?: DistributionRoute[]
   drivers: PlanningResource[]
   vehicles: PlanningResource[]
   isLoading: boolean
   onEdit: (row: DeliveryNoteAssignment) => void
   onReprepare: (row: DeliveryNoteAssignment) => void
   statusFilter?: string
+  selected?: Set<string>
+  onSelectedChange?: (next: Set<string>) => void
+  onBulkAssign?: (deliveryNotes: string[]) => void
+  onCreateRoute?: (deliveryNotes: string[]) => void
+  alertsOnly?: boolean
 }
 
 export function DeliveryNotesBoard({
   rows,
+  routes = [],
   drivers,
   vehicles,
   isLoading,
   onEdit,
   onReprepare,
   statusFilter = "",
+  selected = new Set(),
+  onSelectedChange,
+  onBulkAssign,
+  onCreateRoute,
+  alertsOnly: alertsOnlyProp,
 }: DeliveryNotesBoardProps) {
   const [search, setSearch] = useState("")
   const [dateScope, setDateScope] = useState<DateScope>("all")
@@ -56,7 +70,11 @@ export function DeliveryNotesBoard({
   const [wilaya, setWilaya] = useState("")
   const [driver, setDriver] = useState("")
   const [vehicle, setVehicle] = useState("")
-  const [alertsOnly, setAlertsOnly] = useState(false)
+  const [alertsOnly, setAlertsOnly] = useState(Boolean(alertsOnlyProp))
+
+  useEffect(() => {
+    if (alertsOnlyProp) setAlertsOnly(true)
+  }, [alertsOnlyProp])
 
   const wilayas = useMemo(
     () =>
@@ -67,7 +85,6 @@ export function DeliveryNotesBoard({
   )
 
   const driverLabel = (name?: string) => drivers.find((item) => item.name === name)?.label
-  const vehicleLabel = (name?: string) => vehicles.find((item) => item.name === name)?.label
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr")
@@ -125,30 +142,81 @@ export function DeliveryNotesBoard({
     setAlertsOnly(false)
   }
 
+  const today = isoDateWithOffset(0)
+  const allVisibleSelected = filtered.length > 0 && filtered.every((row) => selected.has(row.deliveryNote))
+  const routeByName = useMemo(() => new Map(routes.map((route) => [route.name, route])), [routes])
+
+  const toggleRow = (deliveryNote: string) => {
+    if (!onSelectedChange) return
+    const next = new Set(selected)
+    if (next.has(deliveryNote)) next.delete(deliveryNote)
+    else next.add(deliveryNote)
+    onSelectedChange(next)
+  }
+
+  const toggleAllVisible = () => {
+    if (!onSelectedChange) return
+    const next = new Set(selected)
+    if (allVisibleSelected) {
+      for (const row of filtered) next.delete(row.deliveryNote)
+    } else {
+      for (const row of filtered) next.add(row.deliveryNote)
+    }
+    onSelectedChange(next)
+  }
+
   const columns: Array<DataTableColumn<DeliveryNoteAssignment>> = [
     {
+      id: "select",
+      header: onSelectedChange ? (
+        <button type="button" onClick={toggleAllVisible} aria-label={allVisibleSelected ? "Tout désélectionner" : "Tout sélectionner"} className="text-muted-foreground hover:text-foreground">
+          {allVisibleSelected ? <SquareCheck className="size-4 text-foreground" /> : <Square className="size-4" />}
+        </button>
+      ) : (
+        ""
+      ),
+      width: "36px",
+      cell: (row) => {
+        const on = selected.has(row.deliveryNote)
+        return (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleRow(row.deliveryNote)
+            }}
+            aria-label={on ? "Désélectionner" : "Sélectionner"}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            {on ? <SquareCheck className="size-4 text-foreground" /> : <Square className="size-4" />}
+          </button>
+        )
+      },
+    },
+    {
       id: "deliveryNote",
-      header: "N° BL",
-      width: "minmax(0, 1.1fr)",
+      header: "BL · Client",
+      width: "minmax(0, 1.4fr)",
       sortValue: (row) => row.deliveryNote,
       cell: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-semibold text-brand-700">{row.deliveryNote}</p>
-          <p className="truncate t-meta text-muted-foreground">{formatQuantity(row.totalQuantity)} article(s) restant(s)</p>
+          <p className="truncate font-mono text-[12.5px] font-medium">{row.deliveryNote}</p>
+          <p className="truncate text-[11px] text-muted-foreground">{row.customerName}</p>
         </div>
       ),
     },
     {
-      id: "customer",
-      header: "Client",
-      width: "minmax(0, 1.3fr)",
-      sortValue: (row) => row.customerName,
+      id: "place",
+      header: "Lieu",
+      width: "minmax(0, 1fr)",
+      sortValue: (row) => row.wilaya || row.commune || "",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-medium">{row.customerName}</p>
-          <p className="truncate t-meta text-muted-foreground">{row.wilaya || row.commune || "Localisation non renseignée"}</p>
+          <p className="truncate text-[12.5px] text-muted-foreground">
+            {[row.commune, row.wilaya].filter(Boolean).join(", ") || "—"}
+          </p>
           {row.requiresCustomerGeolocation && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+            <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-amber-800">
               <LocateFixed className="size-3" />
               GPS client à collecter
             </span>
@@ -158,62 +226,79 @@ export function DeliveryNotesBoard({
     },
     {
       id: "requestedDate",
-      header: "Demandée",
-      width: "110px",
-      hideBelow: "lg",
-      numeric: true,
+      header: "Livraison souhaitée",
+      width: "minmax(0, 1fr)",
       sortValue: (row) => row.requestedDate || "",
-      cell: (row) => (
-        <span className={row.planningStatus === "En retard" ? "font-medium text-red-700" : "text-muted-foreground"}>
-          {row.requestedDate || "—"}
-        </span>
-      ),
-    },
-    {
-      id: "plannedDate",
-      header: "Planifiée",
-      width: "110px",
-      hideBelow: "md",
-      numeric: true,
-      sortValue: (row) => row.plannedDate || "",
-      cell: (row) => row.plannedDate || <span className="text-subtle">—</span>,
+      cell: (row) => {
+        const late = !row.route && row.requestedDate != null && row.requestedDate < today
+        return (
+          <span className={cn("whitespace-nowrap font-mono text-xs", late ? "text-destructive" : "text-muted-foreground")}>
+            {row.requestedDate || "—"}
+          </span>
+        )
+      },
     },
     {
       id: "status",
       header: "Statut",
-      width: "minmax(0, 1.2fr)",
+      width: "104px",
       sortValue: (row) => row.planningStatus,
       cell: (row) => (
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={planningStatusTone(row.planningStatus)} size="sm">
-              {row.planningStatus}
-            </StatusBadge>
-            {row.route && (
-              <span className="truncate t-meta text-slate-600">
-                {row.route} · rév. {row.routeRevision}
-              </span>
-            )}
-          </div>
-          <p className="truncate t-meta text-muted-foreground">
-            {row.route
-              ? `${timePart(row.plannedStart) || "—"}–${timePart(row.plannedEnd) || "—"} · ${driverLabel(row.driver) || "Livreur manquant"} · ${vehicleLabel(row.vehicle) || "Véhicule manquant"}`
-              : "Aucune tournée affectée"}
-          </p>
-          {row.planningAlert && <p className="line-clamp-2 t-meta text-amber-800">{row.planningAlert}</p>}
-        </div>
+        <StatusBadge tone={planningStatusTone(row.planningStatus)} size="sm">
+          {row.planningStatus}
+        </StatusBadge>
       ),
     },
     {
+      id: "articles",
+      header: "Art.",
+      width: "74px",
+      align: "right",
+      numeric: true,
+      sortValue: (row) => row.totalQuantity,
+      cell: (row) => <span className="font-mono text-xs tabular-nums text-muted-foreground">{formatQuantity(row.totalQuantity)}</span>,
+    },
+    {
+      id: "route",
+      header: "Tournée",
+      width: "130px",
+      sortValue: (row) => row.route || "",
+      cell: (row) =>
+        row.route ? (
+          <span className="truncate font-mono text-[11.5px]">{row.route}</span>
+        ) : (
+          <span className="text-muted-foreground/50">—</span>
+        ),
+    },
+    {
+      id: "driver",
+      header: "Livreur · Créneau",
+      width: "minmax(0, 1fr)",
+      hideBelow: "lg",
+      cell: (row) => {
+        const route = row.route ? routeByName.get(row.route) : undefined
+        if (!route && !row.driver) return <span className="text-muted-foreground/50">—</span>
+        const slot = [row.plannedStart || route?.plannedStart, row.plannedEnd || route?.plannedEnd]
+          .map((value) => (value ? timePart(value) : ""))
+          .filter(Boolean)
+          .join(" – ")
+        return (
+          <span className="truncate text-xs text-muted-foreground">
+            {[driverLabel(row.driver) || route?.driverName, slot].filter(Boolean).join(" · ") || "—"}
+          </span>
+        )
+      },
+    },
+    {
       id: "actions",
-      header: "Actions",
-      width: "180px",
+      header: "",
+      width: "120px",
       align: "right",
       cell: (row) => (
-        <span className="flex flex-wrap justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+        <span className="flex flex-wrap justify-end gap-1" onClick={(event) => event.stopPropagation()}>
           <Button
             type="button"
-            size="sm"
+            size="xs"
             variant={row.route ? "outline" : "default"}
             onClick={() => onEdit(row)}
             disabled={!canReprogramAssignment(row.planningStatus)}
@@ -222,7 +307,7 @@ export function DeliveryNotesBoard({
             {row.route ? "Reprogrammer" : "Planifier"}
           </Button>
           {row.planningStatus === "À repréparer" && (
-            <Button type="button" size="sm" onClick={() => onReprepare(row)}>
+            <Button type="button" size="xs" onClick={() => onReprepare(row)}>
               <RefreshCw />
               Reprendre
             </Button>
@@ -325,6 +410,13 @@ export function DeliveryNotesBoard({
           </>
         ) : null}
       </Toolbar>
+
+      <PlanningSelectionBar
+        count={selected.size}
+        onAssign={() => onBulkAssign?.(Array.from(selected))}
+        onCreate={() => onCreateRoute?.(Array.from(selected))}
+        onClear={() => onSelectedChange?.(new Set())}
+      />
 
       <DataTable
         label="Bons de livraison à planifier"

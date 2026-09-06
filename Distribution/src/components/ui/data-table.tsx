@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react"
+import { Fragment, useMemo, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TONES, type StatusTone } from "@/shared/design/statusTone"
@@ -24,6 +24,8 @@ interface DataTableProps<T> {
   rowTone?: (row: T) => StatusTone | undefined
   onRowClick?: (row: T) => void
   isRowActive?: (row: T) => boolean
+  isRowExpanded?: (row: T) => boolean
+  expandedContent?: (row: T) => ReactNode
   rowClassName?: (row: T) => string | undefined
   isLoading?: boolean
   empty?: ReactNode
@@ -53,6 +55,8 @@ export function DataTable<T>({
   rowTone,
   onRowClick,
   isRowActive,
+  isRowExpanded,
+  expandedContent,
   rowClassName,
   isLoading,
   empty,
@@ -157,29 +161,43 @@ export function DataTable<T>({
             {sortedRows.map((row) => {
               const tone = rowTone?.(row)
               const active = isRowActive?.(row)
+              const expanded = Boolean(isRowExpanded?.(row) && expandedContent)
               return (
-                <TableRow
-                  key={rowKey(row)}
-                  data-state={active ? "selected" : undefined}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={cn(onRowClick && "cursor-pointer", active && "bg-muted", rowClassName?.(row))}
-                >
-                  {columns.map((column, index) => (
-                    <TableCell
-                      key={column.id}
-                      className={cn(
-                        "h-10",
-                        ALIGN_CLASS[column.align ?? "left"],
-                        column.numeric && "num tabular-nums",
-                        column.hideBelow && HIDE_CLASS[column.hideBelow],
-                        index === 0 && tone && TONES[tone].railInset,
-                        column.className,
-                      )}
-                    >
-                      {column.cell(row)}
-                    </TableCell>
-                  ))}
-                </TableRow>
+                <Fragment key={rowKey(row)}>
+                  <TableRow
+                    data-state={active ? "selected" : undefined}
+                    aria-expanded={expandedContent ? expanded : undefined}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    className={cn(onRowClick && "cursor-pointer", active && "bg-muted", rowClassName?.(row))}
+                  >
+                    {columns.map((column, index) => (
+                      <TableCell
+                        key={column.id}
+                        className={cn(
+                          "h-10",
+                          ALIGN_CLASS[column.align ?? "left"],
+                          column.numeric && "num tabular-nums",
+                          column.hideBelow && HIDE_CLASS[column.hideBelow],
+                          index === 0 && tone && TONES[tone].railInset,
+                          column.className,
+                        )}
+                      >
+                        {column.cell(row)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  {expanded ? (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell
+                        colSpan={columns.length}
+                        className="whitespace-normal p-0"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {expandedContent!(row)}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
               )
             })}
           </TableBody>

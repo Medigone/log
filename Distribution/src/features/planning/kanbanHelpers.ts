@@ -119,6 +119,22 @@ export function columnLoad(items: KanbanBLItem[]) {
   };
 }
 
+/** Vehicle (or driver) capacity when the API exposes it — never invent a default. */
+export function resourceCapacity(driver: PlanningResource, vehicles: PlanningResource[]): number | undefined {
+  const vehicle = vehicles.find((item) => item.name === driver.vehicle);
+  const value = vehicle?.capacity ?? driver.capacity;
+  return value && value > 0 ? value : undefined;
+}
+
+export function driverLoad(items: KanbanBLItem[], capacity?: number) {
+  const { blCount, articleCount } = columnLoad(items);
+  return {
+    blCount,
+    articleCount,
+    pct: capacity ? Math.min(100, Math.round((articleCount / capacity) * 100)) : undefined,
+  };
+}
+
 export function vehicleLabelFor(
   vehicleId: string | undefined,
   vehicles: PlanningResource[],
