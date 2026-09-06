@@ -46,6 +46,7 @@ PLANNING_ROLES = {"Planificateur", "Responsable", "System Manager"}
 DRIVER_ROLES = {"Livreur", "Responsable", "System Manager"}
 PREPARATION_ROLES = {"Préparateur", "Responsable", "System Manager"}
 CASHIER_ROLES = {"Caissier", "Responsable", "System Manager"}
+MANAGER_ROLES = {"Responsable", "System Manager"}
 STOCK_ROLES = PLANNING_ROLES | PREPARATION_ROLES
 ACTIVITY_ROLES = PLANNING_ROLES | PREPARATION_ROLES
 FLEET_ROLES = PLANNING_ROLES
@@ -505,6 +506,14 @@ def _stop_from_dn(doc, sequence: int) -> dict[str, Any]:
 		"completedAt": str(doc.get("custom_date_livraison") or "") or None,
 		"sequence": sequence,
 		"items": items,
+		"failureReason": next(
+			(
+				str(item.get("custom_raison_non_livraison") or "").strip()
+				for item in doc.items or []
+				if str(item.get("custom_raison_non_livraison") or "").strip()
+			),
+			None,
+		),
 	}
 
 
@@ -2354,7 +2363,7 @@ def get_vehicle_stocks():
 
 @frappe.whitelist()
 def get_driver_cash_boxes():
-	_require(CASHIER_ROLES)
+	_require(MANAGER_ROLES)
 	from log.services.distribution_driver_cash import list_cash_boxes
 
 	return list_cash_boxes()
@@ -2362,7 +2371,7 @@ def get_driver_cash_boxes():
 
 @frappe.whitelist()
 def get_driver_cash_box(livreur=None):
-	_require(CASHIER_ROLES)
+	_require(MANAGER_ROLES)
 	livreur = str(livreur or "").strip()
 	if not livreur:
 		return None
@@ -2373,7 +2382,7 @@ def get_driver_cash_box(livreur=None):
 
 @frappe.whitelist()
 def post_driver_cash_adjustment(payload):
-	_require({"Responsable", "System Manager"})
+	_require(MANAGER_ROLES)
 	data = _payload(payload)
 	from log.services.distribution_driver_cash import post_adjustment
 

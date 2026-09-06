@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Car,
   LoaderCircle,
+  MapPin,
   RefreshCw,
   Route,
   Wallet,
@@ -169,7 +170,7 @@ export function DriverDetailsPage({ canWrite = false }: { canWrite?: boolean }) 
 
       <section aria-label="Indicateurs du livreur" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile icon={Route} tone="info" label="Tournées du jour" value={dashboard?.kpis.plannedRoutes ?? 0} />
-        <KpiTile icon={Route} tone="success" label="Arrêts livrés" value={dashboard?.kpis.deliveredStops ?? 0} hint={`${dashboard?.kpis.failedStops ?? 0} non livrés`} />
+        <KpiTile icon={MapPin} tone="success" label="Arrêts livrés" value={dashboard?.kpis.deliveredStops ?? 0} hint={`${dashboard?.kpis.failedStops ?? 0} non livrés`} />
         <KpiTile icon={Wallet} tone="info" label="Encaissé" value={formatMoney(dashboard?.kpis.amountCollected ?? 0, { precise: true })} />
         <KpiTile
           icon={Wallet}

@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DriverApp } from "@/features/driver/DriverApp";
 import type { DistributionRoute, DriverDashboardData, RouteStop } from "@/shared/types/distribution";
+
+vi.mock("leaflet", () => ({ divIcon: (options: unknown) => options }));
+vi.mock("react-leaflet", () => ({
+  MapContainer: ({ children }: { children: ReactNode }) => <div data-testid="route-map">{children}</div>,
+  Marker: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  Polyline: () => null,
+  Popup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  TileLayer: () => null,
+  useMap: () => ({ setView: vi.fn(), fitBounds: vi.fn() }),
+}));
 
 function stop(overrides: Partial<RouteStop> & Pick<RouteStop, "deliveryNote" | "customerName" | "status" | "sequence">): RouteStop {
   return {
@@ -98,7 +109,8 @@ const mocks = vi.hoisted(() => ({
   loadRoute: vi.fn(),
   acknowledgeRoute: vi.fn(),
   declareRouteReturn: vi.fn(),
-  current: null as unknown as DistributionRoute,
+  current: null as DistributionRoute | null,
+  fetchedRoute: null as DistributionRoute | null,
   history: [] as Array<{
     name: string;
     date: string;
@@ -186,17 +198,17 @@ vi.mock("@/shared/api/distribution", () => ({
   useDriverRouteBoard: () => ({
     data: {
       message: {
-        programmed: [mocks.current],
+        programmed: mocks.current ? [mocks.current] : [],
         history: mocks.history,
-        programmedCount: 1,
+        programmedCount: mocks.current ? 1 : 0,
       },
     },
     error: undefined,
     isLoading: false,
     mutate: mocks.mutate,
   }),
-  useDriverRoute: () => ({
-    data: { message: null },
+  useDriverRoute: (routeId?: string) => ({
+    data: { message: routeId && mocks.fetchedRoute?.name === routeId ? mocks.fetchedRoute : null },
     error: undefined,
     isLoading: false,
     mutate: mocks.mutateOpenRoute,
@@ -228,6 +240,7 @@ describe("DriverApp", () => {
   beforeEach(() => {
     localStorage.clear();
     mocks.current = structuredClone(inProgressRoute);
+    mocks.fetchedRoute = null;
     mocks.history = [
       {
         name: "LIV-OLD",
@@ -257,7 +270,7 @@ describe("DriverApp", () => {
     expect(screen.getByRole("tab", { name: /programmées/i })).toHaveTextContent("1");
     expect(screen.getByRole("tab", { name: /^historique$/i })).not.toHaveTextContent("1");
     expect(screen.getByRole("button", { name: /tournée liv-1/i })).toBeInTheDocument();
-    expect(screen.queryByText(/prochain arrêt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
   });
 
   it("ouvre la tournée sur le prochain arrêt au tap d’une carte", async () => {
@@ -265,7 +278,9 @@ describe("DriverApp", () => {
     render(<DriverApp />);
     await openListedRoute(user);
 
-    expect(screen.getByText(/prochain arrêt/i)).toBeInTheDocument();
+    expect(screen.getByText(/arrêt en cours/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 arrêt restant/i)).toBeInTheDocument();
+    expect(screen.getByText(/^encaissé$/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /épicerie nord/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /traiter cet arrêt/i })).toBeEnabled();
     expect(screen.getAllByRole("link", { name: /navigation vers épicerie nord/i }).length).toBeGreaterThan(0);
@@ -276,16 +291,26 @@ describe("DriverApp", () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await openListedRoute(user);
-    expect(screen.getByText(/prochain arrêt/i)).toBeInTheDocument();
+    expect(screen.getByText(/arrêt en cours/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /retour aux tournées/i }));
-    expect(screen.queryByText(/prochain arrêt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /programmées/i })).toBeInTheDocument();
 
     await openListedRoute(user);
     await user.click(screen.getByRole("button", { name: /^tournée$/i }));
-    expect(screen.queryByText(/prochain arrêt/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /programmées/i })).toBeInTheDocument();
+  });
+
+  it("ouvre l’onglet carte avec la progression de la tournée", async () => {
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await user.click(screen.getByRole("button", { name: /^carte$/i }));
+    expect(screen.getAllByText(/1 \/ 2/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /recentrer/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /épicerie nord/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /traiter cet arrêt/i })).toBeInTheDocument();
   });
 
   it("ouvre l’assistant au tap sur Traiter", async () => {
@@ -294,16 +319,52 @@ describe("DriverApp", () => {
     await openListedRoute(user);
     await user.click(screen.getByRole("button", { name: /traiter cet arrêt/i }));
     expect(screen.getByText(/résultat de l’arrêt/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /continuer/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /livré en totalité/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /continuer/i })).not.toBeInTheDocument();
   });
 
   it("affiche le bilan caisse sans dupliquer le prochain arrêt", async () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await user.click(screen.getByRole("button", { name: /^bilan$/i }));
-    expect(screen.getByRole("heading", { name: /caisse et activité/i })).toBeInTheDocument();
+    expect(screen.getByText(/à remettre au dépôt/i)).toBeInTheDocument();
+    expect(screen.getByText(/rapprochement/i)).toBeInTheDocument();
+    expect(screen.getByText(/la remise se fait au dépôt avec le caissier/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /traiter cet arrêt/i })).not.toBeInTheDocument();
-    expect(screen.getByText("Client A")).toBeInTheDocument();
+    expect(screen.queryByText(/caisse et activité/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/arrêts traités/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Client A")).not.toBeInTheDocument();
+  });
+
+  it("remet à zéro le montant à remettre une fois la caisse validée", async () => {
+    mocks.current = makeRoute({
+      cash: {
+        ...inProgressRoute.cash,
+        status: "Validée",
+        declaredCash: 6000,
+        declaredTotal: 6000,
+        countedTotal: 6000,
+        validatedTotal: 6000,
+      },
+    });
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await user.click(screen.getByRole("button", { name: /^bilan$/i }));
+    const header = screen.getByText(/à remettre au dépôt/i).closest("header");
+    expect(header).toHaveTextContent(/caisse validée/i);
+    expect(header?.querySelector("p.num")).toHaveTextContent(/0\s*DZD/);
+    expect(screen.getByText(/encaissé sur 1 arrêts/i)).toBeInTheDocument();
+  });
+
+  it("affiche le bilan de remise même si la tournée n’est plus programmée", async () => {
+    mocks.current = null;
+    mocks.fetchedRoute = structuredClone(inProgressRoute);
+    const user = userEvent.setup();
+    render(<DriverApp />);
+    await user.click(screen.getByRole("button", { name: /^bilan$/i }));
+    expect(screen.getByText(/à remettre au dépôt/i)).toBeInTheDocument();
+    expect(screen.getByText(/rapprochement/i)).toBeInTheDocument();
+    expect(screen.queryByText(/caisse et activité/i)).not.toBeInTheDocument();
   });
 
   it("n’affiche pas Traiter tant que la tournée est publiée", async () => {
@@ -313,7 +374,9 @@ describe("DriverApp", () => {
     await openListedRoute(user);
     expect(screen.queryByRole("button", { name: /traiter cet arrêt/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /vérifier, charger et démarrer/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /vérifier les bons/i })).toBeInTheDocument();
+    expect(screen.getByText(/contrôle départ/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /scanner un bl/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /charger le véhicule/i })).toBeDisabled();
   });
 
   it("coche un BL scanné et indique le nombre restant", async () => {

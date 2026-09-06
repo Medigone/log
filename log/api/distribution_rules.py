@@ -234,10 +234,6 @@ def completion_errors(
 			)
 	if outcome not in {"delivered", "partial", "failed"}:
 		errors.append("Résultat d'arrêt invalide.")
-	if outcome in {"delivered", "partial"} and not (evidence.get("photoData") or evidence.get("signatureData")):
-		errors.append("Une photo ou une signature est obligatoire.")
-	if evidence.get("signatureData") and not str(evidence.get("signerName") or "").strip():
-		errors.append("Le nom du signataire est obligatoire avec la signature.")
 	if outcome == "partial":
 		items = data.get("items") or []
 		if not items or not any(float(item.get("deliveredQuantity") or 0) > 0 for item in items):

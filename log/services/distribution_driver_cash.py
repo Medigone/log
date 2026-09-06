@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 import frappe
@@ -13,6 +14,14 @@ REMISE = "Remise"
 AVANCE = "Avance"
 AJUSTEMENT = "Ajustement"
 ADJUSTMENT_TYPES = {REMISE, AVANCE, AJUSTEMENT}
+TODAY_ROUTE_PRIORITY = {
+	"En cours": 0,
+	"Publiée": 1,
+	"Retour dépôt": 2,
+	"Contrôle caisse": 3,
+	"Terminée": 4,
+}
+PENDING_CASH_STATUSES = ("À contrôler", "Écart")
 
 
 def signed_amount(movement_type: str, amount: float) -> float:
@@ -69,7 +78,7 @@ def serialize_movement(row) -> dict[str, Any]:
 	}
 
 
-def serialize_cash_box(doc, *, movements: list | None = None) -> dict[str, Any]:
+def serialize_cash_box(doc, *, movements: list | None = None, active: bool | None = None) -> dict[str, Any]:
 	payload = {
 		"name": doc.name,
 		"driver": doc.livreur,
@@ -77,9 +86,65 @@ def serialize_cash_box(doc, *, movements: list | None = None) -> dict[str, Any]:
 		"balance": flt(doc.solde),
 		"updatedAt": str(doc.date_derniere_maj or "") or None,
 	}
+	if active is not None:
+		payload["active"] = bool(active)
 	if movements is not None:
 		payload["movements"] = [serialize_movement(row) for row in movements]
 	return payload
+
+
+def _last_movements_by_box(box_names: list[str]) -> dict[str, dict[str, Any]]:
+	if not box_names:
+		return {}
+	rows = frappe.get_all(
+		"Mouvement Caisse Livreur",
+		filters={"caisse": ["in", box_names]},
+		fields=["name", "caisse", "type_mouvement", "montant", "solde_apres", "tournee", "motif", "date"],
+		order_by="date desc, creation desc",
+	)
+	latest: dict[str, dict[str, Any]] = {}
+	for row in rows:
+		if row.caisse not in latest:
+			latest[row.caisse] = serialize_movement(row)
+	return latest
+
+
+def _today_routes_by_driver() -> dict[str, str]:
+	routes = frappe.get_all(
+		"Livraison",
+		filters={
+			"date_liv": date.today().isoformat(),
+			"etat_planification": ["not in", ["Annulée", "Brouillon"]],
+		},
+		fields=["name", "livreur", "etat_planification"],
+	)
+	chosen: dict[str, Any] = {}
+	for route in routes:
+		driver = route.livreur
+		if not driver:
+			continue
+		current = chosen.get(driver)
+		if current is None or TODAY_ROUTE_PRIORITY.get(route.etat_planification, 99) < TODAY_ROUTE_PRIORITY.get(
+			current.etat_planification, 99
+		):
+			chosen[driver] = route
+	return {driver: row.name for driver, row in chosen.items()}
+
+
+def _pending_control_amount(livreur: str) -> float:
+	routes = frappe.get_all(
+		"Livraison",
+		filters={"livreur": livreur, "statut_caisse": ["in", list(PENDING_CASH_STATUSES)]},
+		pluck="name",
+	)
+	if not routes:
+		return 0.0
+	rows = frappe.get_all(
+		"Mouvement Caisse Livreur",
+		filters={"tournee": ["in", routes], "type_mouvement": ENCAISSEMENT},
+		fields=["montant"],
+	)
+	return round(sum(flt(row.montant) for row in rows), 2)
 
 
 def post_movement(
@@ -289,8 +354,15 @@ def list_cash_boxes() -> list[dict[str, Any]]:
 				"balance": flt(box.solde),
 				"updatedAt": str(box.date_derniere_maj or "") or None,
 				"active": bool(driver.active),
+				"lastMovement": None,
+				"todayRouteId": None,
 			}
 		)
+	last_movements = _last_movements_by_box([row["name"] for row in payload if row.get("name")])
+	today_routes = _today_routes_by_driver()
+	for row in payload:
+		row["lastMovement"] = last_movements.get(row["name"])
+		row["todayRouteId"] = today_routes.get(row["driver"])
 	return payload
 
 
@@ -307,7 +379,13 @@ def get_cash_box(livreur: str) -> dict[str, Any]:
 		order_by="date desc, creation desc",
 		limit=200,
 	)
-	return serialize_cash_box(doc, movements=movements)
+	payload = serialize_cash_box(
+		doc,
+		movements=movements,
+		active=bool(frappe.db.get_value("Livreur", livreur, "active")),
+	)
+	payload["pendingControlAmount"] = _pending_control_amount(livreur)
+	return payload
 
 
 def post_adjustment(livreur: str, movement_type: str, amount: float, motif: str, tournee: str | None = None) -> dict[str, Any]:

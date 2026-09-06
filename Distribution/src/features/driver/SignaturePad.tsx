@@ -3,9 +3,10 @@ import { RotateCcw } from "lucide-react";
 
 interface SignaturePadProps {
   onChange: (data?: string) => void;
+  showClearButton?: boolean;
 }
 
-export function SignaturePad({ onChange }: SignaturePadProps) {
+export function SignaturePad({ onChange, showClearButton = true }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
 
@@ -22,7 +23,7 @@ export function SignaturePad({ onChange }: SignaturePadProps) {
       context.lineCap = "round";
       context.lineJoin = "round";
       context.lineWidth = 2.5;
-      context.strokeStyle = "#0f172a";
+      context.strokeStyle = "#18181b";
     }
   }, []);
 
@@ -61,5 +62,27 @@ export function SignaturePad({ onChange }: SignaturePadProps) {
     onChange(undefined);
   };
 
-  return <div className="overflow-hidden rounded-xl border border-slate-200 bg-white"><canvas ref={canvasRef} onPointerDown={start} onPointerMove={move} onPointerUp={end} onPointerCancel={end} className="h-36 w-full touch-none" aria-label="Zone de signature" /><button type="button" onClick={clear} className="flex w-full items-center justify-center gap-2 border-t border-slate-100 py-2 text-xs font-semibold text-slate-600"><RotateCcw className="h-3.5 w-3.5" />Effacer la signature</button></div>;
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-background">
+      <canvas
+        ref={canvasRef}
+        onPointerDown={start}
+        onPointerMove={move}
+        onPointerUp={end}
+        onPointerCancel={end}
+        className="h-36 w-full touch-none"
+        aria-label="Zone de signature"
+      />
+      {showClearButton ? (
+        <button
+          type="button"
+          onClick={clear}
+          className="flex w-full items-center justify-center gap-2 border-t border-border py-2 text-xs font-semibold text-muted-foreground"
+        >
+          <RotateCcw className="size-3.5" />
+          Effacer la signature
+        </button>
+      ) : null}
+    </div>
+  );
 }

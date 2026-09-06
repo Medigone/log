@@ -42,7 +42,7 @@ export const navItems: NavItem[] = [
   { to: "/vehicules", label: "Véhicules", icon: Car, group: "ressources", roles: ["planificateur", "responsable"] },
   { to: "/stock", label: "Stock véhicules", icon: Package, group: "ressources", badgeKey: "toLoad", roles: ["preparateur", "planificateur", "responsable"] },
   { to: "/cashier", label: "Caisse", icon: Banknote, group: "encaissement", badgeKey: "cashToControl", roles: ["caissier", "responsable"] },
-  { to: "/caisses", label: "Caisses livreurs", icon: Wallet, group: "encaissement", roles: ["caissier", "responsable"] },
+  { to: "/caisses", label: "Caisses livreurs", icon: Wallet, group: "encaissement", roles: ["responsable"] },
 ]
 
 export const roleLabels: Record<DistributionRole, string> = {

@@ -99,6 +99,8 @@ export interface RouteStop {
   postingDate?: string;
   /** Horodatage terrain (`custom_date_livraison`) quand l’arrêt est livré ou en échec. */
   completedAt?: string;
+  /** Motif d’échec (`custom_raison_non_livraison` sur les lignes). */
+  failureReason?: string;
   sequence: number;
   address?: string;
   phone?: string;
@@ -579,6 +581,9 @@ export interface DriverCashBox {
   balance: number;
   updatedAt?: string;
   active?: boolean;
+  lastMovement?: DriverCashMovement | null;
+  todayRouteId?: string | null;
+  pendingControlAmount?: number;
   movements?: DriverCashMovement[];
 }
 

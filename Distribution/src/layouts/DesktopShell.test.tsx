@@ -60,7 +60,7 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/planning");
     expect(hrefs).not.toContain("/livreurs");
     expect(hrefs).not.toContain("/caisses");
-    expect(screen.getByText("Exploitation")).toBeInTheDocument();
+    expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
     expect(screen.queryByText("Encaissement")).not.toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe("DesktopShell", () => {
     renderShell(manager);
     const hrefs = navHrefs();
     expect(hrefs).toEqual(expect.arrayContaining(["/today", "/preparation", "/planning", "/deliveries", "/livreurs", "/vehicules", "/stock", "/cashier", "/caisses"]));
-    expect(screen.getByText("Exploitation")).toBeInTheDocument();
+    expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
     expect(screen.getByText("Encaissement")).toBeInTheDocument();
     expect(screen.queryByText("Console")).not.toBeInTheDocument();
@@ -85,12 +85,12 @@ describe("DesktopShell", () => {
     );
     const hrefs = navHrefs();
     expect(hrefs).toContain("/cashier");
-    expect(hrefs).toContain("/caisses");
+    expect(hrefs).not.toContain("/caisses");
     expect(hrefs).not.toContain("/planning");
     expect(hrefs).not.toContain("/livreurs");
     expect(hrefs).not.toContain("/preparation");
     expect(hrefs).not.toContain("/stock");
-    expect(screen.getByText("Encaissement")).toBeInTheDocument();
+    expect(screen.getAllByText("Encaissement").length).toBeGreaterThan(0);
     expect(screen.queryByText("Exploitation")).not.toBeInTheDocument();
   });
 

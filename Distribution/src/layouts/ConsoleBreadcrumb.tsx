@@ -9,7 +9,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
-import { crumbsFromPath } from "@/layouts/breadcrumbPath"
+import { crumbsFromPath, type Crumb } from "@/layouts/breadcrumbPath"
 
 const LastCrumbContext = createContext<{
   lastLabel: string | null
@@ -31,6 +31,16 @@ export function BreadcrumbLabel({ children }: { children?: string }) {
   return null
 }
 
+function CrumbInner({ crumb }: { crumb: Crumb }) {
+  const Icon = crumb.icon
+  return (
+    <>
+      {Icon ? <Icon className="size-4" /> : null}
+      {crumb.label}
+    </>
+  )
+}
+
 export function ConsoleBreadcrumb() {
   const { pathname } = useLocation()
   const { lastLabel } = useContext(LastCrumbContext)
@@ -43,14 +53,19 @@ export function ConsoleBreadcrumb() {
       <BreadcrumbList>
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1
+          const inner = <CrumbInner crumb={crumb} />
           return (
             <Fragment key={`${crumb.label}-${index}`}>
               {index > 0 && <BreadcrumbSeparator className="hidden md:block" />}
               <BreadcrumbItem className={index === 0 && !last ? "hidden md:block" : undefined}>
-                {last || !crumb.to ? (
-                  <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                {last ? (
+                  <BreadcrumbPage className="flex items-center gap-1.5">{inner}</BreadcrumbPage>
+                ) : crumb.to ? (
+                  <BreadcrumbLink className="flex items-center gap-1.5" render={<Link to={crumb.to} />}>
+                    {inner}
+                  </BreadcrumbLink>
                 ) : (
-                  <BreadcrumbLink render={<Link to={crumb.to} />}>{crumb.label}</BreadcrumbLink>
+                  <span className="flex items-center gap-1.5">{inner}</span>
                 )}
               </BreadcrumbItem>
             </Fragment>

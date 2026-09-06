@@ -1,541 +1,349 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  AlertTriangle,
-  ArrowDownLeft,
-  ArrowUpRight,
-  Check,
-  LoaderCircle,
-  Plus,
-  RefreshCw,
-  Search,
-  Users,
-  Wallet,
-} from "lucide-react";
-import { FilterSelect, FormSelect } from "@/components/FilterSelect";
+import { AlertTriangle, RefreshCw, RotateCcw, Search, Wallet } from "lucide-react";
+import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DataTable } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { KpiTile } from "@/components/ui/kpi-tile";
-import { Money } from "@/components/ui/money";
 import { PageHeader } from "@/components/ui/page-header";
-import { Skeleton } from "@/components/ui/skeleton";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Toolbar } from "@/components/ui/toolbar";
-import { apiErrorMessage, useDistributionMutations, useDriverCashBox, useDriverCashBoxes } from "@/shared/api/distribution";
-import { cashBalanceTone, cashMovementTone } from "@/shared/design/statusTone";
-import { formatDateTime, formatMoney } from "@/shared/format";
+import { Toolbar, ToolbarSpacer } from "@/components/ui/toolbar";
+import { driverCashColumns, driverCashFooter } from "@/features/cashier/driverCashColumns";
+import { DriverCashDialog } from "@/features/cashier/DriverCashDialog";
+import {
+  CASH_STATES,
+  cashState,
+  cashStateCounts,
+  cashStateTone,
+  displayedBalanceTotal,
+  driverCashListKpis,
+  filterCashBoxes,
+  firstPositiveBox,
+  parseCashSort,
+  parseCashStates,
+  plural,
+  signedBalance,
+  sortCashBoxes,
+  type CashAdjustmentType,
+  type CashSort,
+  type CashState,
+} from "@/features/cashier/driverCashTotals";
+import { preparationChipClass } from "@/features/preparation/PreparationQueueShell";
+import { apiErrorMessage, useDistributionMutations, useDriverCashBoxes } from "@/shared/api/distribution";
+import { TONES } from "@/shared/design/statusTone";
+import { formatMoney } from "@/shared/format";
+import type { DriverCashBox } from "@/shared/types/distribution";
 import { cn } from "@/lib/utils";
-import type { DriverCashAdjustmentInput, DriverCashBox, DriverCashMovement, DriverCashMovementType } from "@/shared/types/distribution";
 
-const adjustmentTypes: Array<DriverCashAdjustmentInput["type"]> = ["Remise", "Avance", "Ajustement"];
-const movementFilters: Array<DriverCashMovementType | ""> = ["", "Encaissement", "Remise", "Avance", "Ajustement", "Retour tournée"];
+const STATE_DOT: Record<CashState, string> = {
+  "À remettre": "bg-amber-500",
+  "À zéro": "bg-slate-400",
+  Négatif: "bg-red-500",
+  Inactif: "bg-slate-300",
+};
 
-type CashFocus = "all" | "positive" | "negative" | "inactive";
+const SORT_OPTIONS = [
+  { value: "balance", label: "Solde décroissant" },
+  { value: "name", label: "Nom A → Z" },
+  { value: "updated", label: "Mouvement le plus récent" },
+];
 
-function isActiveBox(box: DriverCashBox) {
-  return box.active !== false;
-}
-
-function matchesFocus(box: DriverCashBox, focus: CashFocus) {
-  if (focus === "positive") return box.balance > 0;
-  if (focus === "negative") return box.balance < 0;
-  if (focus === "inactive") return !isActiveBox(box);
-  return isActiveBox(box);
-}
-
-function matchesSearch(box: DriverCashBox, query: string) {
-  if (!query) return true;
-  return [box.driverName, box.driver, box.name]
-    .filter(Boolean)
-    .some((value) => value.toLocaleLowerCase("fr").includes(query));
-}
-
-function signedAdjustment(type: DriverCashAdjustmentInput["type"], amount: number) {
-  if (type === "Remise") return -Math.abs(amount);
-  if (type === "Avance") return Math.abs(amount);
-  return amount;
-}
-
-function balanceLabel(balance: number) {
-  if (balance < 0) return "Négatif";
-  if (balance > 0) return "À remettre";
-  return "À zéro";
-}
-
-function DriverCashSkeleton() {
-  return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]" aria-hidden="true">
-      <div className="space-y-2">
-        {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-[92px] w-full rounded-lg" />
-        ))}
-      </div>
-      <div className="space-y-4">
-        <Skeleton className="h-36 w-full rounded-lg" />
-        <Skeleton className="h-64 w-full rounded-lg" />
-      </div>
-    </div>
-  );
-}
-
-export function DriverCashPage({ canAdjust = false }: { canAdjust?: boolean }) {
-  const [selected, setSelected] = useState("");
-  const [search, setSearch] = useState("");
-  const [focus, setFocus] = useState<CashFocus>("all");
-  const [movementType, setMovementType] = useState<DriverCashMovementType | "">("");
-  const [movementQuery, setMovementQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [type, setType] = useState<DriverCashAdjustmentInput["type"]>("Remise");
-  const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("");
+export function DriverCashPage() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("q") || "");
+  const [states, setStates] = useState(() => parseCashStates(searchParams.get("state")));
+  const [sort, setSort] = useState<CashSort>(() => parseCashSort(searchParams.get("sort")));
+  const [dialog, setDialog] = useState<{ driver: string; type: CashAdjustmentType; amount: string } | null>(null);
   const [error, setError] = useState("");
   const { data: listData, error: listError, isLoading: listLoading, mutate: refreshList } = useDriverCashBoxes();
   const boxes = useMemo(() => listData?.message || [], [listData?.message]);
-  const { data, error: detailError, isLoading: detailLoading, mutate: refreshDetail } = useDriverCashBox(selected || undefined);
-  const box = data?.message;
   const actions = useDistributionMutations();
-  const query = search.trim().toLocaleLowerCase("fr");
-
-  const totals = useMemo(() => {
-    const positive = boxes.filter((row) => row.balance > 0);
-    const negative = boxes.filter((row) => row.balance < 0);
-    return {
-      float: boxes.reduce((sum, row) => sum + row.balance, 0),
-      toHandover: positive.length,
-      toHandoverAmount: positive.reduce((sum, row) => sum + row.balance, 0),
-      negative: negative.length,
-      negativeAmount: negative.reduce((sum, row) => sum + row.balance, 0),
-      active: boxes.filter(isActiveBox).length,
-    };
-  }, [boxes]);
-
+  const kpis = useMemo(() => driverCashListKpis(boxes), [boxes]);
+  const counts = useMemo(() => cashStateCounts(boxes), [boxes]);
   const filtered = useMemo(
-    () => boxes.filter((row) => matchesFocus(row, focus) && matchesSearch(row, query)),
-    [boxes, focus, query],
+    () => sortCashBoxes(filterCashBoxes(boxes, states, search), sort),
+    [boxes, search, sort, states],
   );
+  const columns = useMemo(
+    () =>
+      driverCashColumns((box) => {
+        setError("");
+        setDialog({ driver: box.driver, type: "Remise", amount: String(box.balance) });
+      }),
+    [],
+  );
+  const dialogBox = boxes.find((box) => box.driver === dialog?.driver);
+  const filtersActive = Boolean(search || states.size || sort !== "balance");
+  const oldestPositive = firstPositiveBox(filtered);
 
-  useEffect(() => {
-    if (filtered.length && !filtered.some((row) => row.driver === selected)) setSelected(filtered[0].driver);
-    if (!filtered.length) setSelected("");
-  }, [filtered, selected]);
-
-  const selectedSummary = boxes.find((row) => row.driver === selected);
-  const parsedAmount = Number(amount || 0);
-  const previewDelta = signedAdjustment(type, parsedAmount);
-  const previewBalance = (box?.balance ?? selectedSummary?.balance ?? 0) + previewDelta;
-  const canSubmit = Boolean(reason.trim()) && Math.abs(parsedAmount) > 0.000001 && !actions.driverCash;
-
-  const movements = useMemo(() => {
-    const source = box?.movements || [];
-    const haystack = movementQuery.trim().toLocaleLowerCase("fr");
-    return source.filter((movement) => {
-      if (movementType && movement.type !== movementType) return false;
-      if (!haystack) return true;
-      return [movement.type, movement.reason, movement.routeId, movement.name]
-        .filter(Boolean)
-        .some((value) => String(value).toLocaleLowerCase("fr").includes(haystack));
-    });
-  }, [box?.movements, movementQuery, movementType]);
-
-  const openDialog = () => {
-    setType("Remise");
-    setAmount("");
-    setReason("");
-    setError("");
-    setDialogOpen(true);
+  const listSearch = (overrides: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+    if (search) params.set("q", search);
+    if (states.size) params.set("state", [...states].join("|"));
+    if (sort !== "balance") params.set("sort", sort);
+    for (const [key, value] of Object.entries(overrides)) {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    }
+    const encoded = params.toString();
+    return encoded ? `?${encoded}` : "";
   };
 
-  const submit = async () => {
-    if (!selected || !canSubmit) return;
+  const syncParams = (next: { q?: string; states?: Set<CashState>; sort?: CashSort }) => {
+    const q = next.q ?? search;
+    const stateSet = next.states ?? states;
+    const sortValue = next.sort ?? sort;
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (stateSet.size) params.set("state", [...stateSet].join("|"));
+    if (sortValue !== "balance") params.set("sort", sortValue);
+    setSearchParams(params, { replace: true });
+  };
+
+  const toggleState = (state: CashState) => {
+    const next = new Set(states);
+    if (next.has(state)) next.delete(state);
+    else next.add(state);
+    setStates(next);
+    syncParams({ states: next });
+  };
+
+  const openBox = (box: DriverCashBox) => {
+    navigate(`/caisses/${encodeURIComponent(box.driver)}${listSearch()}`);
+  };
+
+  const submit = async (payload: { type: CashAdjustmentType; amount: number; reason: string }) => {
+    if (!dialog) return;
     setError("");
     try {
       await actions.postDriverCashAdjustment({
-        driver: selected,
-        type,
-        amount: parsedAmount,
-        reason: reason.trim(),
+        driver: dialog.driver,
+        type: payload.type,
+        amount: payload.amount,
+        reason: payload.reason,
       });
-      toast.success(type === "Remise" ? "Remise enregistrée. La caisse a été débitée." : `${type} enregistré.`);
-      setDialogOpen(false);
-      setAmount("");
-      setReason("");
-      await Promise.all([refreshList(), refreshDetail()]);
+      toast.success(payload.type === "Remise" ? "Remise enregistrée. La caisse a été débitée." : `${payload.type} enregistré.`);
+      setDialog(null);
+      await refreshList();
     } catch (submitError) {
       setError(apiErrorMessage(submitError));
     }
   };
-
-  const movementColumns: Array<DataTableColumn<DriverCashMovement>> = [
-    {
-      id: "type",
-      header: "Mouvement",
-      sortValue: (movement) => movement.type,
-      cell: (movement) => (
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge tone={cashMovementTone(movement.type)} size="sm">
-              {movement.type}
-            </StatusBadge>
-            {movement.routeId &&
-              (canAdjust ? (
-                <Link
-                  to={`/planning/routes/${encodeURIComponent(movement.routeId)}`}
-                  className="num t-meta font-medium text-brand-700 hover:underline"
-                >
-                  {movement.routeId}
-                </Link>
-              ) : (
-                <span className="num t-meta text-muted-foreground">{movement.routeId}</span>
-              ))}
-          </div>
-          <p className="num mt-1 truncate t-meta text-muted-foreground">{formatDateTime(movement.date)}</p>
-          {movement.reason && <p className="mt-0.5 t-meta text-slate-600">{movement.reason}</p>}
-        </div>
-      ),
-    },
-    {
-      id: "amount",
-      header: "Montant",
-      width: "150px",
-      align: "right",
-      numeric: true,
-      sortValue: (movement) => movement.amount,
-      cell: (movement) => (
-        <Money
-          value={movement.amount}
-          precise
-          className={`font-semibold ${movement.amount < 0 ? "text-red-700" : "text-emerald-700"}`}
-        />
-      ),
-    },
-    {
-      id: "balance",
-      header: "Solde après",
-      width: "150px",
-      align: "right",
-      numeric: true,
-      hideBelow: "sm",
-      sortValue: (movement) => movement.balanceAfter,
-      cell: (movement) => <Money value={movement.balanceAfter} precise signed className="text-muted-foreground" />,
-    },
-  ];
 
   return (
     <>
       <PageHeader
         eyebrow="Fonds livreurs"
         title="Caisses des livreurs"
-        description="Solde permanent par livreur. Les encaissements s’y ajoutent en tournée ; la validation de caisse vide la caisse. Un responsable peut ajouter ou retirer des fonds avec un motif."
         meta={
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
-            <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
-            Live 15 s
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+              <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
+              Live · 15 s
+            </span>
+            {kpis.negativeCount ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new Set<CashState>(["Négatif"]);
+                  setStates(next);
+                  syncParams({ states: next });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700"
+              >
+                <span className="size-1.5 rounded-full bg-red-500" />
+                {kpis.negativeCount} en découvert
+              </button>
+            ) : null}
+          </div>
         }
         actions={
-          <Button
-            variant="outline"
-            onClick={() => void Promise.all([refreshList(), selected ? refreshDetail() : Promise.resolve()])}
-            disabled={listLoading}
-          >
-            {listLoading ? <LoaderCircle className="animate-spin" /> : <RefreshCw />}
-            Actualiser
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => void refreshList()} disabled={listLoading}>
+              <RefreshCw />
+              Actualiser
+            </Button>
+            <Button
+              disabled={!oldestPositive}
+              onClick={() => {
+                if (!oldestPositive) return;
+                setError("");
+                setDialog({ driver: oldestPositive.driver, type: "Remise", amount: String(oldestPositive.balance) });
+              }}
+            >
+              Remettre les caisses pleines {kpis.toHandoverCount}
+            </Button>
+          </>
         }
       />
 
-      <section aria-label="Indicateurs des caisses" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {listError ? (
+        <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <AlertTriangle className="size-4 shrink-0" />
+          {apiErrorMessage(listError)}
+        </p>
+      ) : null}
+
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiTile
-          icon={Wallet}
           tone="info"
-          label="Encaisse totale"
-          value={listLoading && !boxes.length ? "—" : formatMoney(totals.float, { precise: true })}
-          hint="Tous les soldes →"
-          onClick={() => setFocus("all")}
-          className={focus === "all" ? "border-brand-300 bg-brand-50/50" : undefined}
+          label="Encaisse en circulation"
+          value={listLoading && !boxes.length ? "—" : formatMoney(kpis.circulation, { precise: true })}
+          hint={`${plural(kpis.openCount, "caisse ouverte", "caisses ouvertes")} · hors caisses inactives`}
         />
         <KpiTile
-          icon={ArrowUpRight}
-          tone={totals.toHandover ? "warning" : "neutral"}
+          tone={kpis.toHandoverCount ? "warning" : "neutral"}
           label="À remettre"
-          value={listLoading && !boxes.length ? "—" : totals.toHandover}
-          hint={totals.toHandover ? `${formatMoney(totals.toHandoverAmount, { precise: true })} en circulation →` : "Aucune caisse à vider →"}
-          onClick={() => setFocus("positive")}
-          className={focus === "positive" ? "border-brand-300 bg-brand-50/50" : undefined}
+          value={listLoading && !boxes.length ? "—" : formatMoney(kpis.toHandoverAmount, { precise: true })}
+          hint={kpis.toHandoverCount ? `${plural(kpis.toHandoverCount, "caisse", "caisses")} à vider` : "Aucune caisse à vider"}
+          onClick={() => {
+            const next = new Set<CashState>(["À remettre"]);
+            setStates(next);
+            syncParams({ states: next });
+          }}
+          className={kpis.toHandoverCount ? TONES.warning.surface : undefined}
         />
         <KpiTile
-          icon={ArrowDownLeft}
-          tone={totals.negative ? "danger" : "neutral"}
+          tone={kpis.negativeCount ? "danger" : "neutral"}
           label="Soldes négatifs"
-          value={listLoading && !boxes.length ? "—" : totals.negative}
-          hint={totals.negative ? `${formatMoney(totals.negativeAmount, { precise: true })} à régulariser →` : "Aucun découvert →"}
-          onClick={() => setFocus("negative")}
-          className={focus === "negative" ? "border-brand-300 bg-brand-50/50" : undefined}
+          value={listLoading && !boxes.length ? "—" : signedBalance(kpis.negativeAmount)}
+          hint={kpis.negativeCount ? `${kpis.negativeCount} à régulariser · motif obligatoire` : "Aucun découvert"}
+          onClick={() => {
+            const next = new Set<CashState>(["Négatif"]);
+            setStates(next);
+            syncParams({ states: next });
+          }}
+          className={kpis.negativeCount ? TONES.danger.surface : undefined}
         />
         <KpiTile
-          icon={Users}
-          tone="success"
-          label="Livreurs actifs"
-          value={listLoading && !boxes.length ? "—" : totals.active}
-          hint="Caisses ouvertes →"
-          onClick={() => setFocus("all")}
+          label="Caisses ouvertes"
+          value={listLoading && !boxes.length ? "—" : `${kpis.openCount} livreurs`}
+          hint={`${plural(kpis.inactiveCount, "caisse", "caisses")} inactive${kpis.inactiveCount > 1 ? "s" : ""} masquée${kpis.inactiveCount > 1 ? "s" : ""} par défaut`}
         />
       </section>
 
       <Toolbar>
-        <InputGroup className="min-w-48 flex-1 bg-background">
+        <InputGroup className="h-8 w-64 min-w-48 bg-background">
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
           <InputGroupInput
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              syncParams({ q: event.target.value });
+            }}
             placeholder="Nom ou code livreur…"
             aria-label="Rechercher un livreur"
           />
         </InputGroup>
+        {CASH_STATES.map((state) => {
+          const active = states.has(state);
+          return (
+            <button
+              key={state}
+              type="button"
+              aria-pressed={active}
+              className={preparationChipClass(active)}
+              onClick={() => toggleState(state)}
+            >
+              <span className={cn("size-1.5 rounded-full", STATE_DOT[state] || TONES[cashStateTone(state)].dot)} />
+              {state}
+              <span className="num text-[11px] opacity-70">{counts[state] || 0}</span>
+            </button>
+          );
+        })}
         <FilterSelect
-          label="État"
-          value={focus}
-          onChange={(value) => setFocus(value as CashFocus)}
-          options={[
-            { value: "all", label: "Tous (actifs)" },
-            { value: "positive", label: "À remettre" },
-            { value: "negative", label: "Négatif" },
-            { value: "inactive", label: "Inactifs" },
-          ]}
+          label="Tri"
+          value={sort}
+          onChange={(value) => {
+            const next = parseCashSort(value);
+            setSort(next);
+            syncParams({ sort: next });
+          }}
+          options={SORT_OPTIONS}
         />
-      </Toolbar>
-
-      {(listError || detailError) && (
-        <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          <AlertTriangle className="size-4 shrink-0" />
-          {apiErrorMessage(listError || detailError)}
-        </p>
-      )}
-
-      {listLoading && !boxes.length && <DriverCashSkeleton />}
-
-      {!listLoading && boxes.length === 0 && (
-        <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
-          <EmptyState
-            icon={Wallet}
-            title="Aucune caisse livreur"
-            description="Les caisses sont créées automatiquement pour chaque livreur."
-          />
-        </div>
-      )}
-
-      {boxes.length > 0 && (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
-          <section className="space-y-2 lg:max-h-[calc(100vh-18rem)] lg:overflow-y-auto lg:pr-1">
-            {filtered.map((row) => {
-              const active = row.driver === selected;
-              const inactive = !isActiveBox(row);
-              return (
-                <button
-                  key={row.driver}
-                  type="button"
-                  onClick={() => {
-                    setSelected(row.driver);
-                    setError("");
-                  }}
-                  aria-pressed={active}
-                  className={cn(
-                    "w-full rounded-lg border p-4 text-left shadow-card transition-colors",
-                    active ? "border-brand-300 bg-brand-50" : "border-hairline bg-card hover:border-hairline-strong",
-                    inactive && "opacity-70",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="t-section text-foreground">{row.driverName}</p>
-                      <p className="truncate t-meta text-muted-foreground">{row.driver}</p>
-                    </div>
-                    <StatusBadge tone={cashBalanceTone(row.balance)} size="sm">
-                      {balanceLabel(row.balance)}
-                    </StatusBadge>
-                  </div>
-                  <Money value={row.balance} precise signed className="mt-3 block text-lg font-semibold" />
-                </button>
-              );
-            })}
-            {!filtered.length && (
-              <p className="rounded-lg border border-dashed border-hairline-strong bg-card p-4 t-body text-muted-foreground">
-                Aucune caisse ne correspond à la recherche.
-              </p>
-            )}
-          </section>
-
-          <section className="space-y-4">
-            {detailLoading && !box && (
-              <div className="space-y-4" aria-hidden="true">
-                <Skeleton className="h-36 w-full rounded-lg" />
-                <Skeleton className="h-64 w-full rounded-lg" />
-              </div>
-            )}
-            {box && (
-              <>
-                <Card className={`p-5 ${box.balance < 0 ? "border-red-200 bg-red-50" : ""}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="t-micro text-muted-foreground">Solde actuel</p>
-                      <h2 className="mt-1 t-display">{box.driverName}</h2>
-                    </div>
-                    {canAdjust && (
-                      <Button onClick={openDialog}>
-                        <Plus />
-                        Nouveau mouvement
-                      </Button>
-                    )}
-                  </div>
-                  <Money value={box.balance} precise signed className="mt-3 block text-3xl font-semibold tracking-tight" />
-                  <p className="num mt-2 t-meta text-muted-foreground">
-                    Dernière mise à jour {formatDateTime(box.updatedAt || selectedSummary?.updatedAt)}
-                  </p>
-                </Card>
-
-                <section className="space-y-3">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
-                    <h3 className="t-section">Historique</h3>
-                    <div className="flex flex-wrap items-end gap-2">
-                      <label className="flex min-w-40 flex-col gap-1">
-                        <span className="t-micro text-muted-foreground">Type</span>
-                        <FormSelect
-                          aria-label="Type de mouvement"
-                          value={movementType || "all"}
-                          onChange={(value) => setMovementType(value === "all" ? "" : (value as DriverCashMovementType))}
-                          options={movementFilters.map((option) => ({
-                            value: option || "all",
-                            label: option || "Tous",
-                          }))}
-                        />
-                      </label>
-                      <label className="flex min-w-48 flex-col gap-1">
-                        <span className="t-micro text-muted-foreground">Filtrer</span>
-                        <Input
-                          value={movementQuery}
-                          onChange={(event) => setMovementQuery(event.target.value)}
-                          placeholder="Motif ou tournée…"
-                          aria-label="Filtrer l’historique"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  <DataTable
-                    label={`Mouvements de caisse de ${box.driverName}`}
-                    columns={movementColumns}
-                    rows={movements}
-                    rowKey={(movement) => movement.name}
-                    rowTone={(movement) => cashMovementTone(movement.type)}
-                    maxHeight="max-h-[50vh]"
-                    empty={
-                      <p className="py-8 text-center t-body text-muted-foreground">
-                        {(box.movements || []).length
-                          ? "Aucun mouvement ne correspond au filtre."
-                          : "Aucun mouvement pour l’instant."}
-                      </p>
-                    }
-                  />
-                </section>
-              </>
-            )}
-          </section>
-        </div>
-      )}
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submit();
+        <ToolbarSpacer />
+        <span className="num text-[11px] text-muted-foreground">
+          {filtered.length} / {boxes.length} caisses
+        </span>
+        {filtersActive ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearch("");
+              setStates(new Set());
+              setSort("balance");
+              syncParams({ q: "", states: new Set(), sort: "balance" });
             }}
           >
-            <DialogHeader>
-              <DialogTitle>Mouvement manuel</DialogTitle>
-              <DialogDescription>
-                Une remise diminue le solde, une avance l’augmente. Un ajustement accepte un montant signé. Le motif est obligatoire.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogBody className="space-y-3">
-              {error && (
-                <p role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                  <AlertTriangle className="size-4 shrink-0" />
-                  {error}
-                </p>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1.5">
-                  <span className="t-micro text-muted-foreground">Type</span>
-                  <FormSelect
-                    value={type}
-                    onChange={(value) => setType(value as DriverCashAdjustmentInput["type"])}
-                    options={adjustmentTypes.map((option) => ({ value: option, label: option }))}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5">
-                  <span className="t-micro text-muted-foreground">Montant</span>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={amount}
-                    onChange={(event) => setAmount(event.target.value)}
-                    className="num"
-                  />
-                </label>
-              </div>
-              <label className="flex flex-col gap-1.5">
-                <span className="t-micro text-muted-foreground">Motif</span>
-                <Textarea
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                  placeholder="Expliquez le mouvement…"
+            <RotateCcw />
+            Réinitialiser
+          </Button>
+        ) : null}
+      </Toolbar>
+
+      {!listLoading && boxes.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-hairline-strong bg-card">
+          <EmptyState icon={Wallet} title="Aucune caisse livreur" description="Les caisses sont créées automatiquement pour chaque livreur." />
+        </div>
+      ) : (
+        <Card className="overflow-hidden py-0">
+          <CardHeader className="flex-row flex-wrap items-center gap-2 py-2.5">
+            <CardTitle>Caisses</CardTitle>
+            <span className="num rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{filtered.length}</span>
+            <p className="ml-auto t-body text-muted-foreground">Cliquez une ligne pour ouvrir la caisse et son historique.</p>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            <div className="overflow-x-auto">
+              <div className="min-w-[824px]">
+                <DataTable
+                  className="rounded-none border-0 border-t"
+                  label="Caisses des livreurs"
+                  columns={columns}
+                  rows={filtered}
+                  rowKey={(box) => box.driver}
+                  rowTone={(box) => cashStateTone(cashState(box))}
+                  rowClassName={(box) => (box.active === false ? "opacity-[0.62]" : undefined)}
+                  onRowClick={openBox}
+                  isLoading={listLoading}
+                  footer={filtered.length ? driverCashFooter(displayedBalanceTotal(filtered)) : undefined}
+                  empty={
+                    <EmptyState
+                      icon={Wallet}
+                      title="Aucune caisse ne correspond"
+                      description="Retirez les filtres. Les caisses sont créées automatiquement pour chaque livreur."
+                    />
+                  }
                 />
-              </label>
-              {amount !== "" && (
-                <p className="rounded-md bg-surface-subtle p-3 t-body text-muted-foreground">
-                  Le solde passera de{" "}
-                  <Money value={box?.balance ?? 0} precise signed className="font-semibold text-foreground" /> à{" "}
-                  <Money value={previewBalance} precise signed className="font-semibold text-foreground" />
-                  {previewDelta !== 0 && (
-                    <>
-                      {" "}
-                      ({previewDelta > 0 ? "+" : ""}
-                      <Money value={previewDelta} precise className="font-semibold text-foreground" />)
-                    </>
-                  )}
-                  .
-                </p>
-              )}
-            </DialogBody>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={actions.driverCash}>
-                Annuler
-              </Button>
-              <Button type="submit" disabled={!canSubmit}>
-                {actions.driverCash ? <LoaderCircle className="animate-spin" /> : <Check />}
-                Enregistrer
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <DriverCashDialog
+        open={Boolean(dialog)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDialog(null);
+            setError("");
+          }
+        }}
+        driverName={dialogBox?.driverName || dialog?.driver || ""}
+        currentBalance={dialogBox?.balance ?? 0}
+        defaultType={dialog?.type || "Remise"}
+        defaultAmount={dialog?.amount || ""}
+        submitting={actions.driverCash}
+        error={error}
+        onSubmit={submit}
+      />
     </>
   );
 }

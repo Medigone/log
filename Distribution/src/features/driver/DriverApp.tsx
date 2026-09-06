@@ -3,16 +3,10 @@ import { useFrappeAuth } from "frappe-react-sdk";
 import {
   Check,
   ChevronLeft,
-  ChevronRight,
-  LocateFixed,
   LogOut,
-  MapPin,
-  Navigation,
-  Phone,
   RefreshCw,
   ScanLine,
   Truck,
-  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -33,8 +27,6 @@ import {
   useDriverRoute,
   useDriverRouteBoard,
 } from "@/shared/api/distribution";
-import { getStopVisualStyle } from "@/features/planning/stopStatus";
-import { formatMoney } from "@/shared/format";
 import { BrandLogo } from "@/shared/ui/BrandLogo";
 import {
   clearPendingOperations,
@@ -43,81 +35,97 @@ import {
   readPendingOperations,
 } from "@/shared/persistence/pendingOperations";
 import type { DistributionRoute, RouteStop, StopCompletionResult } from "@/shared/types/distribution";
-import { DepartureBoard } from "@/features/driver/DepartureBoard";
+import { CashHandoverSummary, CashHandoverSkeleton } from "@/features/driver/CashHandoverSummary";
+import { DepartureBoard, departureStep } from "@/features/driver/DepartureBoard";
+import { DriverRouteList } from "@/features/driver/DriverRouteList";
+import { DriverTabBar, type DriverTab } from "@/features/driver/DriverTabBar";
+import { RouteMapTab } from "@/features/driver/RouteMapTab";
+import { RouteProgressBar } from "@/features/driver/RouteProgressBar";
+import { StopCompletionWizard } from "@/features/driver/StopCompletionWizard";
+import { StopTimeline } from "@/features/driver/StopTimeline";
 import {
   proposeScanAction,
   readVerifiedNotes,
   writeVerifiedNotes,
 } from "@/features/driver/departureWorkflow";
-import { DriverDashboard } from "@/features/driver/DriverDashboard";
-import { DriverRouteList } from "@/features/driver/DriverRouteList";
-import { StopCompletionWizard } from "@/features/driver/StopCompletionWizard";
-import { directionUrl, isStopCompleted, stopAddress, stopFormKey } from "@/features/driver/stopHelpers";
+import { isStopCompleted, stopFormKey } from "@/features/driver/stopHelpers";
+import { formatDriverMoney, routeProgress } from "@/features/driver/driverMobile";
+import { formatTime } from "@/shared/format";
+import { cn } from "@/lib/utils";
 
-type DriverTab = "route" | "scanner" | "bilan";
 type RouteListTab = "programmed" | "history";
-
-const DRIVER_TABS = [
-  { value: "route", label: "Tournée", icon: MapPin },
-  { value: "scanner", label: "Scanner", icon: ScanLine },
-  { value: "bilan", label: "Bilan", icon: Wallet },
-] as const satisfies ReadonlyArray<{ value: DriverTab; label: string; icon: typeof MapPin }>;
 
 function localDate() {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function StopNavLinks({ stop, compact = false }: { stop: RouteStop; compact?: boolean }) {
-  const canCall = Boolean(stop.phone);
-  if (compact) {
-    return (
-      <div className="flex shrink-0 items-center gap-1">
-        <a
-          href={directionUrl(stop)}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Navigation vers ${stop.customerName}`}
-          className="grid size-11 place-items-center rounded-xl border border-hairline-strong text-slate-700"
-        >
-          <Navigation className="size-4" />
-        </a>
-        <a
-          href={canCall ? `tel:${stop.phone}` : undefined}
-          aria-label={canCall ? `Appeler ${stop.customerName}` : "Téléphone non renseigné"}
-          aria-disabled={!canCall}
-          className={`grid size-11 place-items-center rounded-xl border ${
-            canCall ? "border-hairline-strong text-slate-700" : "pointer-events-none border-hairline text-subtle"
-          }`}
-        >
-          <Phone className="size-4" />
-        </a>
-      </div>
-    );
-  }
+function DepartureControlHeader({ route }: { route: DistributionRoute }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <a
-        href={directionUrl(stop)}
-        target="_blank"
-        rel="noreferrer"
-        aria-label={`Navigation vers ${stop.customerName}`}
-        className="flex h-14 items-center justify-center gap-2 rounded-touch bg-brand-600 text-sm font-semibold text-white"
-      >
-        <Navigation className="size-4" />
-        Navigation
-      </a>
-      <a
-        href={canCall ? `tel:${stop.phone}` : undefined}
-        aria-label={canCall ? `Appeler ${stop.customerName}` : "Téléphone non renseigné"}
-        aria-disabled={!canCall}
-        className={`flex h-14 items-center justify-center gap-2 rounded-touch border text-sm font-semibold ${
-          canCall ? "border-hairline-strong text-slate-800" : "pointer-events-none border-hairline text-subtle"
-        }`}
-      >
-        <Phone className="size-4" />
-        Appeler
-      </a>
+    <div className="min-w-0 flex-1">
+      <p className="text-[15px] font-semibold tracking-tight">Contrôle départ</p>
+      <p className="num truncate text-xs text-white/70">
+        {route.name} · rév. {route.publishedRevision} {route.acknowledged ? "acceptée" : "à accepter"}
+      </p>
+    </div>
+  );
+}
+
+function DepartureStepper({ step }: { step: 1 | 2 | 3 }) {
+  const items = [
+    { n: 1, label: "Vérifier" },
+    { n: 2, label: "Charger" },
+    { n: 3, label: "Départ" },
+  ] as const;
+  return (
+    <div className="mt-3 flex gap-1.5" aria-label="Étapes du départ">
+      {items.map((item) => {
+        const active = item.n === step;
+        const done = item.n < step;
+        return (
+          <div key={item.n} className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className={cn("h-[3px] rounded-sm", active || done ? "bg-white" : "bg-white/20")} />
+            <span className={cn("truncate text-xs font-semibold", active || done ? "text-white" : "text-white/45")}>
+              {item.n} · {item.label}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DriverRouteStats({ route }: { route: DistributionRoute }) {
+  const progress = routeProgress(route.stops);
+  const end = formatTime(route.plannedEnd);
+  const remaining =
+    progress.remaining === 0
+      ? "Tous les arrêts sont traités"
+      : progress.remaining === 1
+        ? "1 arrêt restant"
+        : `${progress.remaining} arrêts restants`;
+  return (
+    <div className="flex min-w-0 items-end gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <p className="num text-[26px] leading-none font-medium tracking-tight">
+            {progress.done} / {progress.total}
+          </p>
+          {route.lifecycle === "En cours" ? (
+            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-xs font-semibold">En cours</span>
+          ) : (
+            <span className="truncate text-xs text-white/70">{route.lifecycle}</span>
+          )}
+        </div>
+        <p className="mt-1 truncate text-xs text-white/70">
+          {remaining}
+          {end && end !== "—" ? ` · fin estimée ${end}` : ""}
+        </p>
+      </div>
+      <div className="text-right">
+        <p className="num whitespace-nowrap text-sm font-medium">{formatDriverMoney(progress.collectedAmount)}</p>
+        <p className="text-xs text-white/55">encaissé</p>
+      </div>
     </div>
   );
 }
@@ -201,36 +209,7 @@ function RouteNowView({
         </section>
       )}
 
-      {nextStop ? (
-        <Card density="touch" className="overflow-hidden p-0">
-          <div className="bg-brand-50 p-4">
-            <p className="t-micro text-brand-700">
-              Prochain arrêt · {routeData.stops.findIndex((item) => item.deliveryNote === nextStop.deliveryNote) + 1}/
-              {routeData.stops.length}
-            </p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight">{nextStop.customerName}</h2>
-            <p className="mt-1 t-body text-slate-600">{stopAddress(nextStop)}</p>
-            {nextStop.instructions ? <p className="mt-2 t-meta text-slate-700">{nextStop.instructions}</p> : null}
-            {nextStop.requiresCustomerGeolocation && (
-              <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-900">
-                <LocateFixed className="size-3.5" />
-                GPS client à collecter
-              </p>
-            )}
-          </div>
-          <div className="p-4">
-            <StopNavLinks stop={nextStop} />
-            <div className="mt-3 flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">À encaisser</span>
-              <strong className="num font-semibold">{formatMoney(nextStop.amountToCollect)}</strong>
-            </div>
-            <Button size="touch" onClick={() => onTreat(nextStop)} disabled={!canTreat} className="mt-4 w-full">
-              Traiter cet arrêt
-              <ChevronRight />
-            </Button>
-          </div>
-        </Card>
-      ) : remaining === 0 && routeData.stops.length > 0 ? (
+      {remaining === 0 && routeData.stops.length > 0 && !nextStop ? (
         <Card density="touch" className="p-6 text-center">
           <Check className="mx-auto size-9 text-emerald-600" />
           <h2 className="mt-3 t-section">Tournée traitée</h2>
@@ -238,44 +217,7 @@ function RouteNowView({
         </Card>
       ) : null}
 
-      <Card density="touch" className="p-4">
-        <h2 className="t-section">Arrêts</h2>
-        <ol className="mt-3 space-y-2">
-          {routeData.stops.map((stop, index) => {
-            const visual = getStopVisualStyle(stop.status);
-            const completed = isStopCompleted(stop);
-            return (
-              <li key={stop.deliveryNote} className="flex items-center gap-2 rounded-xl border border-hairline p-2">
-                <button
-                  type="button"
-                  disabled={!canTreat || completed}
-                  onClick={() => onTreat(stop)}
-                  className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-2 text-left transition-colors disabled:opacity-60"
-                >
-                  <span
-                    className={`num grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${
-                      completed ? visual.sequenceClass : "bg-surface-subtle text-slate-600"
-                    }`}
-                  >
-                    {completed ? visual.markerSymbol || <Check className="size-4" /> : index + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold">{stop.customerName}</span>
-                    <span className="block t-meta text-muted-foreground">
-                      {stop.deliveryNote}
-                      {stop.requiresCustomerGeolocation ? " · GPS à collecter" : ""}
-                    </span>
-                  </span>
-                  <span className={`t-meta font-semibold ${completed ? visual.badgeClass.split(" ")[1] : "text-muted-foreground"}`}>
-                    {stop.status}
-                  </span>
-                </button>
-                <StopNavLinks stop={stop} compact />
-              </li>
-            );
-          })}
-        </ol>
-      </Card>
+      <StopTimeline stops={routeData.stops} routeId={routeData.name} canTreat={canTreat} onOpenStop={onTreat} />
     </>
   );
 }
@@ -295,23 +237,32 @@ export function DriverApp() {
   const { logout } = useFrappeAuth();
   const today = localDate();
   const { data, error, isLoading, mutate } = useDriverRouteBoard(today);
-  const { data: dashboardData, error: dashboardError, isLoading: dashboardLoading, mutate: mutateDashboard } =
-    useDriverDashboard(today);
+  const { data: dashboardData, mutate: mutateDashboard } = useDriverDashboard(today);
   const actions = useDistributionMutations();
   const programmed = useMemo(() => data?.message?.programmed || [], [data?.message]);
   const history = useMemo(() => data?.message?.history || [], [data?.message]);
-  const needsHistoryFetch = Boolean(openRouteId && !programmed.some((route) => route.name === openRouteId));
-  const { data: fetchedRouteData, isLoading: historyRouteLoading, mutate: mutateOpenRoute } = useDriverRoute(
-    needsHistoryFetch ? openRouteId : undefined,
-  );
-  const fetchedRoute = fetchedRouteData?.message?.name === openRouteId ? fetchedRouteData.message : undefined;
-  const detailRoute = programmed.find((route) => route.name === openRouteId) || fetchedRoute;
+  const bilanRouteId =
+    programmed.find((route) => route.name === selectedRouteId)?.name
+    || programmed[0]?.name
+    || dashboardData?.message?.routes[0]?.name
+    || history[0]?.name
+    || "";
+  const fetchRouteId = (() => {
+    const id = openRouteId || (tab === "bilan" ? bilanRouteId : "");
+    if (!id || programmed.some((route) => route.name === id)) return undefined;
+    return id;
+  })();
+  const { data: fetchedRouteData, isLoading: historyRouteLoading, mutate: mutateOpenRoute } = useDriverRoute(fetchRouteId);
+  const fetchedRoute =
+    fetchRouteId && fetchedRouteData?.message?.name === fetchRouteId ? fetchedRouteData.message : undefined;
+  const detailRoute = programmed.find((route) => route.name === openRouteId) || (openRouteId ? fetchedRoute : undefined);
   const showingList = tab === "route" && !openRouteId;
   const showDetail = tab === "route" && Boolean(openRouteId);
   const routeData =
     (openRouteId ? detailRoute : undefined)
     || programmed.find((route) => route.name === selectedRouteId)
-    || programmed[0];
+    || programmed[0]
+    || (tab === "bilan" ? fetchedRoute : undefined);
   const completeStopRef = useRef(actions.completeStop);
   const mutateRef = useRef(mutate);
   const mutateDashboardRef = useRef(mutateDashboard);
@@ -398,13 +349,8 @@ export function DriverApp() {
     () => routeData?.stops.find((stop) => !isStopCompleted(stop)),
     [routeData],
   );
-  const completedStops = useMemo(
-    () => routeData?.stops.filter((stop) => isStopCompleted(stop)) || [],
-    [routeData],
-  );
-  const doneCount = completedStops.length;
-  const totalStops = routeData?.stops.length || 0;
-  const vehicleLabel = routeData?.vehicleLabel || dashboardData?.message?.driver?.vehicle || "";
+  const departureMode = showDetail && routeData?.lifecycle === "Publiée";
+  const controlStep = routeData ? departureStep(routeData, verified) : 1;
 
   useEffect(() => {
     if (!routeData) {
@@ -493,9 +439,19 @@ export function DriverApp() {
   };
 
   return (
-    <div className="mx-auto min-h-screen max-w-xl bg-surface-subtle pb-24 text-foreground">
-      <header className="sticky top-0 z-30 bg-brand-600 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white">
-        <div className="flex items-center gap-3">
+    <div
+      className={cn(
+        "mx-auto flex max-w-xl flex-col bg-surface-subtle text-foreground",
+        tab === "map" || departureMode
+          ? "h-svh overflow-hidden pb-20"
+          : tab === "bilan"
+            ? "min-h-screen pb-20"
+            : "min-h-screen pb-24",
+      )}
+    >
+      {tab !== "bilan" ? (
+        <header className="sticky top-0 z-30 shrink-0 bg-brand-600 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white">
+        <div className="flex items-start gap-3">
           {showDetail ? (
             <button
               type="button"
@@ -520,16 +476,10 @@ export function DriverApp() {
                     : "Aucune tournée programmée"}
                 </p>
               </>
+            ) : showDetail && routeData?.lifecycle === "Publiée" ? (
+              <DepartureControlHeader route={routeData} />
             ) : routeData ? (
-              <>
-                <p className="num truncate text-sm font-semibold tracking-tight">
-                  {doneCount}/{totalStops}
-                  {vehicleLabel ? ` · ${vehicleLabel}` : ""}
-                </p>
-                <p className="truncate t-meta text-brand-100">
-                  {routeData.lifecycle} · {routeData.name}
-                </p>
-              </>
+              <DriverRouteStats route={routeData} />
             ) : (
               <>
                 <p className="text-sm font-semibold tracking-tight">Tournée</p>
@@ -551,9 +501,24 @@ export function DriverApp() {
             <LogOut className="size-4" />
           </button>
         </div>
-      </header>
+        {departureMode && routeData ? (
+          <DepartureStepper step={controlStep} />
+        ) : (showDetail || tab === "map") && routeData?.stops.length ? (
+          <RouteProgressBar stops={routeData.stops} className="mt-3" />
+        ) : null}
+        </header>
+      ) : null}
 
-      <main className="space-y-4 p-4">
+      <main
+        className={cn(
+          tab === "map" || departureMode
+            ? "relative flex min-h-0 flex-1 flex-col overflow-hidden"
+            : tab === "bilan"
+              ? "flex min-h-0 flex-1 flex-col"
+              : "space-y-4 p-4",
+        )}
+      >
+        <div className={tab === "map" || departureMode ? "shrink-0 space-y-2 px-4 pt-3" : "contents"}>
         {message && (
           <div role="status" className="rounded-xl border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
             {message}
@@ -580,16 +545,27 @@ export function DriverApp() {
             {apiErrorMessage(error)}
           </div>
         )}
+        </div>
 
-        {tab === "bilan" && (
-          <DriverDashboard
-            data={dashboardData?.message}
-            loading={dashboardLoading}
-            error={dashboardError}
-            onRefresh={() => void mutateDashboard()}
-            completedStops={completedStops}
+        {tab === "bilan" && (fetchRouteId && historyRouteLoading && !routeData ? (
+          <CashHandoverSkeleton />
+        ) : (
+          <CashHandoverSummary
+            route={routeData}
+            cashBoxValidated={
+              routeData
+                ? routeData.cash.status === "Validée"
+                : dashboardData?.message?.cash.status === "Validée"
+            }
+            onOpenHistory={() => {
+              closeRoute();
+              setListTab("history");
+              setTab("route");
+            }}
+            weeklyDeliveryCount={dashboardData?.message?.week.deliveredStops}
+            onLogout={() => logout().then(() => window.location.reload())}
           />
-        )}
+        ))}
 
         {showingList && (
           <DriverRouteList
@@ -640,6 +616,7 @@ export function DriverApp() {
             onAcknowledge={() => void acknowledge()}
             onRequestLoad={() => setConfirmKind("load")}
             onRequestStart={() => setConfirmKind("start")}
+            onScan={() => setTab("scanner")}
           />
         )}
 
@@ -651,6 +628,26 @@ export function DriverApp() {
             onDeclareReturn={() => void declareReturn()}
             onTreat={setSelectedStop}
           />
+        )}
+
+        {tab === "map" && routeData && (
+          <div className="min-h-0 flex-1">
+            <RouteMapTab
+              route={routeData}
+              canTreat={routeData.lifecycle === "En cours"}
+              onOpenStop={(stop) => {
+                if (routeData.lifecycle === "En cours" && !isStopCompleted(stop)) setSelectedStop(stop);
+              }}
+            />
+          </div>
+        )}
+
+        {tab === "map" && !isLoading && !routeData && (
+          <Card density="touch" className="p-8 text-center">
+            <Truck className="mx-auto size-9 text-subtle" />
+            <h2 className="mt-3 t-section">Aucune tournée programmée</h2>
+            <p className="mt-2 t-body text-muted-foreground">Ouvrez une tournée pour voir la carte des arrêts.</p>
+          </Card>
         )}
 
         {routeData && tab === "scanner" && (
@@ -678,37 +675,17 @@ export function DriverApp() {
         )}
       </main>
 
-      <nav
-        aria-label="Navigation livreur"
-        className="fixed inset-x-0 bottom-0 z-40 mx-auto grid h-20 max-w-xl grid-cols-3 border-t border-hairline bg-white px-2 pb-[env(safe-area-inset-bottom)]"
-      >
-        {DRIVER_TABS.map((item) => {
-          const Icon = item.icon;
-          const active = tab === item.value;
-          return (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => {
-                if (item.value === "route" && tab === "route" && openRouteId) {
-                  closeRoute();
-                  return;
-                }
-                setTab(item.value);
-              }}
-              aria-current={active ? "page" : undefined}
-              className={`flex flex-col items-center justify-center gap-1 rounded-xl text-[11px] font-semibold transition-colors ${
-                active ? "text-brand-700" : "text-subtle"
-              }`}
-            >
-              <span className={`grid h-7 w-12 place-items-center rounded-full ${active ? "bg-brand-50" : ""}`}>
-                <Icon className="size-5" />
-              </span>
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
+      <DriverTabBar
+        tab={tab}
+        onSelect={(next) => {
+          if (next === "route" && tab === "route" && openRouteId) {
+            closeRoute();
+            return;
+          }
+          setTab(next);
+          if (next === "bilan") void refresh();
+        }}
+      />
 
       {selectedStop && routeData && routeData.lifecycle === "En cours" && (
         <StopCompletionWizard

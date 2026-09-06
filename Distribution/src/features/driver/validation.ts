@@ -55,8 +55,6 @@ export function validateStopForm(input: StopValidationInput): string {
       return "Localisez le client avec une précision de 50 m ou meilleure.";
     }
   }
-  if (input.outcome !== "failed" && !input.evidence.photoData && !input.evidence.signatureData) return "Ajoutez une photo ou une signature.";
-  if (input.evidence.signatureData && !input.evidence.signerName?.trim()) return "Saisissez le nom du signataire.";
   if (input.outcome === "partial" && !Object.values(input.quantities).some((quantity) => quantity > 0)) return "Saisissez au moins une quantité livrée.";
   if (input.outcome === "failed" && (!input.failureReason || !input.comment.trim())) return "Le motif et le commentaire sont obligatoires.";
   if (input.paymentEnabled && (!input.payment.amount || input.payment.amount <= 0)) return "Le paiement doit être positif.";

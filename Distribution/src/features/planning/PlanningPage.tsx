@@ -413,10 +413,6 @@ export function PlanningPage() {
     const [, month, day] = kanbanDate.split("-");
     return `${day}/${month}`;
   }, [kanbanDate]);
-  const description =
-    tab === "tournees"
-      ? "Ouvrez une tournée pour vérifier ses détails avant de la publier. Une tournée publiée exige un motif de reprogrammation."
-      : "Affectez les BL aux tournées du jour. Les colonnes se dimensionnent à leur contenu.";
 
   const updateParams = (overrides: Record<string, string | undefined>) => {
     const base: Record<string, string> = {};
@@ -629,7 +625,6 @@ export function PlanningPage() {
             onToggle={() => setAlertsOpen((open) => !open)}
           />
         }
-        description={description}
       />
 
       {alertsOpen && (

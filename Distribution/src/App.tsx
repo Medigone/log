@@ -13,7 +13,9 @@ import { PlanningPage } from "@/features/planning/PlanningPage";
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage";
 import { DriverApp } from "@/features/driver/DriverApp";
 import { CashierPage } from "@/features/cashier/CashierPage";
+import { CashierRoutePage } from "@/features/cashier/CashierRoutePage";
 import { DriverCashPage } from "@/features/cashier/DriverCashPage";
+import { DriverCashBoxPage } from "@/features/cashier/DriverCashBoxPage";
 import { VehicleStockPage } from "@/features/stock/VehicleStockPage";
 import { DriversPage } from "@/features/fleet/DriversPage";
 import { DriverDetailsPage } from "@/features/fleet/DriverDetailsPage";
@@ -95,8 +97,10 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/vehicules" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><VehiclesPage canWrite={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/vehicules/:vehicleId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><VehicleDetailsPage canWrite={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage canLinkRoutes={user.role !== "preparateur"} /></RoleGuard>} />
-        <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
-        <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><DriverCashPage canAdjust={user.role === "responsable"} /></RoleGuard>} />
+        <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage /></RoleGuard>} />
+        <Route path="/cashier/:routeId" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierRoutePage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
+        <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["responsable"]}><DriverCashPage /></RoleGuard>} />
+        <Route path="/caisses/:driver" element={<RoleGuard role={user.role} allowed={["responsable"]}><DriverCashBoxPage /></RoleGuard>} />
         <Route path="/" element={<Navigate to={defaultRoute(user.role)} replace />} />
         <Route path="*" element={<Navigate to={defaultRoute(user.role)} replace />} />
       </Routes>

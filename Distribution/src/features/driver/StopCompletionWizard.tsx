@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, ChevronLeft, LocateFixed, LoaderCircle } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { Sheet, SheetBody, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { apiErrorMessage, useDistributionMutations } from "@/shared/api/distribution";
-import { formatMoney } from "@/shared/format";
 import {
   confirmOperation,
   markOperationAttempt,
@@ -20,7 +19,9 @@ import type {
   StopCompletionPayload,
   StopCompletionResult,
 } from "@/shared/types/distribution";
-import { SignaturePad } from "@/features/driver/SignaturePad";
+import { StopEvidenceStep } from "@/features/driver/StopEvidenceStep";
+import { StopOutcomeStep } from "@/features/driver/StopOutcomeStep";
+import { StopPaymentStep } from "@/features/driver/StopPaymentStep";
 import { estimatedCollectableAmount, validateStopForm } from "@/features/driver/validation";
 import {
   compressImage,
@@ -29,31 +30,17 @@ import {
   stopFormKey,
   type SavedStopForm,
 } from "@/features/driver/stopHelpers";
+import { useStopWizardSteps, wizardSteps, type WizardStep } from "@/features/driver/useStopWizardSteps";
+import { cn } from "@/lib/utils";
 
-export type WizardStep = "outcome" | "detail" | "evidence" | "payment" | "summary";
+export { wizardSteps, type WizardStep };
 
 const STEP_LABELS: Record<WizardStep, string> = {
   outcome: "Résultat",
   detail: "Détail",
   evidence: "Preuves",
   payment: "Encaissement",
-  summary: "Récapitulatif",
 };
-
-const OUTCOME_LABELS: Record<DeliveryOutcome, string> = {
-  delivered: "Livré",
-  partial: "Partiel",
-  failed: "Échec",
-};
-
-export function wizardSteps(outcome: DeliveryOutcome): WizardStep[] {
-  const steps: WizardStep[] = ["outcome"];
-  if (outcome === "partial" || outcome === "failed") steps.push("detail");
-  steps.push("evidence");
-  if (outcome !== "failed") steps.push("payment");
-  steps.push("summary");
-  return steps;
-}
 
 export function validateWizardStep(
   step: WizardStep,
@@ -69,9 +56,7 @@ export function validateWizardStep(
     }
     return "";
   }
-  if (step === "evidence") {
-    return validateStopForm({ ...input, paymentEnabled: false });
-  }
+  if (step === "evidence") return "";
   if (step === "payment") {
     if (!input.paymentEnabled) return "";
     return validateStopForm(input);
@@ -107,17 +92,13 @@ export function StopCompletionWizard({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
-  const [stepIndex, setStepIndex] = useState(0);
   const actions = useDistributionMutations();
   const suggestedAmount = useMemo(
     () => estimatedCollectableAmount(stop, outcome, quantities),
     [outcome, quantities, stop],
   );
   const lastSuggested = useRef(suggestedAmount);
-  const steps = wizardSteps(outcome);
-  const step = steps[Math.min(stepIndex, steps.length - 1)];
-  const isFirst = stepIndex === 0;
-  const isLast = step === "summary";
+  const { step, steps, stepIndex, isFirst, isLast, goNext: advance, goBack, selectOutcome } = useStopWizardSteps(outcome);
   const validationInput = {
     outcome,
     quantities,
@@ -187,16 +168,6 @@ export function StopCompletionWizard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const photo = async (file?: File) => {
-    if (!file) return;
-    try {
-      const photoData = await compressImage(file);
-      setEvidence((current) => ({ ...current, photoData }));
-    } catch {
-      setError("La photo n’a pas pu être préparée.");
-    }
-  };
-
   const chequePhoto = async (file?: File) => {
     if (!file) return;
     try {
@@ -265,21 +236,78 @@ export function StopCompletionWizard({
       void submit();
       return;
     }
-    setStepIndex((current) => Math.min(current + 1, steps.length - 1));
+    advance();
   };
 
-  const goBack = () => {
+  const goPrev = () => {
     setError("");
-    setStepIndex((current) => Math.max(current - 1, 0));
+    goBack();
   };
 
-  const gpsOk =
-    evidence.latitude != null &&
-    !(stop.requiresCustomerGeolocation && outcome !== "failed" && (evidence.accuracy == null || evidence.accuracy > 50));
+  const reviewEvidence = () => {
+    setError("");
+    goBack();
+  };
+
+  const confirmLabel = "Continuer";
 
   return (
     <Sheet open onOpenChange={(open) => !open && !saving && onClose()}>
-      <SheetContent side="bottom" aria-label={`Résultat ${stop.deliveryNote}`} className="max-h-[95vh] rounded-t-touch">
+      <SheetContent
+        side="bottom"
+        aria-label={`Résultat ${stop.deliveryNote}`}
+        showCloseButton={step !== "evidence"}
+        className={cn(
+          "max-h-[95vh] rounded-t-touch",
+          step === "evidence" && "h-[95vh] gap-0 overflow-hidden p-0",
+          step === "payment" && "max-h-[95vh] gap-0 overflow-hidden p-0",
+        )}
+      >
+        {step === "evidence" ? (
+          <StopEvidenceStep
+            stop={stop}
+            evidence={evidence}
+            locating={locating}
+            stepIndex={stepIndex}
+            stepCount={steps.length}
+            amount={suggestedAmount}
+            nextLabel={isLast ? "Valider l’arrêt" : "Continuer"}
+            saving={saving}
+            error={error}
+            onRetryGps={() => locate(true)}
+            onChange={(patch) => {
+              setError("");
+              setEvidence((current) => ({ ...current, ...patch }));
+            }}
+            onBack={goPrev}
+            onContinue={goNext}
+          />
+        ) : step === "payment" ? (
+          <StopPaymentStep
+            stop={stop}
+            evidence={evidence}
+            payment={payment}
+            paymentEnabled={paymentEnabled}
+            suggestedAmount={suggestedAmount}
+            stepIndex={stepIndex}
+            stepCount={steps.length}
+            saving={saving}
+            error={error}
+            onPaymentChange={(patch) => {
+              setError("");
+              setPayment((current) => ({ ...current, ...patch }));
+            }}
+            onToggleCollect={(enabled) => {
+              setError("");
+              setPaymentEnabled(enabled);
+            }}
+            onChequePhoto={(file) => void chequePhoto(file)}
+            onReviewEvidence={reviewEvidence}
+            onBack={goPrev}
+            onConfirm={goNext}
+          />
+        ) : (
+          <>
         <SheetHeader>
           <p className="t-meta font-semibold text-brand-700">
             {stop.deliveryNote} · {Math.min(stepIndex, steps.length - 1) + 1}/{steps.length}
@@ -305,32 +333,16 @@ export function StopCompletionWizard({
           )}
 
           {step === "outcome" && (
-            <fieldset>
-              <legend className="t-section">Résultat de l’arrêt</legend>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {(
-                  [
-                    ["delivered", "Livré"],
-                    ["partial", "Partiel"],
-                    ["failed", "Échec"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    aria-pressed={outcome === value}
-                    onClick={() => setOutcome(value)}
-                    className={`h-20 rounded-touch border text-base font-semibold transition-colors ${
-                      outcome === value
-                        ? "border-brand-600 bg-brand-600 text-white"
-                        : "border-hairline-strong bg-white text-slate-700"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
+            <StopOutcomeStep
+              stop={stop}
+              gpsAccuracy={evidence.accuracy}
+              locating={locating}
+              onRetryGps={() => locate(true)}
+              onSelect={(value) => {
+                setError("");
+                selectOutcome(setOutcome, value);
+              }}
+            />
           )}
 
           {step === "detail" && outcome === "partial" && (
@@ -383,182 +395,6 @@ export function StopCompletionWizard({
               </label>
             </div>
           )}
-
-          {step === "evidence" && (
-            <div className="space-y-3">
-              {stop.requiresCustomerGeolocation && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-                  <p className="font-semibold">GPS client à collecter</p>
-                  <p className="mt-1 text-amber-800">
-                    Une position précise à 50 m ou moins sera conservée pour les prochaines livraisons.
-                  </p>
-                </div>
-              )}
-              <Button type="button" variant="outline" size="touch" onClick={() => locate(true)} className="w-full" disabled={locating}>
-                {locating ? <LoaderCircle className="animate-spin" /> : <LocateFixed />}
-                {locating
-                  ? "Localisation…"
-                  : evidence.latitude != null
-                    ? "Reprendre la localisation"
-                    : stop.requiresCustomerGeolocation
-                      ? "Localiser ce client"
-                      : "Enregistrer la position GPS"}
-              </Button>
-              {evidence.latitude != null && (
-                <p
-                  className={`num text-center t-meta font-semibold ${
-                    stop.requiresCustomerGeolocation && outcome !== "failed" && (evidence.accuracy == null || evidence.accuracy > 50)
-                      ? "text-red-700"
-                      : "text-emerald-700"
-                  }`}
-                >
-                  Précision : {Math.round(evidence.accuracy || 0)} m
-                  {stop.requiresCustomerGeolocation &&
-                  outcome !== "failed" &&
-                  evidence.accuracy != null &&
-                  evidence.accuracy > 50
-                    ? " · recommencez pour atteindre 50 m ou moins"
-                    : ""}
-                </p>
-              )}
-              {outcome !== "failed" && (
-                <>
-                  <label className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-touch border border-hairline-strong bg-white text-sm font-semibold">
-                    <Camera className="size-4" />
-                    {evidence.photoData ? "Photo ajoutée" : "Ajouter une photo"}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="sr-only"
-                      onChange={(event) => photo(event.target.files?.[0])}
-                    />
-                  </label>
-                  <p className="text-center t-meta font-semibold text-subtle">OU</p>
-                  <SignaturePad onChange={(signatureData) => setEvidence((current) => ({ ...current, signatureData }))} />
-                  {evidence.signatureData && (
-                    <Input
-                      value={evidence.signerName || ""}
-                      onChange={(event) => setEvidence((current) => ({ ...current, signerName: event.target.value }))}
-                      className="h-12 text-base"
-                      placeholder="Nom du signataire"
-                    />
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {step === "payment" && (
-            <div className="space-y-3">
-              <p className="t-body text-muted-foreground">
-                Passez cette étape si vous n’encaissez rien maintenant.
-                {outcome === "partial"
-                  ? ` Facture estimée : ${formatMoney(suggestedAmount)} sur un BL de ${formatMoney(stop.amountToCollect)}.`
-                  : ` Facture estimée : ${formatMoney(suggestedAmount)}.`}
-              </p>
-              {!paymentEnabled ? (
-                <Button type="button" variant="outline" size="touch" className="w-full" onClick={() => setPaymentEnabled(true)}>
-                  Déclarer un encaissement
-                </Button>
-              ) : (
-                <div className="space-y-3 rounded-touch border border-hairline bg-white p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="t-section">Encaissement</p>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setPaymentEnabled(false)}>
-                      Ne pas encaisser
-                    </Button>
-                  </div>
-                  <NativeSelect
-                    size="touch"
-                    aria-label="Mode de paiement"
-                    value={payment.method}
-                    onChange={(event) =>
-                      setPayment((current) => ({ ...current, method: event.target.value as PaymentInput["method"] }))
-                    }
-                  >
-                    <option value="cash">Espèces</option>
-                    <option value="cheque">Chèque</option>
-                  </NativeSelect>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={payment.amount ?? ""}
-                    onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))}
-                    className="num h-14 rounded-touch text-base"
-                    placeholder="Montant DZD"
-                  />
-                  {payment.method === "cheque" && (
-                    <>
-                      <Input
-                        value={payment.chequeNumber || ""}
-                        onChange={(event) => setPayment((current) => ({ ...current, chequeNumber: event.target.value }))}
-                        className="h-14 rounded-touch text-base"
-                        placeholder="Numéro du chèque"
-                      />
-                      <label className="flex h-14 cursor-pointer items-center justify-center gap-2 rounded-touch border border-hairline-strong text-sm font-semibold">
-                        <Camera className="size-4" />
-                        {payment.chequePhotoData ? "Photo du chèque ajoutée" : "Photo du chèque"}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          className="sr-only"
-                          onChange={(event) => chequePhoto(event.target.files?.[0])}
-                        />
-                      </label>
-                      <Input
-                        type="date"
-                        value={payment.collectionDate || ""}
-                        onChange={(event) =>
-                          setPayment((current) => ({ ...current, collectionDate: event.target.value }))
-                        }
-                        className="h-14 rounded-touch text-base"
-                      />
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {step === "summary" && (
-            <dl className="space-y-3 rounded-touch border border-hairline bg-white p-4 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">Résultat</dt>
-                <dd className="font-semibold">{OUTCOME_LABELS[outcome]}</dd>
-              </div>
-              {outcome === "failed" && (
-                <div className="flex items-center justify-between gap-3">
-                  <dt className="text-muted-foreground">Motif</dt>
-                  <dd className="font-semibold">{failureReason}</dd>
-                </div>
-              )}
-              <div className="flex items-center justify-between gap-3">
-                <dt className="text-muted-foreground">GPS</dt>
-                <dd className={`num font-semibold ${gpsOk ? "text-emerald-700" : "text-red-700"}`}>
-                  {evidence.latitude != null ? `${Math.round(evidence.accuracy || 0)} m` : "Manquant"}
-                </dd>
-              </div>
-              {outcome !== "failed" && (
-                <div className="flex items-center justify-between gap-3">
-                  <dt className="text-muted-foreground">Preuve</dt>
-                  <dd className="font-semibold">{evidence.photoData ? "Photo" : evidence.signatureData ? "Signature" : "Manquante"}</dd>
-                </div>
-              )}
-              {outcome !== "failed" && (
-                <div className="flex items-center justify-between gap-3">
-                  <dt className="text-muted-foreground">Encaissement</dt>
-                  <dd className="num font-semibold">
-                    {paymentEnabled && payment.amount
-                      ? `${formatMoney(payment.amount)} · ${payment.method === "cheque" ? "Chèque" : "Espèces"}`
-                      : "Aucun"}
-                  </dd>
-                </div>
-              )}
-            </dl>
-          )}
         </SheetBody>
 
         <SheetFooter className="gap-2">
@@ -567,16 +403,20 @@ export function StopCompletionWizard({
               Annuler
             </Button>
           ) : (
-            <Button variant="outline" size="touch" onClick={goBack} className="flex-1" disabled={saving}>
+            <Button variant="outline" size="touch" onClick={goPrev} className="flex-1" disabled={saving}>
               <ChevronLeft />
               Retour
             </Button>
           )}
-          <Button size="touch" onClick={goNext} disabled={saving} className="flex-[2]">
-            {saving ? <LoaderCircle className="animate-spin" /> : isLast ? <Check /> : null}
-            {isLast ? "Valider l’arrêt" : "Continuer"}
-          </Button>
+          {isFirst ? null : (
+            <Button size="touch" onClick={goNext} disabled={saving} className="flex-[2]">
+              {saving ? <LoaderCircle className="animate-spin" /> : isLast ? <Check /> : null}
+              {confirmLabel}
+            </Button>
+          )}
         </SheetFooter>
+          </>
+        )}
       </SheetContent>
     </Sheet>
   );

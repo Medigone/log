@@ -14,7 +14,7 @@ describe("navItems", () => {
 
   it("filtre les pages selon le rôle", () => {
     expect(visibleNavItems("preparateur").map((item) => item.to)).toEqual(["/today", "/preparation", "/stock"])
-    expect(visibleNavItems("caissier").map((item) => item.to)).toEqual(["/cashier", "/caisses"])
+    expect(visibleNavItems("caissier").map((item) => item.to)).toEqual(["/cashier"])
   })
 
   it("marque l’entrée active y compris sur une sous-page", () => {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StopCompletionWizard, validateWizardStep, wizardSteps } from "@/features/driver/StopCompletionWizard";
@@ -9,13 +10,28 @@ const mocks = vi.hoisted(() => ({
   completeStop: vi.fn().mockResolvedValue({ success: true, idempotent: false, customerLocationUpdated: false, route: {} }),
 }));
 
+vi.mock("leaflet", () => ({ divIcon: (options: unknown) => options }));
+vi.mock("react-leaflet", () => ({
+  MapContainer: ({ children }: { children: ReactNode }) => <div data-testid="evidence-map">{children}</div>,
+  Marker: () => null,
+  Circle: () => null,
+  TileLayer: () => null,
+  useMap: () => ({ setView: vi.fn() }),
+}));
+
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
   useDistributionMutations: () => ({ completeStop: mocks.completeStop, saving: false }),
 }));
 
 vi.mock("@/features/driver/SignaturePad", () => ({
-  SignaturePad: () => <div data-testid="signature-pad">Signature</div>,
+  SignaturePad: ({ onChange }: { onChange: (data?: string) => void }) => (
+    <div data-testid="signature-pad">
+      <button type="button" onClick={() => onChange("data:image/png;base64,AA==")}>
+        Signer
+      </button>
+    </div>
+  ),
 }));
 
 const stop: RouteStop = {
@@ -64,9 +80,9 @@ function mockGeolocation(success = true) {
 
 describe("wizardSteps", () => {
   it("saute le détail en livré et le paiement en échec", () => {
-    expect(wizardSteps("delivered")).toEqual(["outcome", "evidence", "payment", "summary"]);
-    expect(wizardSteps("partial")).toEqual(["outcome", "detail", "evidence", "payment", "summary"]);
-    expect(wizardSteps("failed")).toEqual(["outcome", "detail", "evidence", "summary"]);
+    expect(wizardSteps("delivered")).toEqual(["outcome", "evidence", "payment"]);
+    expect(wizardSteps("partial")).toEqual(["outcome", "detail", "evidence", "payment"]);
+    expect(wizardSteps("failed")).toEqual(["outcome", "detail", "evidence"]);
   });
 });
 
@@ -83,9 +99,15 @@ describe("validateWizardStep", () => {
     requiresCustomerGeolocation: false,
   };
 
-  it("laisse passer le résultat et bloque une preuve sans GPS", () => {
+  it("n’impose ni GPS, ni photo, ni signature à cette étape", () => {
     expect(validateWizardStep("outcome", base)).toBe("");
-    expect(validateWizardStep("evidence", { ...base, evidence: { photoData: validEvidence.photoData } })).toContain("GPS");
+    expect(validateWizardStep("evidence", { ...base, evidence: {} })).toBe("");
+    expect(
+      validateWizardStep("evidence", {
+        ...base,
+        evidence: { signatureData: "data:image/png;base64,AA==" },
+      }),
+    ).toBe("");
   });
 
   it("autorise de passer l’encaissement par défaut", () => {
@@ -104,7 +126,7 @@ describe("StopCompletionWizard", () => {
     localStorage.clear();
   });
 
-  it("lance le GPS à l’ouverture et enchaîne les étapes jusqu’au récap sans encaissement", async () => {
+  it("lance le GPS à l’ouverture et enchaîne les étapes jusqu’à l’encaissement sans récap", async () => {
     const user = userEvent.setup();
     localStorage.setItem(
       stopFormKey("LIV-1", "DN-8"),
@@ -124,14 +146,16 @@ describe("StopCompletionWizard", () => {
 
     expect(geo).not.toHaveBeenCalled();
     expect(screen.getByText(/résultat de l’arrêt/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^livré$/i }));
+    await user.click(screen.getByRole("button", { name: /livré en totalité/i }));
+    expect(screen.getByText(/preuves de livraison/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continuer/i })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /continuer/i }));
-    expect(screen.getByText(/photo ajoutée/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /continuer/i }));
-    expect(screen.getByText(/passez cette étape/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /continuer/i }));
-    expect(screen.getByText(/récapitulatif/i)).toBeInTheDocument();
-    expect(screen.getByText("Aucun")).toBeInTheDocument();
+    expect(screen.getByText(/montant suggéré/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /je n’encaisse rien maintenant/i })).toBeInTheDocument();
+    expect(screen.getByText(/déjà collecté/i)).toBeInTheDocument();
+    expect(screen.getByText(/tout est prêt/i)).toBeInTheDocument();
+    expect(screen.queryByText(/éléments manquants/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^signature$/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /valider l’arrêt/i }));
     expect(mocks.completeStop).toHaveBeenCalledWith(expect.objectContaining({
       deliveryNote: "DN-8",
@@ -152,8 +176,7 @@ describe("StopCompletionWizard", () => {
         onPending={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /^partiel$/i }));
-    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    await user.click(screen.getByRole("button", { name: /livraison partielle/i }));
     expect(screen.getByText(/quantités livrées maintenant/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /continuer/i }));
     expect(screen.getByRole("alert")).toHaveTextContent(/quantité/i);
@@ -172,5 +195,38 @@ describe("StopCompletionWizard", () => {
       />,
     );
     expect(geo).toHaveBeenCalled();
+  });
+
+  it("laisse Continuer actif sans signature ni photo, et n’affiche pas la signature comme manquante", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      stopFormKey("LIV-1", "DN-8"),
+      JSON.stringify({
+        requestId: "req-sig",
+        outcome: "delivered",
+        evidence: { ...validEvidence, signatureData: undefined, photoData: undefined },
+        paymentEnabled: false,
+      }),
+    );
+    render(
+      <StopCompletionWizard
+        stop={stop}
+        routeId="LIV-1"
+        routeRevision={1}
+        onDone={vi.fn()}
+        onClose={vi.fn()}
+        onPending={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /livré en totalité/i }));
+    expect(screen.getByRole("button", { name: /continuer/i })).toBeEnabled();
+    expect(screen.getByText(/vous pouvez continuer/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/^facultative$/i)).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    expect(screen.getByText(/tout est prêt/i)).toBeInTheDocument();
+    expect(screen.queryByText(/éléments manquants/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^signature$/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /valider l’arrêt/i })).toBeEnabled();
   });
 });

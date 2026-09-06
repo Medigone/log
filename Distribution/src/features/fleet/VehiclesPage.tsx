@@ -205,7 +205,6 @@ export function VehiclesPage({ canWrite = false }: { canWrite?: boolean }) {
       <PageHeader
         eyebrow="Flotte"
         title="Véhicules"
-        description="Parc, documents, entretien et chauffeur principal."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => void mutate()} disabled={isLoading}>

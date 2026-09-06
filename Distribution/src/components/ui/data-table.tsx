@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { TONES, type StatusTone } from "@/shared/design/statusTone"
 import { SkeletonRows } from "@/components/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export interface DataTableColumn<T> {
   id: string
@@ -32,6 +32,7 @@ interface DataTableProps<T> {
   label: string
   defaultSort?: { id: string; direction: "asc" | "desc" }
   maxHeight?: string
+  footer?: ReactNode
   className?: string
 }
 
@@ -63,6 +64,7 @@ export function DataTable<T>({
   label,
   defaultSort,
   maxHeight,
+  footer,
   className,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState(defaultSort)
@@ -201,6 +203,11 @@ export function DataTable<T>({
               )
             })}
           </TableBody>
+          {footer ? (
+            <TableFooter className="bg-surface-subtle font-medium">
+              {footer}
+            </TableFooter>
+          ) : null}
         </Table>
       </div>
     </div>

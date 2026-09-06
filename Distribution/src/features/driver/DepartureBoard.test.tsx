@@ -115,4 +115,30 @@ describe("DepartureBoard", () => {
     expect(onToggle).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
+
+  it("place les restants en tête et garde le chargement désactivé", () => {
+    render(
+      <DepartureBoard
+        route={{
+          ...route,
+          acknowledged: true,
+          stops: [
+            stop({ deliveryNote: "DN-1", customerName: "Client A", sequence: 1 }),
+            stop({ deliveryNote: "DN-2", customerName: "Client B", sequence: 2, totalQuantity: 9 }),
+          ],
+        }}
+        verified={["DN-1"]}
+        saving={false}
+        onToggle={vi.fn()}
+        onAcknowledge={vi.fn()}
+        onRequestLoad={vi.fn()}
+        onRequestStart={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/restants d’abord/i)).toBeInTheDocument();
+    expect(screen.getByText(/1 contrôlé/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /charger le véhicule/i })).toBeDisabled();
+    expect(screen.getByText(/débloqué après le dernier bon/i)).toBeInTheDocument();
+  });
 });

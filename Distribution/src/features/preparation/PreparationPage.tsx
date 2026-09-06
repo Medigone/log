@@ -1406,13 +1406,6 @@ export function PreparationPage() {
     );
   }
 
-  const description =
-    tab === "retours"
-      ? "Recomptage et retour du véhicule vers l’entrepôt, indépendant du contrôle de caisse."
-      : tab === "listes"
-        ? "Rouvrez une liste de prélèvement en brouillon ou consultez les listes déjà soumises."
-        : "Les listes se créent à la soumission. Ouvrez-les pour prélever, puis générez les BL.";
-
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -1423,7 +1416,6 @@ export function PreparationPage() {
             <AlertsChip count={alertCount} open={alertsOpen} onToggle={() => setAlertsOpen((open) => !open)} />
           ) : undefined
         }
-        description={description}
       />
       {tab === "commandes" && alertsOpen && alertCount > 0 && (
         <section aria-label="Anomalies" className="grid gap-3 sm:grid-cols-2">

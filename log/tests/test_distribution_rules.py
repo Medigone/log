@@ -143,7 +143,7 @@ class TestDistributionRules(unittest.TestCase):
 
 	def test_total_delivery_evidence(self):
 		data = {"outcome": "delivered", "evidence": {"latitude": 36.7, "longitude": 3.0}}
-		self.assertIn("photo ou une signature", completion_errors(data, balance=1000, failure_reasons=FAILURES)[0])
+		self.assertEqual(completion_errors(data, balance=1000, failure_reasons=FAILURES), [])
 
 	def test_missing_customer_requires_accurate_gps_for_delivery(self):
 		data = {

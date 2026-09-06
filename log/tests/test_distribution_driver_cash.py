@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -204,6 +205,64 @@ class TestDriverCash(unittest.TestCase):
 		self.assertEqual(payload[0]["balance"], 1500)
 		self.assertEqual(payload[1]["balance"], -80)
 		self.assertTrue(payload[0]["active"])
+		self.assertIsNone(payload[0]["lastMovement"])
+		self.assertIsNone(payload[0]["todayRouteId"])
+
+	def test_list_cash_boxes_attaches_last_movement_and_today_route(self):
+		drivers = [frappe._dict({"name": "DRV-1", "nom": "Karim", "active": 1})]
+		existing = [
+			frappe._dict({"name": "CAISSE-DRV-1", "livreur": "DRV-1", "nom_livreur": "Karim", "solde": 2808, "date_derniere_maj": "2026-09-06"}),
+		]
+		movements = [
+			frappe._dict({
+				"name": "MVT-NEW",
+				"caisse": "CAISSE-DRV-1",
+				"type_mouvement": "Encaissement",
+				"montant": 2808,
+				"solde_apres": 2808,
+				"tournee": "LIV-26-09-00003",
+				"motif": "Encaissement espèces",
+				"date": "2026-09-06 10:00:00",
+			}),
+			frappe._dict({
+				"name": "MVT-OLD",
+				"caisse": "CAISSE-DRV-1",
+				"type_mouvement": "Remise",
+				"montant": -500,
+				"solde_apres": 0,
+				"tournee": "LIV-OLD",
+				"motif": "Ancienne",
+				"date": "2026-09-01 08:00:00",
+			}),
+		]
+		routes = [
+			frappe._dict({"name": "LIV-26-09-00003", "livreur": "DRV-1", "etat_planification": "En cours"}),
+			frappe._dict({"name": "LIV-DRAFT", "livreur": "DRV-1", "etat_planification": "Publiée"}),
+		]
+
+		def fake_get_all(doctype, **kwargs):
+			if doctype == "Livreur":
+				return drivers
+			if doctype == "Caisse Livreur":
+				return existing
+			if doctype == "Mouvement Caisse Livreur":
+				return movements
+			if doctype == "Livraison":
+				return routes
+			return []
+
+		with (
+			patch.object(driver_cash.frappe, "get_all", side_effect=fake_get_all),
+			patch.object(driver_cash, "date") as date_mod,
+		):
+			date_mod.today.return_value = date(2026, 9, 6)
+			payload = driver_cash.list_cash_boxes()
+
+		self.assertEqual(payload[0]["lastMovement"]["name"], "MVT-NEW")
+		self.assertEqual(payload[0]["lastMovement"]["type"], "Encaissement")
+		self.assertEqual(payload[0]["lastMovement"]["amount"], 2808)
+		self.assertEqual(payload[0]["lastMovement"]["routeId"], "LIV-26-09-00003")
+		self.assertEqual(payload[0]["todayRouteId"], "LIV-26-09-00003")
 
 	def test_list_cash_boxes_creates_missing_box_without_syncing_routes(self):
 		drivers = [frappe._dict({"name": "DRV-3", "nom": "Samir", "active": 0})]

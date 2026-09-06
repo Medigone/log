@@ -21,6 +21,9 @@ describe("validateStopForm", () => {
     expect(validateStopForm({ ...valid, evidence: { ...valid.evidence, latitude: 0, longitude: 0 } })).toContain("GPS");
   });
   it("accepte une livraison avec GPS et photo", () => expect(validateStopForm(valid)).toBe(""));
+  it("accepte une livraison avec GPS seulement, sans photo ni signature", () => {
+    expect(validateStopForm({ ...valid, evidence: { latitude: 36.75, longitude: 3.04 } })).toBe("");
+  });
   it("exige 50 m ou mieux pour géolocaliser un client manquant", () => {
     expect(validateStopForm({
       ...valid,
@@ -43,8 +46,8 @@ describe("validateStopForm", () => {
       evidence: { latitude: 36.75, longitude: 3.04, accuracy: 120 },
     })).toBe("");
   });
-  it("exige le nom avec une signature", () => {
-    expect(validateStopForm({ ...valid, evidence: { latitude: 36.75, longitude: 3.04, signatureData: "data:image/png;base64,AA==" } })).toContain("signataire");
+  it("accepte une signature sans nom de signataire", () => {
+    expect(validateStopForm({ ...valid, evidence: { latitude: 36.75, longitude: 3.04, signatureData: "data:image/png;base64,AA==" } })).toBe("");
   });
   it("exige motif et commentaire pour un échec", () => {
     expect(validateStopForm({ ...valid, outcome: "failed", evidence: { latitude: 36.75, longitude: 3.04 } })).toContain("motif");

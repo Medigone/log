@@ -1,74 +1,141 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { CashierPage } from "@/features/cashier/CashierPage";
+import type { DistributionRoute } from "@/shared/types/distribution";
 
 const mocks = vi.hoisted(() => ({
-  validate: vi.fn().mockResolvedValue({ reconciliation: { requiresManagerApproval: false } }),
   mutate: vi.fn().mockResolvedValue(undefined),
+  routes: [] as DistributionRoute[],
 }));
 
-const route = {
-  name: "LIV-CASH-1",
-  date: "2026-08-25",
-  lifecycle: "Contrôle caisse",
-  revision: 4,
-  driver: "DRV-1",
-  driverName: "Livreur Test",
-};
+function cash(overrides: Partial<DistributionRoute["cash"]> & { status: string }): DistributionRoute["cash"] {
+  return {
+    routeId: "LIV-1",
+    routeLifecycle: "Contrôle caisse",
+    declaredCash: 0,
+    declaredCheques: 0,
+    declaredTotal: 0,
+    countedTotal: 0,
+    validatedTotal: 0,
+    payments: [],
+    ...overrides,
+  };
+}
 
-const reconciliation = {
-  routeId: "LIV-CASH-1",
-  routeLifecycle: "Contrôle caisse",
-  status: "À contrôler",
-  declaredCash: 1500,
-  declaredCheques: 0,
-  declaredTotal: 1500,
-  countedTotal: 0,
-  validatedTotal: 0,
-  payments: [{
-    name: "PAY-1",
-    deliveryNote: "DN-1",
-    salesInvoice: "SINV-1",
-    customer: "CUST-1",
-    customerName: "Client Test",
-    method: "Espèce",
-    amount: 1500,
-    countedAmount: 0,
-    status: "À contrôler",
-    allocations: [{ salesInvoice: "SINV-1", outstandingBefore: 1000, allocatedAmount: 1000 }],
-    unallocatedAmount: 500,
-  }],
-};
+function route(overrides: Partial<DistributionRoute> & Pick<DistributionRoute, "name">): DistributionRoute {
+  return {
+    date: "2026-08-25",
+    lifecycle: "Contrôle caisse",
+    revision: 1,
+    publishedRevision: 1,
+    acknowledgedRevision: 1,
+    acknowledged: true,
+    needsReview: false,
+    driver: "DRV-1",
+    driverName: "Livreur Test",
+    vehicle: "VEH-1",
+    vehicleLabel: "CAM-04",
+    totalQuantity: 0,
+    totalArticles: 0,
+    totalCollected: 0,
+    totalAmount: 0,
+    stops: [],
+    routing: {
+      status: "idle",
+      provider: "",
+      profile: "",
+      optimizationEnabled: false,
+      distanceMeters: 0,
+      durationSeconds: 0,
+      stopDurationMinutes: 0,
+      stopDurationSeconds: 0,
+      totalDurationSeconds: 0,
+      geometry: { type: "LineString", coordinates: [] },
+      revision: 1,
+    },
+    stock: { status: "Chargé", loadedQuantity: 0, deliveredQuantity: 0, remainingQuantity: 0, returnedQuantity: 0, lines: [] },
+    cash: cash({ status: "À contrôler", declaredCash: 1500, declaredTotal: 1500, routeId: overrides.name }),
+    alerts: [],
+    ...overrides,
+  } as DistributionRoute;
+}
 
 vi.mock("@/shared/api/distribution", () => ({
   apiErrorMessage: (error: unknown) => String(error),
-  useCashierRoutes: () => ({ data: { message: [route] }, error: undefined, isLoading: false, mutate: mocks.mutate }),
-  useCashierReconciliation: (routeId?: string) => ({ data: routeId ? { message: reconciliation } : undefined, error: undefined, isLoading: false, mutate: mocks.mutate }),
-  useDistributionMutations: () => ({ validateCashReconciliation: mocks.validate, cashier: false }),
+  useCashierRoutes: () => ({ data: { message: mocks.routes }, error: undefined, isLoading: false, mutate: mocks.mutate }),
+  useCashierReconciliation: () => ({ data: undefined, error: undefined, isLoading: false, mutate: mocks.mutate }),
+  useDistributionMutations: () => ({ validateCashReconciliation: vi.fn(), cashier: false }),
 }));
 
+function DetailStub() {
+  const { routeId } = useParams();
+  return <p>Détail {routeId}</p>;
+}
+
+function renderList(entry = "/cashier") {
+  return render(
+    <MemoryRouter initialEntries={[entry]}>
+      <Routes>
+        <Route path="/cashier" element={<CashierPage />} />
+        <Route path="/cashier/:routeId" element={<DetailStub />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
 describe("CashierPage", () => {
-  it("contrôle la déclaration, la facture et l'avance avant de créer le paiement", async () => {
+  it("affiche une ligne par tournée sans ouvrir de formulaire", () => {
+    mocks.routes = [
+      route({ name: "LIV-CASH-1" }),
+      route({
+        name: "LIV-CASH-2",
+        driverName: "Autre livreur",
+        cash: cash({ status: "Validée", declaredCash: 800, declaredTotal: 800, routeId: "LIV-CASH-2" }),
+      }),
+    ];
+    renderList();
+    expect(screen.getByRole("heading", { name: /caisse des tournées/i })).toBeInTheDocument();
+    expect(screen.getByText("LIV-CASH-1")).toBeInTheDocument();
+    expect(screen.getByText("LIV-CASH-2")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /valider le contrôle de caisse/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /tournée/i })).not.toBeInTheDocument();
+  });
+
+  it("ouvre le détail au clic d’une ligne", async () => {
+    mocks.routes = [route({ name: "LIV-CASH-1" })];
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <CashierPage />
-      </MemoryRouter>,
-    );
+    renderList();
+    await user.click(screen.getByText("LIV-CASH-1"));
+    expect(screen.getByText("Détail LIV-CASH-1")).toBeInTheDocument();
+  });
 
-    expect(await screen.findByRole("heading", { name: /caisse des tournées/i })).toBeInTheDocument();
-    expect(screen.getByText(/indépendant du retour stock/i)).toBeInTheDocument();
+  it("filtre les lignes via les chips d’état", async () => {
+    mocks.routes = [
+      route({ name: "LIV-CASH-1" }),
+      route({
+        name: "LIV-CASH-2",
+        cash: cash({ status: "Validée", declaredCash: 800, declaredTotal: 800, routeId: "LIV-CASH-2" }),
+      }),
+    ];
+    const user = userEvent.setup();
+    renderList();
+    await user.click(screen.getByRole("button", { name: /validée/i }));
+    expect(screen.queryByText("LIV-CASH-1")).not.toBeInTheDocument();
+    expect(screen.getByText("LIV-CASH-2")).toBeInTheDocument();
+  });
 
-    expect(screen.getByText("SINV-1")).toBeInTheDocument();
-    expect(screen.getByText(/avance client : 500 DZD/i)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /valider le contrôle de caisse/i }));
-
-    await waitFor(() => expect(mocks.validate).toHaveBeenCalledWith(expect.objectContaining({
-      routeId: "LIV-CASH-1",
-      countedCash: 1500,
-      payments: [expect.objectContaining({ paymentId: "PAY-1" })],
-    })));
+  it("préremplit le chip depuis ?status=", () => {
+    mocks.routes = [
+      route({ name: "LIV-CASH-1" }),
+      route({
+        name: "LIV-CASH-2",
+        cash: cash({ status: "Écart", declaredCash: 200, declaredTotal: 200, countedTotal: 100, routeId: "LIV-CASH-2" }),
+      }),
+    ];
+    renderList("/cashier?status=Écart");
+    expect(screen.queryByText("LIV-CASH-1")).not.toBeInTheDocument();
+    expect(screen.getByText("LIV-CASH-2")).toBeInTheDocument();
   });
 });

@@ -221,7 +221,6 @@ export function DriversPage({ canWrite = false }: { canWrite?: boolean }) {
       <PageHeader
         eyebrow="Flotte"
         title="Livreurs"
-        description="Tableau de bord des livreurs : affectation véhicule, permis et caisse."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => void mutate()} disabled={isLoading}>

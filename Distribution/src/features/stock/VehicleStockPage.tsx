@@ -178,7 +178,6 @@ export function VehicleStockPage({ canLinkRoutes = false }: { canLinkRoutes?: bo
       <PageHeader
         eyebrow="Stock physique"
         title="Stock des véhicules"
-        description="Stock physique des camions, à jour toutes les 10 secondes."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
             <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden />
