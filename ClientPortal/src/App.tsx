@@ -7,11 +7,13 @@ import { Spinner } from "@/components/ui/spinner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AccountPage } from "@/features/account/AccountPage"
 import { LoginPage } from "@/features/auth/LoginPage"
+import { ForgotPasswordPage } from "@/features/auth/ForgotPasswordPage"
 import { InitialPasswordChangePage } from "@/features/auth/InitialPasswordChangePage"
 import { CartPage } from "@/features/cart/CartPage"
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage"
 import { DeliveryDetailPage } from "@/features/deliveries/DeliveryDetailPage"
 import { LandingPage } from "@/features/landing/LandingPage"
+import { SignupPage } from "@/features/signup/SignupPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { OrderDetailPage } from "@/features/orders/OrderDetailPage"
 import { OrdersPage } from "@/features/orders/OrdersPage"
@@ -43,6 +45,8 @@ function GuestRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot" element={<ForgotPasswordPage />} />
+      <Route path="/signup" element={<SignupPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -6,10 +6,12 @@ export function CommunePicker({
   value,
   communes,
   onChange,
+  id = "customer-commune",
 }: {
   value?: string | null
   communes: CommuneOption[]
   onChange: (commune: CommuneOption) => void
+  id?: string
 }) {
   const selected = communes.find((commune) => commune.name === value)
   const [query, setQuery] = useState("")
@@ -30,7 +32,7 @@ export function CommunePicker({
   return (
     <div className="relative">
       <Input
-        id="customer-commune"
+        id={id}
         role="combobox"
         aria-expanded={open}
         aria-controls="commune-list"

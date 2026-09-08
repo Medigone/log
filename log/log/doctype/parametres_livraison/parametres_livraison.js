@@ -19,7 +19,8 @@ frappe.ui.form.on("Parametres Livraison", {
 		const address = frappe.utils.escape_html(depot.adresse || __("Adresse non renseignée"));
 		const latitude = frappe.utils.escape_html(String(depot.latitude_depot || "—"));
 		const longitude = frappe.utils.escape_html(String(depot.longitude_depot || "—"));
-		const href = `/desk/depot-distribution/${encodeURIComponent(depot.name)}`;
+		const deskRoot = (frappe.boot && frappe.boot.desk_path) || "/app";
+		const href = `${deskRoot}/depot-distribution/${encodeURIComponent(depot.name)}`;
 		frm.get_field("depot_principal_html").$wrapper.html(`
 			<div class="rounded border p-3">
 				<div class="font-weight-bold">${label}</div>

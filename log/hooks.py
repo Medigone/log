@@ -28,11 +28,11 @@ add_to_apps_screen = [
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/log/css/log.css"
-# app_include_js = "/assets/log/js/log.js"
+app_include_js = ["/assets/log/js/desk_logout.js"]
 
 # include js, css files in header of web template
 # web_include_css = "/assets/log/css/log.css"
-# web_include_js = "/assets/log/js/log.js"
+web_include_js = ["/assets/log/js/website_login_redirect.js"]
 
 # include custom scss in every website theme (without file extension ".scss")
 # website_theme_scss = "log/public/scss/website"
@@ -65,6 +65,12 @@ doctype_js = {
 # application home page (will override Website Settings)
 home_page = "client"
 get_website_user_home_page = "log.auth.get_home_page"
+
+website_context = {
+	"app_name": "Modern Pharma",
+}
+
+extend_bootinfo = "log.compat.extend_bootinfo"
 
 # website user home page (by Role)
 # role_home_page = {

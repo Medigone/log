@@ -14,6 +14,7 @@ import type {
   PaymentSummary,
   PortalContext,
   PortalNotification,
+  SignupOptions,
   StorefrontPayload,
 } from "@/shared/types"
 
@@ -24,6 +25,7 @@ interface FrappeMessage<T> {
 const API = "log.api.client_portal"
 const REQUESTS_API = "log.api.catalog_requests"
 const NOTIFICATIONS_API = "log.api.portal_notifications"
+const SIGNUP_API = "log.api.customer_signup"
 
 export function apiErrorMessage(error: unknown): string {
   if (typeof error === "string") return error
@@ -290,6 +292,37 @@ export function usePasswordActions() {
   }
 }
 
+export function passwordResetFeedback(result: unknown, error?: unknown): { ok: boolean; message: string } {
+  if (error) {
+    const raw = apiErrorMessage(error)
+    if (/not found|404|DoesNotExist/i.test(raw)) {
+      return { ok: false, message: "Aucun compte ne correspond à cet identifiant." }
+    }
+    return { ok: false, message: raw }
+  }
+  if (result === "not found") {
+    return { ok: false, message: "Aucun compte ne correspond à cet identifiant." }
+  }
+  if (result === "disabled") {
+    return { ok: false, message: "Ce compte est désactivé." }
+  }
+  if (result === "not allowed") {
+    return { ok: false, message: "Cette action n’est pas autorisée." }
+  }
+  return {
+    ok: true,
+    message: "Les instructions de réinitialisation ont été envoyées à votre adresse e-mail.",
+  }
+}
+
+export function usePasswordReset() {
+  const reset = useFrappePostCall<FrappeMessage<string | null>>("frappe.core.doctype.user.user.reset_password")
+  return {
+    send: async (user: string) => passwordResetFeedback((await reset.call({ user })).message),
+    sending: reset.loading,
+  }
+}
+
 export interface CatalogRequestListQuery {
   page: number
   search?: string
@@ -410,6 +443,30 @@ export function usePushConfig(enabled = true) {
     undefined,
     enabled ? "client-push-config" : null,
   )
+}
+
+export function useSignupOptions() {
+  return useFrappeGetCall<FrappeMessage<SignupOptions>>(
+    `${SIGNUP_API}.get_signup_options`,
+    undefined,
+    "customer-signup-options",
+  )
+}
+
+export function useCustomerSignup() {
+  const submit = useFrappePostCall<FrappeMessage<{ success: boolean; message: string }>>(`${SIGNUP_API}.submit_signup`)
+  return {
+    submit: async (payload: {
+      commercialName: string
+      firstName: string
+      lastName: string
+      commune: string
+      category: string
+      phone: string
+      email: string
+    }) => (await submit.call({ payload })).message,
+    sending: submit.loading,
+  }
 }
 
 export function usePushSubscriptionActions() {

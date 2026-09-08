@@ -16,6 +16,7 @@ from frappe.desk.doctype.notification_log.notification_log import enqueue_create
 from frappe.utils import cint, cstr, flt, getdate, now_datetime, today
 
 from log.api.distribution_rules import parse_gps_value
+from log.compat import desk_form_path
 
 
 MAX_GPS_ACCURACY_METERS = 50
@@ -948,7 +949,7 @@ def _notify_responsibles(order):
 			"document_type": "Sales Order",
 			"document_name": order.name,
 			"from_user": frappe.session.user,
-			"link": f"/app/sales-order/{order.name}",
+			"link": desk_form_path("Sales Order", order.name),
 		},
 		dedupe_on=["type", "document_type", "document_name"],
 	)

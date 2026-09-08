@@ -28,6 +28,7 @@ import {
   useDriverRouteBoard,
 } from "@/shared/api/distribution";
 import { BrandLogo } from "@/shared/ui/BrandLogo";
+import { goToLanding } from "@/shared/session";
 import {
   clearPendingOperations,
   confirmOperation,
@@ -519,7 +520,7 @@ export function DriverApp() {
           ) : null}
           <button
             type="button"
-            onClick={() => logout().then(() => window.location.reload())}
+            onClick={() => logout().then(() => goToLanding())}
             aria-label="Se déconnecter"
             className="grid size-11 place-items-center rounded-xl bg-white/10 transition-colors hover:bg-white/20"
           >
@@ -588,7 +589,7 @@ export function DriverApp() {
               setTab("route");
             }}
             weeklyDeliveryCount={dashboardData?.message?.week.deliveredStops}
-            onLogout={() => logout().then(() => window.location.reload())}
+            onLogout={() => logout().then(() => goToLanding())}
           />
         ))}
 

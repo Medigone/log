@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from "react"
+import { useEffect, type CSSProperties, type MouseEvent } from "react"
 import { Link } from "react-router-dom"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -53,6 +53,10 @@ function BrandMark({ className }: { className?: string }) {
 }
 
 export function LandingPage() {
+	useEffect(() => {
+		document.title = "Modern Pharma"
+	}, [])
+
 	return (
 		<div className="min-h-svh bg-white text-zinc-950 antialiased">
 			<header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
@@ -73,12 +77,12 @@ export function LandingPage() {
 						))}
 					</nav>
 					<div className="ml-auto flex shrink-0 items-center gap-2.5">
-						<SectionLink
-							id="compte"
+						<Link
+							to="/signup"
 							className="hidden h-[34px] items-center rounded-lg border border-zinc-200 px-3 text-[13px] font-medium hover:bg-zinc-100 sm:flex"
 						>
 							Devenir client
-						</SectionLink>
+						</Link>
 						<Link
 							to="/login"
 							className="flex h-[34px] items-center rounded-lg px-4 text-[13px] font-medium text-white hover:opacity-90"
@@ -105,13 +109,13 @@ export function LandingPage() {
 							générale — et les grossistes de l’Ouest algérien. Un interlocuteur, un compte, une livraison qui suit.
 						</p>
 						<div className="flex flex-wrap items-center gap-2.5">
-							<SectionLink
-								id="compte"
+							<Link
+								to="/signup"
 								className="flex h-11 items-center rounded-[10px] px-5 text-[14.5px] font-medium text-white hover:opacity-90"
 								style={{ background: ACCENT }}
 							>
 								Devenir client →
-							</SectionLink>
+							</Link>
 							<Link
 								to="/login"
 								className="flex h-11 items-center rounded-[10px] border border-zinc-300 px-4 text-[14.5px] font-medium hover:bg-zinc-100"
@@ -256,12 +260,12 @@ export function LandingPage() {
 						>
 							Se connecter
 						</Link>
-						<SectionLink
-							id="contact"
+						<Link
+							to="/signup"
 							className="flex h-[42px] items-center justify-center rounded-[10px] border border-zinc-600 text-[14.5px] font-medium text-white hover:bg-zinc-700"
 						>
 							Ouvrir un compte professionnel
-						</SectionLink>
+						</Link>
 						<span className="text-[12.5px] leading-relaxed text-zinc-400">
 							Nous vendons exclusivement aux professionnels.
 						</span>
@@ -300,9 +304,9 @@ export function LandingPage() {
 						<Link to="/login" className="text-[13px] text-zinc-700 hover:underline">
 							Se connecter
 						</Link>
-						<SectionLink id="compte" className="text-left text-[13px] text-zinc-700 hover:underline">
+						<Link to="/signup" className="text-[13px] text-zinc-700 hover:underline">
 							Devenir client
-						</SectionLink>
+						</Link>
 						<SectionLink id="couverture" className="text-left text-[13px] text-zinc-700 hover:underline">
 							Zones desservies
 						</SectionLink>

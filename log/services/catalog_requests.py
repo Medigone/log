@@ -13,6 +13,8 @@ from frappe import _
 from frappe.desk.doctype.notification_log.notification_log import enqueue_create_notification
 from frappe.utils import cint, cstr, flt, strip_html
 
+from log.compat import desk_form_path
+
 DOCTYPE = "Demande Hors Catalogue"
 CHILD_DOCTYPE = "Ligne Demande Hors Catalogue"
 MAX_OPEN_REQUESTS = 10
@@ -185,7 +187,7 @@ def _notify_responsibles(doc):
 			"document_type": DOCTYPE,
 			"document_name": doc.name,
 			"from_user": frappe.session.user,
-			"link": f"/app/demande-hors-catalogue/{doc.name}",
+			"link": desk_form_path("Demande Hors Catalogue", doc.name),
 		},
 		dedupe_on=["type", "document_type", "document_name"],
 	)

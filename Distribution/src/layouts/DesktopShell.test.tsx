@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { DesktopShell } from "@/layouts/DesktopShell";
 import { NAV_ALERT_DISMISS_KEY } from "@/layouts/NavAlertCard";
+import { deskRoot } from "@/shared/frappeCompat";
 import type { ActivityDashboardData } from "@/shared/types/distribution";
 
 vi.mock("frappe-react-sdk", () => ({ useFrappeAuth: () => ({ logout: vi.fn() }) }));
@@ -63,7 +64,7 @@ describe("DesktopShell", () => {
     expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
     expect(screen.queryByText("Caisse")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", "/desk");
+    expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", deskRoot());
   });
 
   it("donne au responsable les parcours opérationnels groupés", () => {
@@ -93,7 +94,7 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/stock");
     expect(screen.getAllByText("Caisse").length).toBeGreaterThan(0);
     expect(screen.queryByText("Exploitation")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", "/desk");
+    expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", deskRoot());
   });
 
   it("permet de fermer puis de rouvrir le menu", async () => {
@@ -120,7 +121,7 @@ describe("DesktopShell", () => {
   it("affiche un lien Bureau vers le desk pour les rôles internes", () => {
     renderShell(manager);
     const desk = screen.getByRole("link", { name: "Bureau" });
-    expect(desk).toHaveAttribute("href", "/desk");
+    expect(desk).toHaveAttribute("href", deskRoot());
   });
 
   it("n'affiche pas le lien Bureau pour un livreur", () => {

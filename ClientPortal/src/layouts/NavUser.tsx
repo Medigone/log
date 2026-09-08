@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { goToLanding } from "@/shared/session"
 import type { PortalContext } from "@/shared/types"
 
 function initials(name: string) {
@@ -42,7 +43,7 @@ export function usePortalLogout() {
   const { logout } = useFrappeAuth()
   return async () => {
     await logout()
-    window.location.reload()
+    goToLanding()
   }
 }
 

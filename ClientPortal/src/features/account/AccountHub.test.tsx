@@ -6,10 +6,18 @@ import { AccountHub } from "@/features/account/AccountHub"
 import { AccountPage } from "@/features/account/AccountPage"
 import type { PortalContext } from "@/shared/types"
 
-const logout = vi.fn()
+const { logout, goToLanding } = vi.hoisted(() => ({
+  logout: vi.fn(),
+  goToLanding: vi.fn(),
+}))
 
 vi.mock("frappe-react-sdk", () => ({
   useFrappeAuth: () => ({ logout }),
+}))
+
+vi.mock("@/shared/session", () => ({
+  LANDING_HREF: "/",
+  goToLanding,
 }))
 
 vi.mock("@/shared/api", async () => {
@@ -64,6 +72,7 @@ describe("hub compte mobile", () => {
   beforeEach(() => {
     stubMatchMedia(true)
     logout.mockReset()
+    goToLanding.mockReset()
   })
 
   afterEach(() => {
@@ -108,6 +117,7 @@ describe("hub compte mobile", () => {
     expect(button).not.toHaveClass("bg-destructive")
     await user.click(button)
     await waitFor(() => expect(logout).toHaveBeenCalled())
+    expect(goToLanding).toHaveBeenCalled()
   })
 
   it("ouvre le hub sur /account et le profil via l’onglet", () => {

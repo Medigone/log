@@ -8,6 +8,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { AppSidebar } from "@/layouts/AppSidebar"
 import { ConsoleBreadcrumb, BreadcrumbLabelProvider } from "@/layouts/ConsoleBreadcrumb"
 import { cn } from "@/lib/utils"
+import { deskRoot } from "@/shared/frappeCompat"
 import type { DistributionUser } from "@/shared/types/distribution"
 
 interface DesktopShellProps {
@@ -31,7 +32,7 @@ function ShellHeader({ user }: { user: DistributionUser }) {
       </div>
       {user.role !== "livreur" && (
         <div className="shrink-0 pr-4">
-          <a href="/desk" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <a href={deskRoot()} className={buttonVariants({ variant: "outline", size: "sm" })}>
             <LayoutDashboard data-icon="inline-start" />
             Bureau
           </a>

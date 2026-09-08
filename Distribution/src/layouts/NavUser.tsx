@@ -13,6 +13,7 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
 import { roleLabels } from "@/layouts/navItems"
 import { cn } from "@/lib/utils"
+import { goToLanding } from "@/shared/session"
 import type { DistributionUser } from "@/shared/types/distribution"
 
 function initials(name: string) {
@@ -36,7 +37,7 @@ export function NavUser({ user }: { user: DistributionUser }) {
 
   const handleLogout = async () => {
     await logout()
-    window.location.reload()
+    goToLanding()
   }
 
   return (

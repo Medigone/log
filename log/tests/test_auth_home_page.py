@@ -5,6 +5,7 @@ from unittest.mock import patch
 import frappe
 
 from log import auth
+from log.compat import desk_home_route, desk_root
 
 
 class TestAuthHomePage(unittest.TestCase):
@@ -21,6 +22,8 @@ class TestAuthHomePage(unittest.TestCase):
 	def test_guest_goes_to_client(self):
 		self.assertEqual(self._run_home_page("Guest", None, ["Guest"]), "client")
 		self.assertEqual(auth.get_home_page("Guest"), "client")
+		self.assertEqual(auth.LANDING_PATH, "/")
+		self.assertEqual(auth.SITE_TITLE, "Modern Pharma")
 
 	def test_website_user_customer_goes_to_client(self):
 		self.assertEqual(
@@ -35,13 +38,13 @@ class TestAuthHomePage(unittest.TestCase):
 				"System User",
 				["Administrator", "Customer", "Livreur", "Responsable", "System Manager", "All"],
 			),
-			"desk",
+			desk_home_route(),
 		)
 
 	def test_system_user_with_customer_role_is_not_sent_to_client(self):
 		self.assertEqual(
 			self._run_home_page("mixed@example.com", "System User", ["Customer", "All"]),
-			"desk",
+			desk_home_route(),
 		)
 
 	def test_livreur_goes_to_distribution(self):
@@ -65,7 +68,7 @@ class TestAuthHomePage(unittest.TestCase):
 	def test_system_manager_without_distribution_role_goes_to_desk(self):
 		self.assertEqual(
 			self._run_home_page("admin@example.com", "System User", ["System Manager", "All"]),
-			"desk",
+			desk_home_route(),
 		)
 
 	def test_distribution_app_is_hidden_from_website_users(self):
@@ -97,7 +100,7 @@ class TestAuthHomePage(unittest.TestCase):
 			self.assertRaises(frappe.Redirect),
 		):
 			auth.redirect_if_wrong_app("client")
-		self.assertEqual(flags.redirect_location, "/desk")
+		self.assertEqual(flags.redirect_location, desk_root())
 		flags = SimpleNamespace(redirect_location=None)
 		with (
 			patch.object(auth, "get_home_page", return_value="distribution"),

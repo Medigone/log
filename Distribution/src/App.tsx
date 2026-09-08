@@ -24,6 +24,7 @@ import { VehicleDetailsPage } from "@/features/fleet/VehicleDetailsPage";
 import { PublicTrackingPage } from "@/features/tracking/PublicTrackingPage";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { DesktopShell } from "@/layouts/DesktopShell";
+import { goToLanding } from "@/shared/session";
 import type { DistributionRole } from "@/shared/types/distribution";
 
 const RouteDetailsPage = lazy(() => import("@/features/planning/RouteDetailsPage").then((module) => ({ default: module.RouteDetailsPage })));
@@ -56,7 +57,7 @@ function AccessDenied() {
         <p className="mt-2 t-body text-muted-foreground">
           Votre compte doit recevoir un rôle Préparateur, Planificateur, Livreur, Caissier ou Responsable.
         </p>
-        <Button className="mt-6" variant="outline" onClick={() => logout().then(() => window.location.reload())}>
+        <Button className="mt-6" variant="outline" onClick={() => logout().then(() => goToLanding())}>
           Se déconnecter
         </Button>
       </div>

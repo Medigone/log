@@ -1,8 +1,8 @@
 {
   "id": "/client",
-  "name": "IntraPro — Portail client",
-  "short_name": "IntraPro",
-  "description": "Commandes, livraisons et notifications IntraPro",
+  "name": "Modern Pharma",
+  "short_name": "Modern Pharma",
+  "description": "Commandes, livraisons et notifications Modern Pharma",
   "start_url": "/client",
   "scope": "/client",
   "display": "standalone",

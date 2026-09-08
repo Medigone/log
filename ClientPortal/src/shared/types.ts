@@ -215,6 +215,16 @@ export interface CommuneOption {
   wilayaName: string
 }
 
+export interface CustomerCategoryOption {
+  name: string
+  label: string
+}
+
+export interface SignupOptions {
+  communes: CommuneOption[]
+  categories: CustomerCategoryOption[]
+}
+
 export interface GpsPosition {
   latitude: number
   longitude: number

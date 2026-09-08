@@ -6,10 +6,18 @@ import { NavUser } from "@/layouts/NavUser"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import type { PortalContext } from "@/shared/types"
 
-const logout = vi.fn()
+const { logout, goToLanding } = vi.hoisted(() => ({
+  logout: vi.fn(),
+  goToLanding: vi.fn(),
+}))
 
 vi.mock("frappe-react-sdk", () => ({
   useFrappeAuth: () => ({ logout }),
+}))
+
+vi.mock("@/shared/session", () => ({
+  LANDING_HREF: "/",
+  goToLanding,
 }))
 
 const context: PortalContext = {
@@ -57,6 +65,7 @@ describe("NavUser suivi de compte", () => {
   beforeEach(() => {
     stubMatchMedia()
     logout.mockReset()
+    goToLanding.mockReset()
   })
 
   it("n’affiche que le profil, mon compte et la déconnexion", async () => {
@@ -103,5 +112,18 @@ describe("NavUser suivi de compte", () => {
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
     expect(screen.getByText("Client")).toBeVisible()
     expect(screen.getByRole("menuitem", { name: "Déconnexion" })).toBeVisible()
+  })
+
+  it("envoie vers la landing après déconnexion", async () => {
+    logout.mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    renderNav()
+    const trigger = screen.getByRole("button", { name: /Client test/ })
+    trigger.focus()
+    await user.keyboard("{Enter}")
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Déconnexion" })).toBeVisible())
+    await user.click(screen.getByRole("menuitem", { name: "Déconnexion" }))
+    await waitFor(() => expect(logout).toHaveBeenCalled())
+    expect(goToLanding).toHaveBeenCalled()
   })
 })
