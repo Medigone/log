@@ -162,6 +162,7 @@ export function usePortalPwa() {
     isStandalone,
     isIos,
     canPrompt,
+    canInstall: !isStandalone,
     showBanner: !isStandalone && !dismissed,
     installing,
     install,

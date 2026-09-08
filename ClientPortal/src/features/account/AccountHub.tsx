@@ -1,8 +1,11 @@
 import { NavLink } from "react-router-dom"
-import { Banknote, Bell, ChevronRight, ClipboardList, LifeBuoy, LogOut, PackageCheck, PackagePlus, UserRound } from "lucide-react"
+import { Banknote, Bell, ChevronRight, ClipboardList, Download, LifeBuoy, LogOut, PackageCheck, PackagePlus, UserRound } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item"
 import { CustomerAvatar, usePortalLogout } from "@/layouts/NavUser"
+import { installAppFromAccount } from "@/pwa/installApp"
+import { usePortalPwa } from "@/pwa/usePortalPwa"
 import type { PortalContext } from "@/shared/types"
 
 const ACCOUNT_LINKS = [
@@ -13,6 +16,27 @@ const ACCOUNT_LINKS = [
   { to: "/payments", label: "Paiements", description: "Règlements et historique", icon: Banknote },
   { to: "/requests", label: "Demandes hors catalogue", description: "Articles absents du catalogue", icon: PackagePlus },
 ] as const
+
+function InstallAppAccountItem() {
+  const pwa = usePortalPwa()
+  if (!pwa.canInstall) return null
+  return (
+    <Item className="min-h-11 rounded-none border-b last:border-b-0">
+      <ItemMedia variant="icon">
+        <Download aria-hidden />
+      </ItemMedia>
+      <ItemContent>
+        <ItemTitle>Application</ItemTitle>
+        <ItemDescription>Ajouter à l’écran d’accueil</ItemDescription>
+      </ItemContent>
+      <ItemActions>
+        <Button type="button" size="sm" disabled={pwa.installing} onClick={() => void installAppFromAccount(pwa)}>
+          Installer
+        </Button>
+      </ItemActions>
+    </Item>
+  )
+}
 
 export function AccountHub({ context }: { context: PortalContext }) {
   const logout = usePortalLogout()
@@ -54,6 +78,7 @@ export function AccountHub({ context }: { context: PortalContext }) {
             </Item>
           )
         })}
+        <InstallAppAccountItem />
       </ItemGroup>
 
       <section className="flex flex-col gap-2">

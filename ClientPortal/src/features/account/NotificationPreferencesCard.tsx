@@ -53,11 +53,11 @@ const PUSH_COPY: Record<PushStatus, { title: string; description: string }> = {
   },
   "needs-install": {
     title: "Installez l’application",
-    description: "Sur iPhone, ajoutez IntraPro à l’écran d’accueil puis ouvrez-la pour activer les notifications.",
+    description: "Sur iPhone, ajoutez Modern Pharma à l’écran d’accueil puis ouvrez-la pour activer les notifications.",
   },
   denied: {
     title: "Notifications bloquées",
-    description: "Autorisez les notifications IntraPro dans les réglages du navigateur ou du téléphone.",
+    description: "Autorisez les notifications Modern Pharma dans les réglages du navigateur ou du téléphone.",
   },
   prompt: {
     title: "Activer les notifications téléphone",

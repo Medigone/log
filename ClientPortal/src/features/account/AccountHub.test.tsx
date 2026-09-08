@@ -6,9 +6,16 @@ import { AccountHub } from "@/features/account/AccountHub"
 import { AccountPage } from "@/features/account/AccountPage"
 import type { PortalContext } from "@/shared/types"
 
-const { logout, goToLanding } = vi.hoisted(() => ({
+const { logout, goToLanding, pwa } = vi.hoisted(() => ({
   logout: vi.fn(),
   goToLanding: vi.fn(),
+  pwa: {
+    canInstall: true,
+    isIos: false,
+    canPrompt: true,
+    installing: false,
+    install: vi.fn(),
+  },
 }))
 
 vi.mock("frappe-react-sdk", () => ({
@@ -18,6 +25,10 @@ vi.mock("frappe-react-sdk", () => ({
 vi.mock("@/shared/session", () => ({
   LANDING_HREF: "/",
   goToLanding,
+}))
+
+vi.mock("@/pwa/usePortalPwa", () => ({
+  usePortalPwa: () => pwa,
 }))
 
 vi.mock("@/shared/api", async () => {
@@ -73,6 +84,8 @@ describe("hub compte mobile", () => {
     stubMatchMedia(true)
     logout.mockReset()
     goToLanding.mockReset()
+    pwa.canInstall = true
+    pwa.install.mockReset()
   })
 
   afterEach(() => {
@@ -96,6 +109,8 @@ describe("hub compte mobile", () => {
     expect(screen.getByRole("link", { name: /Bons de livraison/ })).toHaveAttribute("href", "/deliveries")
     expect(screen.getByRole("link", { name: /Paiements/ })).toHaveAttribute("href", "/payments")
     expect(screen.getByRole("link", { name: /Demandes hors catalogue/ })).toHaveAttribute("href", "/requests")
+    expect(screen.getByRole("button", { name: "Installer" })).toBeVisible()
+    expect(screen.getByText("Ajouter à l’écran d’accueil")).toBeVisible()
     expect(screen.getByRole("heading", { name: "Assistance" })).toBeVisible()
     expect(screen.queryByText("Changer de client")).not.toBeInTheDocument()
     expect(screen.queryByRole("link", { name: "Accueil" })).not.toBeInTheDocument()
@@ -118,6 +133,28 @@ describe("hub compte mobile", () => {
     await user.click(button)
     await waitFor(() => expect(logout).toHaveBeenCalled())
     expect(goToLanding).toHaveBeenCalled()
+  })
+
+  it("propose Installer tant que l’application n’est pas installée", async () => {
+    const user = userEvent.setup()
+    pwa.install.mockResolvedValue("accepted")
+    render(
+      <MemoryRouter>
+        <AccountHub context={context} />
+      </MemoryRouter>,
+    )
+    await user.click(screen.getByRole("button", { name: "Installer" }))
+    expect(pwa.install).toHaveBeenCalled()
+  })
+
+  it("masque Installer une fois l’application installée", () => {
+    pwa.canInstall = false
+    render(
+      <MemoryRouter>
+        <AccountHub context={context} />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole("button", { name: "Installer" })).not.toBeInTheDocument()
   })
 
   it("ouvre le hub sur /account et le profil via l’onglet", () => {

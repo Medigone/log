@@ -49,6 +49,7 @@ vi.mock("@/shared/api", async () => {
 
 vi.mock("@/pwa/usePortalPwa", () => ({
   usePortalPwa: () => ({
+    canInstall: true,
     showBanner: false,
     isIos: false,
     isStandalone: false,

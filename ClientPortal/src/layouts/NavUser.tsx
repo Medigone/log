@@ -1,6 +1,6 @@
 import { useFrappeAuth } from "frappe-react-sdk"
 import { useNavigate } from "react-router-dom"
-import { ChevronsUpDown, LogOut, UserRound } from "lucide-react"
+import { ChevronsUpDown, Download, LogOut, UserRound } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { installAppFromAccount } from "@/pwa/installApp"
+import { usePortalPwa } from "@/pwa/usePortalPwa"
 import { goToLanding } from "@/shared/session"
 import type { PortalContext } from "@/shared/types"
 
@@ -50,6 +52,7 @@ export function usePortalLogout() {
 export function NavUser({ context, variant = "sidebar" }: { context: PortalContext; variant?: "sidebar" | "bar" }) {
   const { isMobile, setOpenMobile } = useSidebar()
   const logout = usePortalLogout()
+  const pwa = usePortalPwa()
   const navigate = useNavigate()
   const displayName = context.customer.customerName || context.user.fullName
   const contactName = context.user.fullName || context.user.email
@@ -110,6 +113,12 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
             <UserRound />
             Mon compte
           </DropdownMenuItem>
+          {pwa.canInstall ? (
+            <DropdownMenuItem disabled={pwa.installing} onClick={() => void installAppFromAccount(pwa)}>
+              <Download />
+              Installer
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>

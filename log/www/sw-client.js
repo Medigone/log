@@ -1,6 +1,6 @@
-/* Service worker du portail client IntraPro — push + ouverture des liens. */
-var ICON_URL = "/assets/log/pwa/icon-192.png";
-var BADGE_URL = "/assets/log/pwa/icon-192.png";
+/* Service worker du portail client Modern Pharma — push + ouverture des liens. */
+var ICON_URL = "/assets/log/pwa/icon-192.png?v=2";
+var BADGE_URL = "/assets/log/pwa/icon-192.png?v=2";
 var DEFAULT_URL = "/client";
 
 self.addEventListener("install", function (event) {
@@ -12,7 +12,7 @@ self.addEventListener("activate", function (event) {
 });
 
 self.addEventListener("push", function (event) {
-	var payload = { title: "IntraPro", body: "", url: DEFAULT_URL };
+	var payload = { title: "Modern Pharma", body: "", url: DEFAULT_URL };
 	try {
 		if (event.data) {
 			var parsed = event.data.json();

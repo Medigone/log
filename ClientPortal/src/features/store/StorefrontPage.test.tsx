@@ -402,7 +402,7 @@ describe("boutique portail", () => {
     )
     await user.click(screen.getByRole("button", { name: "Augmenter Article quantité" }))
     await user.click(screen.getByRole("button", { name: "Augmenter Article quantité" }))
-    expect(screen.getByLabelText("Quantité Article quantité")).toHaveValue(3)
+    expect(screen.getByLabelText("Quantité Article quantité")).toHaveValue("3")
     expect(screen.getByLabelText("Quantité Article quantité")).toHaveClass("text-center")
     expect(screen.getByRole("button", { name: "Ajouter au panier" })).toHaveClass("w-full")
     await user.click(screen.getByRole("button", { name: "Ajouter au panier" }))

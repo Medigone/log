@@ -6,9 +6,16 @@ import { NavUser } from "@/layouts/NavUser"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import type { PortalContext } from "@/shared/types"
 
-const { logout, goToLanding } = vi.hoisted(() => ({
+const { logout, goToLanding, pwa } = vi.hoisted(() => ({
   logout: vi.fn(),
   goToLanding: vi.fn(),
+  pwa: {
+    canInstall: true,
+    isIos: false,
+    canPrompt: true,
+    installing: false,
+    install: vi.fn(),
+  },
 }))
 
 vi.mock("frappe-react-sdk", () => ({
@@ -18,6 +25,10 @@ vi.mock("frappe-react-sdk", () => ({
 vi.mock("@/shared/session", () => ({
   LANDING_HREF: "/",
   goToLanding,
+}))
+
+vi.mock("@/pwa/usePortalPwa", () => ({
+  usePortalPwa: () => pwa,
 }))
 
 const context: PortalContext = {
@@ -66,6 +77,8 @@ describe("NavUser suivi de compte", () => {
     stubMatchMedia()
     logout.mockReset()
     goToLanding.mockReset()
+    pwa.canInstall = true
+    pwa.install.mockReset()
   })
 
   it("n’affiche que le profil, mon compte et la déconnexion", async () => {
@@ -75,6 +88,7 @@ describe("NavUser suivi de compte", () => {
     trigger.focus()
     await user.keyboard("{Enter}")
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
+    expect(screen.getByRole("menuitem", { name: "Installer" })).toBeVisible()
     expect(screen.queryByRole("menuitem", { name: /Commandes/ })).not.toBeInTheDocument()
     expect(screen.queryByRole("menuitem", { name: /Bons de livraison/ })).not.toBeInTheDocument()
     expect(screen.queryByRole("menuitem", { name: /Paiements/ })).not.toBeInTheDocument()
@@ -112,6 +126,29 @@ describe("NavUser suivi de compte", () => {
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
     expect(screen.getByText("Client")).toBeVisible()
     expect(screen.getByRole("menuitem", { name: "Déconnexion" })).toBeVisible()
+  })
+
+  it("masque Installer quand l’application est déjà installée", async () => {
+    pwa.canInstall = false
+    const user = userEvent.setup()
+    renderNav()
+    const trigger = screen.getByRole("button", { name: /Client test/ })
+    trigger.focus()
+    await user.keyboard("{Enter}")
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Mon compte" })).toBeVisible())
+    expect(screen.queryByRole("menuitem", { name: "Installer" })).not.toBeInTheDocument()
+  })
+
+  it("installe l’application depuis le menu compte", async () => {
+    const user = userEvent.setup()
+    pwa.install.mockResolvedValue("accepted")
+    renderNav()
+    const trigger = screen.getByRole("button", { name: /Client test/ })
+    trigger.focus()
+    await user.keyboard("{Enter}")
+    await waitFor(() => expect(screen.getByRole("menuitem", { name: "Installer" })).toBeVisible())
+    await user.click(screen.getByRole("menuitem", { name: "Installer" }))
+    expect(pwa.install).toHaveBeenCalled()
   })
 
   it("envoie vers la landing après déconnexion", async () => {
