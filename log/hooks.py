@@ -336,11 +336,37 @@ fixtures = [
         "dt": "Role",
         "filters": [["name", "in", ["Préparateur", "Planificateur", "Livreur", "Responsable", "Caissier"]]],
     },
+    {
+        "dt": "Customer Group",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Gros",
+                    "D.D",
+                    "Super Marché",
+                    "Laboratoire",
+                    "Grossiste Cosmétique",
+                    "Grossiste Alimentaire",
+                    "Grossiste Parapharm",
+                    "Interne",
+                    "Parapharm",
+                    "Cosmétique",
+                    "Supérette",
+                    "Pharmacie",
+                ],
+            ]
+        ],
+    },
 ]
 
 after_migrate = [
     "log.patches.v1_0.migrate_colis_to_delivery_note.run_after_migrate",
     "log.services.portal_push.ensure_vapid_keys",
+    "log.setup.customer_groups.ensure_customer_groups",
+    "log.setup.item_groups.ensure_item_groups",
+    "log.setup.brands.ensure_brands",
 ]
 
 page_renderer = ["log.pwa.ServiceWorkerRenderer"]

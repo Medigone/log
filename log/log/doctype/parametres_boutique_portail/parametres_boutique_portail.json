@@ -16,6 +16,8 @@
   "show_featured",
   "column_break_layout",
   "rail_limit",
+  "section_store",
+  "store_groups",
   "section_groups",
   "featured_groups"
  ],
@@ -88,7 +90,19 @@
    "reqd": 1
   },
   {
-   "description": "Groupes affichés en rayons permanents, dans cet ordre.",
+   "description": "Rayons proposés dans le filtre du Store, dans cet ordre. Vide = taxonomie canonique.",
+   "fieldname": "section_store",
+   "fieldtype": "Section Break",
+   "label": "Rayons du Store"
+  },
+  {
+   "fieldname": "store_groups",
+   "fieldtype": "Table",
+   "label": "Rayons",
+   "options": "Parametres Boutique Groupe"
+  },
+  {
+   "description": "Chips catalogue, dans cet ordre. Chaque rayon doit figurer parmi les rayons du Store. Vide = chips par défaut.",
    "fieldname": "section_groups",
    "fieldtype": "Section Break",
    "label": "Groupes mis en avant"
@@ -96,13 +110,13 @@
   {
    "fieldname": "featured_groups",
    "fieldtype": "Table",
-   "label": "Groupes",
+   "label": "Chips",
    "options": "Parametres Boutique Groupe"
   }
  ],
  "issingle": 1,
  "links": [],
- "modified": "2026-08-28 18:10:00.000000",
+ "modified": "2026-09-09 01:45:00.000000",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Parametres Boutique Portail",

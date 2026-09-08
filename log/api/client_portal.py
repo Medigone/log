@@ -1179,7 +1179,14 @@ def _catalog_total(filters: dict[str, Any], or_filters) -> int:
 
 
 def _catalog_groups() -> list[str]:
-	return frappe.get_all("Item Group", filters={"is_group": 0}, pluck="name", order_by="name asc")
+	from log.setup.item_groups import effective_store_groups
+
+	try:
+		from log.services.portal_merchandising import store_catalog_groups
+
+		return store_catalog_groups()
+	except Exception:
+		return effective_store_groups()
 
 
 def _empty_catalog(page_number: int, length: int) -> dict[str, Any]:

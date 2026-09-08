@@ -1,0 +1,96 @@
+[
+ {
+  "customer_group_name": "Gros",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 1,
+  "name": "Gros"
+ },
+ {
+  "customer_group_name": "D.D",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 1,
+  "name": "D.D"
+ },
+ {
+  "customer_group_name": "Super Marché",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Super Marché",
+  "parent_customer_group": "Gros"
+ },
+ {
+  "customer_group_name": "Laboratoire",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Laboratoire",
+  "parent_customer_group": "Gros"
+ },
+ {
+  "customer_group_name": "Grossiste Cosmétique",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Grossiste Cosmétique",
+  "parent_customer_group": "Gros"
+ },
+ {
+  "customer_group_name": "Grossiste Alimentaire",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Grossiste Alimentaire",
+  "parent_customer_group": "Gros"
+ },
+ {
+  "customer_group_name": "Grossiste Parapharm",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Grossiste Parapharm",
+  "parent_customer_group": "Gros"
+ },
+ {
+  "customer_group_name": "Interne",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Interne",
+  "parent_customer_group": "D.D"
+ },
+ {
+  "customer_group_name": "Parapharm",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Parapharm",
+  "parent_customer_group": "D.D"
+ },
+ {
+  "customer_group_name": "Cosmétique",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Cosmétique",
+  "parent_customer_group": "D.D"
+ },
+ {
+  "customer_group_name": "Supérette",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Supérette",
+  "parent_customer_group": "D.D"
+ },
+ {
+  "customer_group_name": "Pharmacie",
+  "docstatus": 0,
+  "doctype": "Customer Group",
+  "is_group": 0,
+  "name": "Pharmacie",
+  "parent_customer_group": "D.D"
+ }
+]
