@@ -68,12 +68,17 @@ describe("SignupForm", () => {
   })
 
   it("envoie la candidature et confirme", async () => {
+    const onSuccess = vi.fn()
     mocks.submit.mockResolvedValue({
       success: true,
       message: "Demande envoyée. Un conseiller vous contactera pour valider le compte.",
     })
     const user = userEvent.setup()
-    renderSignup()
+    render(
+      <MemoryRouter>
+        <SignupForm onSuccess={onSuccess} />
+      </MemoryRouter>,
+    )
     await user.type(screen.getByLabelText("Nom commercial"), "Pharmacie Test")
     await user.type(screen.getByLabelText("Prénom"), "Amina")
     await user.type(screen.getByLabelText("Nom"), "Benali")
@@ -86,6 +91,7 @@ describe("SignupForm", () => {
     await waitFor(() =>
       expect(screen.getByText(/demande envoyée/i)).toBeVisible(),
     )
+    expect(onSuccess).toHaveBeenCalledTimes(1)
     expect(mocks.submit).toHaveBeenCalledWith({
       commercialName: "Pharmacie Test",
       firstName: "Amina",

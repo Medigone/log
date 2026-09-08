@@ -1,11 +1,15 @@
+import { useState } from "react"
 import { Link } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { ACCENT } from "@/features/landing/landingCopy"
 import { SignupForm } from "@/features/signup/SignupForm"
+import { SignupStepper } from "@/features/signup/SignupStepper"
 
 const LOGO_SRC = "/assets/log/images/logo_mp_new.png"
 
 export function SignupPage() {
+  const [currentStep, setCurrentStep] = useState(1)
+
   return (
     <div className="min-h-svh bg-white text-zinc-950 antialiased">
       <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
@@ -28,9 +32,10 @@ export function SignupPage() {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-xl px-6 py-12">
-        <div className={cn("rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8")}>
-          <SignupForm />
+      <main className="mx-auto w-full max-w-3xl px-6 py-12">
+        <SignupStepper currentStep={currentStep} />
+        <div className={cn("mx-auto mt-8 max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm md:p-8")}>
+          <SignupForm onSuccess={() => setCurrentStep(2)} />
         </div>
         <p className="mt-6 text-center text-sm text-zinc-500">
           Déjà client ?{" "}

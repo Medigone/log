@@ -45,7 +45,7 @@ describe("App invité", () => {
 
 	it("affiche la landing et non le store", () => {
 		render(<App />)
-		expect(screen.getByRole("heading", { name: /le distributeur de vos rayons/i })).toBeInTheDocument()
+		expect(screen.getByRole("heading", { name: /la distribution, simplement/i })).toBeInTheDocument()
 		expect(screen.getByRole("link", { name: /^connexion$/i })).toHaveAttribute("href", "#/login")
 		expect(screen.queryByText(/article promo/i)).not.toBeInTheDocument()
 	})
@@ -81,6 +81,8 @@ describe("App invité", () => {
 		render(<App />)
 		await user.click(screen.getAllByRole("link", { name: /^devenir client$/i })[0])
 		expect(screen.getByRole("heading", { name: "Devenir client" })).toBeInTheDocument()
+		expect(screen.getByRole("list", { name: /étapes pour devenir client/i })).toBeInTheDocument()
+		expect(screen.getByText("Inscription en ligne")).toBeInTheDocument()
 		expect(screen.getByLabelText("Nom commercial")).toBeRequired()
 		expect(screen.getByLabelText("Catégorie client")).toBeInTheDocument()
 		expect(screen.getByRole("button", { name: "Envoyer la demande" })).toBeInTheDocument()
