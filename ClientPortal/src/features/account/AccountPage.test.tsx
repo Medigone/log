@@ -117,6 +117,8 @@ describe("onglet Localisation", () => {
     Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } })
     const user = userEvent.setup()
     renderAccount()
+    expect(screen.getByTestId("map")).toBeVisible()
+    expect(screen.getByText("Aucun point de livraison enregistré.")).toBeVisible()
 
     await user.click(screen.getByRole("button", { name: "Enregistrer ma position actuelle" }))
     await waitFor(() =>
@@ -145,8 +147,7 @@ describe("onglet Localisation", () => {
   it("enregistre un pin posé sur la carte sans règle de 50 m", async () => {
     const user = userEvent.setup()
     renderAccount()
-
-    await user.click(screen.getByRole("button", { name: "Localiser sur la carte" }))
+    expect(screen.getByTestId("map")).toBeVisible()
     await user.click(screen.getByRole("button", { name: "Poser un pin" }))
     expect(screen.getByTestId("marker")).toHaveAttribute("data-lat", "36.7")
     await user.click(screen.getByRole("button", { name: "Enregistrer la position de la carte" }))
@@ -158,6 +159,85 @@ describe("onglet Localisation", () => {
       }),
     )
   })
+
+  it("propose de corriger la position déjà enregistrée", async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({ coords: { latitude: 35.7, longitude: -0.63, accuracy: 12 } } as GeolocationPosition),
+    )
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } })
+    const user = userEvent.setup()
+    renderAccount({
+      ...context,
+      gpsConfigured: true,
+      gpsLatitude: 35.69,
+      gpsLongitude: -0.64,
+      gpsAccuracy: 0,
+      gpsCapturedAt: "2026-08-28",
+    })
+
+    expect(screen.getByText("Configurée")).toBeVisible()
+    expect(screen.getByTestId("map")).toBeVisible()
+    expect(screen.getByTestId("marker")).toHaveAttribute("data-lat", "35.69")
+    expect(screen.queryByRole("button", { name: "Enregistrer ma position actuelle" })).not.toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Corriger ma position" }))
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(screen.getByRole("button", { name: "Utiliser ma position actuelle" })).toBeVisible()
+    await user.click(screen.getByRole("button", { name: "Poser un pin" }))
+    await user.click(screen.getByRole("button", { name: "Enregistrer la nouvelle position" }))
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({
+        source: "map",
+        latitude: 36.7,
+        longitude: 3.05,
+      }),
+    )
+  })
+
+  it("peut corriger avec le GPS après avoir choisi de corriger", async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({ coords: { latitude: 35.7, longitude: -0.63, accuracy: 12 } } as GeolocationPosition),
+    )
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: { getCurrentPosition } })
+    const user = userEvent.setup()
+    renderAccount({
+      ...context,
+      gpsConfigured: true,
+      gpsLatitude: 35.69,
+      gpsLongitude: -0.64,
+      gpsAccuracy: 0,
+      gpsCapturedAt: "2026-08-28",
+    })
+
+    await user.click(screen.getByRole("button", { name: "Corriger ma position" }))
+    await user.click(screen.getByRole("button", { name: "Utiliser ma position actuelle" }))
+    await waitFor(() =>
+      expect(mocks.update).toHaveBeenCalledWith({
+        source: "device",
+        latitude: 35.7,
+        longitude: -0.63,
+        accuracy: 12,
+      }),
+    )
+  })
+
+  it("met à jour la wilaya depuis la commune", async () => {
+    const user = userEvent.setup()
+    renderAccount()
+
+    expect(screen.getByText("Géolocalisation")).toBeVisible()
+    await user.click(screen.getByRole("combobox", { name: "Commune" }))
+    await user.click(screen.getByRole("button", { name: /Alger Centre/ }))
+    expect(screen.getByLabelText("Wilaya")).toHaveValue("Alger")
+    await user.click(screen.getByRole("button", { name: "Enregistrer l’adresse" }))
+    await waitFor(() =>
+      expect(mocks.updateProfile).toHaveBeenCalledWith({
+        fullName: "Client",
+        email: "client@example.com",
+        phone: "",
+        commune: "COM-1",
+      }),
+    )
+  })
 })
 
 describe("onglet Profil", () => {
@@ -166,7 +246,20 @@ describe("onglet Profil", () => {
     mocks.updateProfile.mockResolvedValue({ success: true })
   })
 
-  it("met à jour la wilaya depuis la commune et n'autorise pas le code client", async () => {
+  it("n’affiche Enregistrer le profil qu’après une modification", async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={["/account"]}>
+        <AccountPage context={context} onUpdated={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByRole("button", { name: "Enregistrer le profil" })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText("Téléphone"), "0550000000")
+    expect(screen.getByRole("button", { name: "Enregistrer le profil" })).toBeVisible()
+  })
+
+  it("met à jour les coordonnées sans afficher la commune", async () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter initialEntries={["/account"]}>
@@ -175,6 +268,7 @@ describe("onglet Profil", () => {
     )
 
     expect(screen.getByLabelText("Code client")).toBeDisabled()
+    expect(screen.getByLabelText("E-mail client")).toHaveValue("client@example.com")
     expect(screen.getByText("Client")).toBeVisible()
     expect(screen.queryByText("Compte portail : client@example.com")).not.toBeInTheDocument()
     expect(screen.getByLabelText("Photo du client")).toBeEnabled()
@@ -182,18 +276,20 @@ describe("onglet Profil", () => {
     expect(screen.queryByRole("tab", { name: "Solde comptable" })).not.toBeInTheDocument()
     await user.clear(screen.getByLabelText("Utilisateur"))
     await user.type(screen.getByLabelText("Utilisateur"), "Amine Test")
+    await user.clear(screen.getByLabelText("E-mail client"))
     await user.type(screen.getByLabelText("E-mail client"), "client@test.com")
     await user.type(screen.getByLabelText("Téléphone"), "0550000000")
-    await user.click(screen.getByRole("combobox", { name: "Commune" }))
-    await user.click(screen.getByRole("button", { name: /Alger Centre/ }))
-    expect(screen.getByLabelText("Wilaya")).toHaveValue("Alger")
+    expect(screen.queryByLabelText("Commune")).not.toBeInTheDocument()
+    expect(screen.queryByLabelText("Wilaya")).not.toBeInTheDocument()
+    expect(screen.queryByText("Géolocalisation")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Enregistrer le profil" })).toBeVisible()
     await user.click(screen.getByRole("button", { name: "Enregistrer le profil" }))
     await waitFor(() =>
       expect(mocks.updateProfile).toHaveBeenCalledWith({
         fullName: "Amine Test",
         email: "client@test.com",
         phone: "0550000000",
-        commune: "COM-1",
+        commune: "",
       }),
     )
   })

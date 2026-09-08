@@ -401,6 +401,14 @@ class TestClientPortalValidation(unittest.TestCase):
 		self.assertEqual(values["custom_gps_precision_m"], 20)
 		self.assertEqual(values["custom_gps_capture_user"], "client@example.com")
 
+	def test_portal_customer_payload_falls_back_to_user_contact(self):
+		customer = frappe._dict(name="CUST-1", customer_name="Client test")
+		user = frappe._dict(name="client@example.com", email="client@example.com", mobile_no="0550123456")
+		with patch.object(client_portal, "_commune_label", return_value=None):
+			payload = client_portal._portal_customer_payload(customer, user)
+		self.assertEqual(payload["email"], "client@example.com")
+		self.assertEqual(payload["phone"], "0550123456")
+
 	def test_profile_update_copies_wilaya_from_commune(self):
 		user = frappe._dict(name="client@example.com", email="client@example.com")
 		customer = SimpleNamespace(

@@ -78,7 +78,7 @@ def _current_portal_customer() -> tuple[str, frappe._dict]:
 	if not user or user == "Guest":
 		frappe.throw(_("Authentification requise."), frappe.PermissionError)
 
-	user_fields = ["name", "enabled", "user_type", "full_name", "email"]
+	user_fields = ["name", "enabled", "user_type", "full_name", "email", "mobile_no"]
 	if frappe.db.has_column("User", PASSWORD_CHANGE_FIELD):
 		user_fields.append(PASSWORD_CHANGE_FIELD)
 	user_row = frappe.db.get_value("User", user, user_fields, as_dict=True)
@@ -136,14 +136,16 @@ def _commune_label(commune: str | None) -> str | None:
 	return cstr(frappe.db.get_value("Commune", commune, "nom")) or commune
 
 
-def _portal_customer_payload(customer: frappe._dict) -> dict[str, Any]:
+def _portal_customer_payload(customer: frappe._dict, user: frappe._dict | None = None) -> dict[str, Any]:
 	commune = customer.get("custom_commune")
 	wilaya = customer.get("custom_wilaya")
+	user_email = cstr((user or {}).get("email") or (user or {}).get("name") or "")
+	user_phone = (user or {}).get("mobile_no") or (user or {}).get("phone")
 	return {
 		"name": customer.name,
 		"customerName": customer.customer_name or customer.name,
-		"phone": customer.mobile_no,
-		"email": customer.email_id,
+		"phone": customer.mobile_no or user_phone,
+		"email": customer.email_id or user_email or None,
 		"commune": commune,
 		"communeName": _commune_label(commune),
 		"wilaya": wilaya,
@@ -975,7 +977,7 @@ def get_portal_context():
 			"fullName": user.full_name or user.email or user.name,
 			"email": user.email or user.name,
 		},
-		"customer": _portal_customer_payload(customer),
+		"customer": _portal_customer_payload(customer, user),
 		"company": company,
 		"currency": _currency(customer, company),
 		**_gps_context(customer),
@@ -1068,7 +1070,7 @@ def update_customer_profile(payload):
 			"fullName": full_name,
 			"email": user.email or user.name,
 		},
-		"customer": _portal_customer_payload(updated),
+		"customer": _portal_customer_payload(updated, user),
 	}
 
 
@@ -1097,7 +1099,7 @@ def _customer_image_filename(filename: str) -> str:
 
 @frappe.whitelist(methods=["POST"])
 def update_customer_image(payload):
-	customer_name, _user = _current_portal_customer()
+	customer_name, user = _current_portal_customer()
 	data = _payload(payload)
 	filename = _customer_image_filename(cstr(data.get("filename")))
 	content = _decode_customer_image(cstr(data.get("imageData")))
@@ -1114,7 +1116,7 @@ def update_customer_image(payload):
 	).insert(ignore_permissions=True)
 	frappe.db.set_value("Customer", customer_name, "image", file_doc.file_url)
 	updated = _customer_data(customer_name)
-	return {"success": True, "customer": _portal_customer_payload(updated)}
+	return {"success": True, "customer": _portal_customer_payload(updated, user)}
 
 
 @frappe.whitelist(methods=["POST"])

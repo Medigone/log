@@ -86,9 +86,11 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        className="min-w-56 rounded-lg"
-        side={compact ? "top" : isMobile ? "bottom" : "right"}
-        align="end"
+        className={cn("rounded-lg", compact ? "min-w-56" : "w-[calc(var(--anchor-width)+1rem)] min-w-0")}
+        side="top"
+        align="start"
+        alignOffset={compact ? 0 : -8}
+        collisionPadding={compact ? undefined : 0}
         sideOffset={4}
       >
         <DropdownMenuGroup>
@@ -111,7 +113,7 @@ export function NavUser({ context, variant = "sidebar" }: { context: PortalConte
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => void logout()}>
+          <DropdownMenuItem variant="destructive" onClick={() => void logout()}>
             <LogOut />
             Déconnexion
           </DropdownMenuItem>

@@ -22,7 +22,7 @@ export function MobileHeader() {
 
   return (
     <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b bg-background px-3 pt-[env(safe-area-inset-top)]">
-      <NavLink to="/" aria-label="IntraPro" className="flex size-11 shrink-0 items-center justify-center">
+      <NavLink to="/" aria-label="Modern Pharma" className="flex size-11 shrink-0 items-center justify-center">
         <BrandLogo compact className="size-8" />
       </NavLink>
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>

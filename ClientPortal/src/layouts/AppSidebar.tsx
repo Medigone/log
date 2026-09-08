@@ -29,13 +29,10 @@ export function AppSidebar({ context }: { context: PortalContext }) {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<NavLink to="/" />} tooltip="IntraPro">
-              <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <BrandLogo compact className="size-8" />
-              </div>
+            <SidebarMenuButton size="lg" render={<NavLink to="/" />} tooltip="Modern Pharma">
+              <BrandLogo compact className="size-8" alt="" />
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">IntraPro</span>
-                <span className="truncate text-xs">Portail client</span>
+                <span className="truncate font-medium">Modern Pharma</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

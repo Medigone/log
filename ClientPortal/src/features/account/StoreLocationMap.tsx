@@ -25,9 +25,11 @@ function MapClickHandler({ onPick }: { onPick: (latitude: number, longitude: num
 export function StoreLocationMap({
   pin,
   onPick,
+  editable = true,
 }: {
   pin: [number, number] | null
   onPick: (latitude: number, longitude: number) => void
+  editable?: boolean
 }) {
   const center = pin || DEFAULT_MAP_CENTER
 
@@ -40,19 +42,23 @@ export function StoreLocationMap({
         attributionControl={false}
         className="h-full w-full"
       >
-        <MapClickHandler onPick={onPick} />
+        {editable ? <MapClickHandler onPick={onPick} /> : null}
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         {pin && (
           <Marker
             position={pin}
             icon={pinIcon}
-            draggable
-            eventHandlers={{
-              dragend(event) {
-                const { lat, lng } = event.target.getLatLng()
-                onPick(lat, lng)
-              },
-            }}
+            draggable={editable}
+            eventHandlers={
+              editable
+                ? {
+                    dragend(event) {
+                      const { lat, lng } = event.target.getLatLng()
+                      onPick(lat, lng)
+                    },
+                  }
+                : undefined
+            }
           />
         )}
       </MapContainer>

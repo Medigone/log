@@ -123,7 +123,7 @@ describe("coquille mobile", () => {
     expect(screen.getByRole("heading", { name: "Boutique" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Notifications" })).toBeVisible()
     expect(screen.getByRole("button", { name: "Rechercher un article, une référence ou un rayon" })).toBeVisible()
-    expect(screen.getByRole("link", { name: "IntraPro" })).toBeVisible()
+    expect(screen.getByRole("link", { name: "Modern Pharma" })).toBeVisible()
   })
 
   it("garde Accueil actif sur un rayon et Promotions sur la vue offres", () => {
