@@ -11,6 +11,7 @@ import { InitialPasswordChangePage } from "@/features/auth/InitialPasswordChange
 import { CartPage } from "@/features/cart/CartPage"
 import { DeliveriesPage } from "@/features/deliveries/DeliveriesPage"
 import { DeliveryDetailPage } from "@/features/deliveries/DeliveryDetailPage"
+import { LandingPage } from "@/features/landing/LandingPage"
 import { NotificationsPage } from "@/features/notifications/NotificationsPage"
 import { OrderDetailPage } from "@/features/orders/OrderDetailPage"
 import { OrdersPage } from "@/features/orders/OrdersPage"
@@ -37,11 +38,18 @@ function SessionGate({ label }: { label: string }) {
   )
 }
 
-function PortalRoutes() {
-  const { currentUser, isValidating } = useFrappeAuth()
+function GuestRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
+}
+
+function AuthenticatedRoutes({ currentUser }: { currentUser: string }) {
   const { data, isLoading, error, mutate } = usePortalContext(currentUser)
-  if (isValidating) return <SessionGate label="Vérification de la session…" />
-  if (!currentUser || currentUser === "Guest") return <LoginPage />
   if (isLoading) return <SessionGate label="Chargement du portail…" />
   if (error || !data?.message) {
     return (
@@ -59,6 +67,7 @@ function PortalRoutes() {
       <ClientShell context={context}>
         <Routes>
           <Route path="/" element={<StorefrontPage context={context} />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/store" element={<Navigate to="/" replace />} />
           <Route path="/products/:itemCode" element={<ProductPage />} />
           <Route path="/cart" element={<CartPage context={context} />} />
@@ -77,6 +86,13 @@ function PortalRoutes() {
       </ClientShell>
     </CartProvider>
   )
+}
+
+function PortalRoutes() {
+  const { currentUser, isValidating } = useFrappeAuth()
+  if (isValidating) return <SessionGate label="Vérification de la session…" />
+  if (!currentUser || currentUser === "Guest") return <GuestRoutes />
+  return <AuthenticatedRoutes currentUser={currentUser} />
 }
 
 export default function App() {

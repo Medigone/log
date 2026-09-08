@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
+import { LayoutDashboard } from "lucide-react"
 import { useLocation } from "react-router-dom"
+import { buttonVariants } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { SidebarInset, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -13,12 +15,12 @@ interface DesktopShellProps {
   user: DistributionUser
 }
 
-function ShellHeader() {
+function ShellHeader({ user }: { user: DistributionUser }) {
   const { isMobile } = useSidebar()
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-      <div className="flex min-w-0 items-center gap-2 px-4">
+      <div className="flex min-w-0 flex-1 items-center gap-2 px-4">
         {isMobile && (
           <>
             <SidebarTrigger className="-ml-1" aria-label="Ouvrir le menu de navigation" title="Ouvrir le menu de navigation" />
@@ -27,6 +29,14 @@ function ShellHeader() {
         )}
         <ConsoleBreadcrumb />
       </div>
+      {user.role !== "livreur" && (
+        <div className="shrink-0 pr-4">
+          <a href="/desk" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <LayoutDashboard data-icon="inline-start" />
+            Bureau
+          </a>
+        </div>
+      )}
     </header>
   )
 }
@@ -41,7 +51,7 @@ export function DistributionShell({ children, user }: DesktopShellProps) {
         <SidebarProvider>
           <AppSidebar user={user} />
           <SidebarInset>
-            <ShellHeader />
+            <ShellHeader user={user} />
             <div
               className={cn(
                 "mx-auto flex w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8",

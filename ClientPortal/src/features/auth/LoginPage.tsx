@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom"
 import { LoginForm } from "@/components/login-form"
 
 export function LoginPage() {
@@ -5,6 +6,11 @@ export function LoginPage() {
     <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-6 md:p-10">
       <div className="w-full max-w-sm md:max-w-4xl">
         <LoginForm />
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          <Link to="/" className="underline-offset-4 hover:underline">
+            Retour à l’accueil
+          </Link>
+        </p>
       </div>
     </div>
   )

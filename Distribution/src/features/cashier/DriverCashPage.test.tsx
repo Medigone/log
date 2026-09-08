@@ -63,6 +63,7 @@ describe("DriverCashPage", () => {
     expect(screen.queryByText("Samir")).not.toBeInTheDocument();
     expect(screen.getByText("Total des caisses affichées")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /\+ mouvement/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remettre les caisses/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Karim" })).not.toBeInTheDocument();
   });
 

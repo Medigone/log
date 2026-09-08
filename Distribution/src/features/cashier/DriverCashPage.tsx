@@ -21,7 +21,6 @@ import {
   displayedBalanceTotal,
   driverCashListKpis,
   filterCashBoxes,
-  firstPositiveBox,
   parseCashSort,
   parseCashStates,
   plural,
@@ -78,8 +77,6 @@ export function DriverCashPage() {
   );
   const dialogBox = boxes.find((box) => box.driver === dialog?.driver);
   const filtersActive = Boolean(search || states.size || sort !== "balance");
-  const oldestPositive = firstPositiveBox(filtered);
-
   const listSearch = (overrides: Record<string, string> = {}) => {
     const params = new URLSearchParams();
     if (search) params.set("q", search);
@@ -162,22 +159,10 @@ export function DriverCashPage() {
           </div>
         }
         actions={
-          <>
-            <Button variant="outline" onClick={() => void refreshList()} disabled={listLoading}>
-              <RefreshCw />
-              Actualiser
-            </Button>
-            <Button
-              disabled={!oldestPositive}
-              onClick={() => {
-                if (!oldestPositive) return;
-                setError("");
-                setDialog({ driver: oldestPositive.driver, type: "Remise", amount: String(oldestPositive.balance) });
-              }}
-            >
-              Remettre les caisses pleines {kpis.toHandoverCount}
-            </Button>
-          </>
+          <Button variant="outline" onClick={() => void refreshList()} disabled={listLoading}>
+            <RefreshCw />
+            Actualiser
+          </Button>
         }
       />
 

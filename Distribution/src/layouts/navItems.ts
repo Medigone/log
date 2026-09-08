@@ -12,13 +12,13 @@ import {
 import type { DistributionRole } from "@/shared/types/distribution"
 
 /** Groupes affichés dans la barre latérale, dans cet ordre. */
-export const navGroups = ["exploitation", "ressources", "encaissement"] as const
+export const navGroups = ["exploitation", "encaissement", "ressources"] as const
 export type NavGroup = (typeof navGroups)[number]
 
 export const navGroupLabels: Record<NavGroup, string> = {
   exploitation: "Exploitation",
   ressources: "Ressources",
-  encaissement: "Encaissement",
+  encaissement: "Caisse",
 }
 
 /** Clé de compteur : voir navBadges.ts */
@@ -58,7 +58,7 @@ export function visibleNavItems(role: DistributionRole) {
   return navItems.filter((item) => item.roles.includes(role))
 }
 
-/** Items groupés, groupes vides retirés — un caissier ne voit que « Encaissement ». */
+/** Items groupés, groupes vides retirés — un caissier ne voit que « Caisse ». */
 export function groupedNavItems(role: DistributionRole) {
   const visible = visibleNavItems(role)
   return navGroups

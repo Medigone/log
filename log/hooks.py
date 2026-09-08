@@ -11,14 +11,15 @@ app_license = "mit"
 required_apps = ["frappe/erpnext"]
 
 # Each item in the list will be shown as an app in the apps page
-app_logo_url = "/assets/log/images/intrapro-mark.png"
+app_logo_url = "/assets/log/images/logo_mp_new.png"
 
 add_to_apps_screen = [
     {
         "name": "log",
-        "logo": "/assets/log/images/intrapro-mark.png",
+        "logo": "/assets/log/images/logo_mp_new.png",
         "title": "IntraPro Distribution",
         "route": "/distribution",
+        "has_permission": "log.auth.can_show_distribution_app",
     }
 ]
 
@@ -62,7 +63,8 @@ doctype_js = {
 # ----------
 
 # application home page (will override Website Settings)
-# home_page = "login"
+home_page = "client"
+get_website_user_home_page = "log.auth.get_home_page"
 
 # website user home page (by Role)
 # role_home_page = {
@@ -313,7 +315,7 @@ override_whitelisted_methods = {
 # }
 
 website_redirects = [
-    {"source": r"/favicon\.ico", "target": "/assets/log/images/intrapro-mark.png"},
+    {"source": r"/favicon\.ico", "target": "/assets/log/images/logo_mp_new.png"},
 ]
 
 website_route_rules = [

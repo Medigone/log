@@ -9,6 +9,10 @@ SCRIPT_TAG_PATTERN = re.compile(r"\<script[^<]*\</script\>")
 CLOSING_SCRIPT_TAG_PATTERN = re.compile(r"</script\>")
 
 def get_context(context):
+    from log.auth import redirect_if_wrong_app
+
+    redirect_if_wrong_app("distribution")
+
     csrf_token = frappe.sessions.get_csrf_token()
     frappe.db.commit()
     context.csrf_token = csrf_token

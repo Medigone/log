@@ -62,7 +62,8 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/caisses");
     expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
-    expect(screen.queryByText("Encaissement")).not.toBeInTheDocument();
+    expect(screen.queryByText("Caisse")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", "/desk");
   });
 
   it("donne au responsable les parcours opérationnels groupés", () => {
@@ -71,7 +72,7 @@ describe("DesktopShell", () => {
     expect(hrefs).toEqual(expect.arrayContaining(["/today", "/preparation", "/planning", "/deliveries", "/livreurs", "/vehicules", "/stock", "/cashier", "/caisses"]));
     expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
-    expect(screen.getByText("Encaissement")).toBeInTheDocument();
+    expect(screen.getByText("Caisse")).toBeInTheDocument();
     expect(screen.queryByText("Console")).not.toBeInTheDocument();
   });
 
@@ -90,8 +91,9 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/livreurs");
     expect(hrefs).not.toContain("/preparation");
     expect(hrefs).not.toContain("/stock");
-    expect(screen.getAllByText("Encaissement").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Caisse").length).toBeGreaterThan(0);
     expect(screen.queryByText("Exploitation")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", "/desk");
   });
 
   it("permet de fermer puis de rouvrir le menu", async () => {
@@ -113,6 +115,17 @@ describe("DesktopShell", () => {
     expect(screen.getByText("Préparation en retard")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Masquer les anomalies" }));
     expect(screen.queryByText("1 anomalie")).not.toBeInTheDocument();
+  });
+
+  it("affiche un lien Bureau vers le desk pour les rôles internes", () => {
+    renderShell(manager);
+    const desk = screen.getByRole("link", { name: "Bureau" });
+    expect(desk).toHaveAttribute("href", "/desk");
+  });
+
+  it("n'affiche pas le lien Bureau pour un livreur", () => {
+    renderShell({ name: "driver@test", email: "driver@test", fullName: "Livreur Test", role: "livreur" });
+    expect(screen.queryByRole("link", { name: "Bureau" })).not.toBeInTheDocument();
   });
 
   it("ouvre la recherche vers une page de la console", async () => {

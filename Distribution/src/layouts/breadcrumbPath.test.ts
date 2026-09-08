@@ -15,7 +15,7 @@ describe("crumbsFromPath", () => {
     expect(labels("/today")).toEqual(["Exploitation", "Tableau de bord"])
     expect(labels("/deliveries")).toEqual(["Exploitation", "Livraisons"])
     expect(labels("/stock")).toEqual(["Ressources", "Stock véhicules"])
-    expect(labels("/cashier")).toEqual(["Encaissement", "Caisse Tournées"])
+    expect(labels("/cashier")).toEqual(["Caisse", "Caisse Tournées"])
   })
 
   it("garde le lien vers la liste sur une fiche détail", () => {
@@ -30,12 +30,12 @@ describe("crumbsFromPath", () => {
       { label: "i1m9bh99va", to: undefined },
     ])
     expect(hops("/cashier/LIV-1")).toEqual([
-      { label: "Encaissement", to: undefined },
+      { label: "Caisse", to: undefined },
       { label: "Caisse Tournées", to: "/cashier" },
       { label: "LIV-1", to: undefined },
     ])
     expect(hops("/caisses/i1m9bh99va")).toEqual([
-      { label: "Encaissement", to: undefined },
+      { label: "Caisse", to: undefined },
       { label: "Caisses livreurs", to: "/caisses" },
       { label: "i1m9bh99va", to: undefined },
     ])

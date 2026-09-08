@@ -7,8 +7,8 @@ describe("navItems", () => {
     expect(groupedNavItems("preparateur").map((group) => group.group)).toEqual(["exploitation", "ressources"])
     expect(groupedNavItems("responsable").map((group) => group.group)).toEqual([
       "exploitation",
-      "ressources",
       "encaissement",
+      "ressources",
     ])
   })
 

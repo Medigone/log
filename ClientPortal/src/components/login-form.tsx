@@ -46,7 +46,7 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
                 <BrandLogo className="mb-2 h-10 md:hidden" />
                 <h1 className="text-2xl font-bold">Connexion</h1>
                 <p className="text-balance text-muted-foreground">
-                  Utilisez le compte client reçu par invitation.
+                  Saisissez votre identifiant et votre mot de passe.
                 </p>
               </div>
               {error && (
@@ -55,10 +55,10 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
                 </Alert>
               )}
               <Field>
-                <FieldLabel htmlFor="email">Adresse e-mail</FieldLabel>
+                <FieldLabel htmlFor="username">Identifiant</FieldLabel>
                 <Input
-                  id="email"
-                  type="email"
+                  id="username"
+                  type="text"
                   autoComplete="username"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
@@ -101,11 +101,11 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
             </FieldGroup>
           </form>
           <div className="relative hidden flex-col justify-between bg-primary p-8 text-primary-foreground md:flex">
-            <BrandLogo className="h-10 w-fit rounded-lg bg-background px-4 py-3" />
+            <div className="flex items-center gap-2.5">
+              <BrandLogo className="h-10 w-auto brightness-0 invert" />
+              <span className="text-sm font-semibold tracking-tight">Modern Pharma</span>
+            </div>
             <div className="flex flex-col gap-6">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
-                Espace clients
-              </p>
               <h2 className="max-w-lg text-3xl font-semibold leading-tight">
                 Vos commandes et livraisons, réunies au même endroit.
               </h2>
@@ -120,9 +120,6 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
                 </p>
               </div>
             </div>
-            <p className="text-xs text-primary-foreground/80">
-              Accès sur invitation réservé aux clients IntraPro.
-            </p>
           </div>
         </CardContent>
       </Card>
