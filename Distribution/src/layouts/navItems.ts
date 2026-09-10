@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Package,
   Route,
+  ScanBarcode,
   Truck,
   UserRound,
   Wallet,
@@ -41,6 +42,7 @@ export const navItems: NavItem[] = [
   { to: "/livreurs", label: "Livreurs", icon: UserRound, group: "ressources", roles: ["planificateur", "responsable"] },
   { to: "/vehicules", label: "Véhicules", icon: Car, group: "ressources", roles: ["planificateur", "responsable"] },
   { to: "/stock", label: "Stock véhicules", icon: Package, group: "ressources", badgeKey: "toLoad", roles: ["preparateur", "planificateur", "responsable"] },
+  { to: "/codes-barres", label: "Codes-barres", icon: ScanBarcode, group: "ressources", roles: ["preparateur", "planificateur", "responsable"] },
   { to: "/cashier", label: "Caisse Tournées", icon: Banknote, group: "encaissement", badgeKey: "cashToControl", roles: ["caissier", "responsable"] },
   { to: "/caisses", label: "Caisses livreurs", icon: Wallet, group: "encaissement", roles: ["responsable"] },
 ]

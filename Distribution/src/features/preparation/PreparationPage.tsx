@@ -1,26 +1,16 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { FilterSelect } from "@/components/FilterSelect";
-import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
-import {
-  OrderItemsList,
-  OrderItemsSubGrid,
-  PreparationSubTableGrid,
-} from "@/features/preparation/PreparationSubTableGrid";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle,
-  ClipboardList,
   Package,
   Printer,
   QrCode,
@@ -28,26 +18,25 @@ import {
 import { ScanConsole } from "@/features/preparation/ScanConsole";
 import { PickLinesTable } from "@/features/preparation/pickLineRows";
 import { ScanJournal } from "@/features/preparation/ScanJournal";
-import { scanClock, type PickLine, type ScanLogEntry, type ScanTone } from "@/features/preparation/pickScan";
+import { scanClock, type PickLine, type ScanEntryMode, type ScanLogEntry, type ScanTone } from "@/features/preparation/pickScan";
 import { apiErrorMessage } from "@/shared/api/distribution";
 import {
   usePickSession,
   usePreparationMutations,
-  usePreparationQueue,
   useRecentPickLists,
   applyBarcodeScan,
   getPickGroupLocations,
-  orderIsModified,
-  orderReadyToComplete,
+  pickListDueDate,
+  pickListIncomplete,
   usePickListOrderChanged,
   type DeliveryNoteResult,
   type PickGroup,
-  type SalesOrderRow,
 } from "@/shared/api/preparation";
 import { PickListQueue } from "@/features/preparation/PickListQueue";
 import { OrderModifiedAlert } from "@/features/preparation/OrderModifiedAlert";
 import { ReturnControlPanel, usePendingReturnRoutes } from "@/features/preparation/ReturnControlPanel";
 import { PickFloorView, type ScanSnapshot } from "@/features/preparation/PickFloorView";
+import { ScanQtyDialog, type ScanQtyPrompt } from "@/features/preparation/ScanQtyDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Dialog,
@@ -62,41 +51,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertsChip } from "@/features/today/AlertsSummary";
-import { ListStateIcon } from "@/features/preparation/ListStateIcon";
-import {
-  PreparationMoreFilters,
-  PreparationQueueShell,
-  PreparationSelectionBar,
-  preparationChipClass,
-} from "@/features/preparation/PreparationQueueShell";
-import { PreparationStageKpis, type PreparationStage } from "@/features/preparation/PreparationStageKpis";
-import {
-  listStateForOrder,
-  orderPickListNames,
-  orderPickProgress,
-  preparationOrderColumns,
-  remainingOf,
-} from "@/features/preparation/preparationOrderColumns";
-import { salesOrderDeskStatus, orderPickListState } from "@/shared/design/statusTone";
 import { cn } from "@/lib/utils";
-import { formatLongDate, formatQuantity, formatShortDate } from "@/shared/format";
+import { formatLongDate, formatQuantity } from "@/shared/format";
 
 const PREPARATION_STEPS = ["Sélection", "Prélèvement", "Contrôle"] as const;
-
-type DateScope = "all" | "today" | "tomorrow" | "overdue";
-type ListFilter = "all" | "none" | "draft" | "submitted";
-type StockFilter = "all" | "shortage" | "complete";
-
-function dateScopeFromParam(value: string | null): DateScope {
-  if (value === "today" || value === "tomorrow" || value === "overdue") return value;
-  return "all";
-}
-
-function stockFilterFromParam(searchParams: URLSearchParams): StockFilter {
-  if (searchParams.get("complete") === "1") return "complete";
-  if (searchParams.get("shortage") === "1") return "shortage";
-  return "all";
-}
 
 function localIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -107,11 +65,28 @@ function localIsoDate(date: Date) {
 
 const formatQty = formatQuantity;
 
+const PICK_QTY_SAVE_MS = 400;
+
 function groupPickedQty(group: PickGroup, picked: Record<string, number>) {
   return getPickGroupLocations(group).reduce(
     (sum, location) => sum + (picked[location.name] ?? location.picked_qty ?? 0),
     0,
   );
+}
+
+function locationIdentity(pickLists: Array<{ locations?: Array<{ name: string }> }>) {
+  return pickLists
+    .flatMap((pickList) => (pickList.locations || []).map((location) => location.name))
+    .sort()
+    .join("\0");
+}
+
+function qtyByLocation(pickLists: Array<{ locations?: Array<{ name: string; picked_qty?: number }> }>) {
+  const next: Record<string, number> = {};
+  pickLists.flatMap((pickList) => pickList.locations || []).forEach((location) => {
+    next[location.name] = location.picked_qty ?? 0;
+  });
+  return next;
 }
 
 function PreparationStepBar({ current }: { current: (typeof PREPARATION_STEPS)[number] }) {
@@ -140,6 +115,42 @@ function PreparationStepBar({ current }: { current: (typeof PREPARATION_STEPS)[n
   );
 }
 
+type PendingReset = { key: string; itemCode: string; itemName: string; picked: number; source: "location" | "floor" };
+
+function ResetPickQtyDialog({
+  target,
+  onClose,
+  onConfirm,
+}: {
+  target: PendingReset | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!target) return null;
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <p className="t-micro text-muted-foreground">Confirmation requise</p>
+          <DialogTitle>Remettre à 0</DialogTitle>
+          <DialogDescription>
+            La quantité prélevée de {target.itemCode} · {target.itemName} ({formatQuantity(target.picked)})
+            sera effacée. Cette action enregistre immédiatement 0 sur la liste.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Annuler
+          </Button>
+          <Button type="button" variant="destructive" onClick={onConfirm}>
+            Remettre à 0
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function PickSessionSkeleton() {
   return (
     <div className="space-y-4" aria-hidden="true">
@@ -147,40 +158,6 @@ function PickSessionSkeleton() {
       <Skeleton className="h-48 w-full rounded-xl" />
       <Skeleton className="h-24 w-full rounded-xl" />
     </div>
-  );
-}
-
-function stockShortages(order: SalesOrderRow) {
-  return order.stock_shortages || [];
-}
-
-function OpenDraftListsButton({
-  names,
-  onOpen,
-  disabled,
-  icon,
-}: {
-  names: string[];
-  onOpen: (names: string[]) => void;
-  disabled?: boolean;
-  icon?: boolean;
-}) {
-  const many = names.length > 1;
-  const label = many
-    ? `Ouvrir les ${names.length} listes de prélèvement`
-    : `Ouvrir la liste ${names[0]}`;
-  return (
-    <Button
-      type="button"
-      size={icon ? "icon-sm" : "sm"}
-      variant={icon ? "ghost" : "outline"}
-      disabled={disabled}
-      aria-label={label}
-      title={icon ? label : undefined}
-      onClick={() => onOpen(names)}
-    >
-      {icon ? <ClipboardList /> : many ? "Ouvrir les listes" : "Ouvrir la liste"}
-    </Button>
   );
 }
 
@@ -203,494 +180,6 @@ function printQr(note: DeliveryNoteResult) {
   win.print();
 }
 
-function SalesOrderPicker({
-  onOpenPickLists,
-  onShowPickLists,
-  presetSelection,
-  requestedDateScope,
-}: {
-  onOpenPickLists: (names: string[], created?: boolean) => void;
-  onShowPickLists: () => void;
-  presetSelection?: string[];
-  requestedDateScope?: DateScope;
-}) {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [search, setSearch] = useState("");
-  const [dateScope, setDateScope] = useState<DateScope>(() => dateScopeFromParam(searchParams.get("dateScope")));
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [wilaya, setWilaya] = useState("");
-  const [commune, setCommune] = useState("");
-  const [customer, setCustomer] = useState("");
-  const [listFilter, setListFilter] = useState<ListFilter>("all");
-  const [stockFilter, setStockFilter] = useState<StockFilter>(() => stockFilterFromParam(searchParams));
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
-  const [selection, setSelection] = useState<Record<string, true>>({});
-  const [activeStage, setActiveStage] = useState<PreparationStage["id"] | null>(null);
-
-  const { data, error, isLoading } = usePreparationQueue();
-  const isMobile = useIsMobile();
-
-  const orders = useMemo(() => data?.message || [], [data?.message]);
-  const visible = orders;
-  const wilayas = useMemo(
-    () => Array.from(new Set(visible.map((order) => order.custom_wilaya).filter((value): value is string => Boolean(value)))).sort((a, b) => a.localeCompare(b, "fr")),
-    [visible],
-  );
-  const communes = useMemo(
-    () => Array.from(visible
-      .filter((order) => (!wilaya || order.custom_wilaya === wilaya) && order.custom_commune)
-      .reduce((values, order) => {
-        const value = order.custom_commune as string;
-        values.set(value, order.custom_commune_nom || value);
-        return values;
-      }, new Map<string, string>()))
-      .map(([value, label]) => ({ value, label }))
-      .sort((a, b) => a.label.localeCompare(b.label, "fr")),
-    [visible, wilaya],
-  );
-  const customers = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          visible
-            .map((order) => order.customer_name || order.customer)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ).sort((a, b) => a.localeCompare(b, "fr")),
-    [visible],
-  );
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const today = isoDateWithOffset(0);
-    const tomorrow = isoDateWithOffset(1);
-    return visible.filter((row) => {
-      const matchesSearch = !q || [row.name, row.customer, row.customer_name, row.custom_commune, row.custom_commune_nom, row.custom_wilaya]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q));
-      if (!matchesSearch) return false;
-      if (wilaya && row.custom_wilaya !== wilaya) return false;
-      if (commune && row.custom_commune !== commune) return false;
-      if (customer && (row.customer_name || row.customer) !== customer) return false;
-      if (listFilter !== "all" && orderPickListState(row) !== listFilter) return false;
-
-      const orderDate = row.delivery_date || row.transaction_date || "";
-      if (dateScope === "today" && orderDate !== today) return false;
-      if (dateScope === "tomorrow" && orderDate !== tomorrow) return false;
-      if (dateScope === "overdue" && (!orderDate || orderDate >= today)) return false;
-      if (dateFrom && (!orderDate || orderDate < dateFrom)) return false;
-      if (dateTo && (!orderDate || orderDate > dateTo)) return false;
-      if (stockFilter === "shortage" && !stockShortages(row).length) return false;
-      if (stockFilter === "complete" && !orderReadyToComplete(row)) return false;
-      return true;
-    });
-  }, [commune, customer, dateFrom, dateScope, dateTo, listFilter, stockFilter, visible, search, wilaya]);
-
-  const filtersActive = Boolean(
-    search ||
-      dateScope !== "all" ||
-      dateFrom ||
-      dateTo ||
-      wilaya ||
-      commune ||
-      customer ||
-      listFilter !== "all" ||
-      stockFilter !== "all",
-  );
-
-  const today = isoDateWithOffset(0);
-  const stages = useMemo((): PreparationStage[] => {
-    const toPick = visible.filter((row) => orderPickListState(row) === "none").length;
-    const inProgress = visible.filter((row) => orderPickListState(row) === "draft").length;
-    const toComplete = visible.filter((row) => orderReadyToComplete(row)).length;
-    const ready = visible.filter(
-      (row) => orderPickListState(row) === "submitted" && !row.pick_incomplete,
-    ).length;
-    const shortage = visible.filter((row) => stockShortages(row).length > 0).length;
-    const total = Math.max(1, toPick + inProgress + toComplete + ready);
-    return [
-      { id: "toPick", step: 1, title: "Sans liste", value: toPick, unit: "commandes", ratio: toPick / total },
-      { id: "inProgress", step: 2, title: "En cours", value: inProgress, unit: "listes brouillon", ratio: inProgress / total },
-      {
-        id: "toComplete",
-        step: 3,
-        title: "À compléter",
-        value: toComplete,
-        unit: "reliquats",
-        ratio: toComplete / total,
-        exception: shortage ? { label: `${shortage} rupture`, tone: "danger" } : undefined,
-        barTone: toComplete ? "danger" : "default",
-      },
-      {
-        id: "ready",
-        step: 4,
-        title: "Prêtes à livrer",
-        value: ready,
-        unit: "listes soumises",
-        ratio: ready / total,
-        barTone: "success",
-      },
-    ];
-  }, [visible]);
-
-  const presetKey = (presetSelection ?? []).join("|");
-  useEffect(() => {
-    if (!presetSelection?.length) return;
-    setSelection(Object.fromEntries(presetSelection.map((id) => [id, true as const])));
-    setStockFilter("complete");
-    setActiveStage("toComplete");
-  }, [presetKey, presetSelection]);
-
-  useEffect(() => {
-    if (!requestedDateScope) return;
-    setDateScope(requestedDateScope);
-    setDateFrom("");
-    setDateTo("");
-    setActiveStage(null);
-  }, [requestedDateScope]);
-
-  const openDetail = (order: SalesOrderRow) => {
-    navigate(`/preparation/commandes/${encodeURIComponent(order.name)}`);
-  };
-
-  const resetFilters = () => {
-    setSearch("");
-    setDateScope("all");
-    setDateFrom("");
-    setDateTo("");
-    setWilaya("");
-    setCommune("");
-    setCustomer("");
-    setListFilter("all");
-    setStockFilter("all");
-    setNotPicked(false);
-    setActiveStage(null);
-  };
-
-  const emptyOrders = (
-    <Empty className="border border-dashed">
-      <EmptyHeader>
-        <EmptyMedia variant="icon">
-          <Package />
-        </EmptyMedia>
-        <EmptyTitle>{visible.length ? "Aucune commande ne correspond" : "Aucune commande"}</EmptyTitle>
-        <EmptyDescription>
-          {visible.length
-            ? "Modifiez ou réinitialisez les filtres."
-            : "Les commandes soumises apparaîtront ici, qu’une liste de prélèvement existe ou non."}
-        </EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        {visible.length ? (
-          <Button variant="outline" size="sm" onClick={resetFilters}>
-            Réinitialiser
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm" onClick={onShowPickLists}>
-            Voir les listes
-          </Button>
-        )}
-      </EmptyContent>
-    </Empty>
-  );
-
-  const toggleMobileItems = (name: string) => {
-    setExpandedOrders((current) => {
-      const next = new Set(current);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
-  };
-
-  const selectedIds = Object.keys(selection).filter((id) => filtered.some((row) => row.name === id));
-  const selectedOrders = filtered.filter((row) => selection[row.name]);
-  const remainingSelected = selectedOrders.reduce((sum, row) => sum + remainingOf(row), 0);
-  const selectedListNames = Array.from(
-    new Set(
-      selectedOrders
-        .filter((row) => !orderIsModified(row))
-        .flatMap((row) => orderPickListNames(row)),
-    ),
-  );
-  const allFilteredSelected = filtered.length > 0 && filtered.every((row) => selection[row.name]);
-
-  const toggle = (id: string) =>
-    setSelection((prev) => {
-      const next = { ...prev };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-
-  const toggleAll = () => {
-    if (allFilteredSelected) {
-      setSelection({});
-      return;
-    }
-    setSelection(Object.fromEntries(filtered.map((row) => [row.name, true as const])));
-  };
-
-  const pickStage = (id: PreparationStage["id"]) => {
-    setDateScope("all");
-    setStockFilter("all");
-    setListFilter("all");
-    setActiveStage(id);
-    if (id === "toPick") {
-      setListFilter("none");
-    } else if (id === "inProgress") {
-      setListFilter("draft");
-    } else if (id === "toComplete") {
-      setStockFilter("complete");
-      const names = visible.filter((row) => orderReadyToComplete(row)).map((row) => row.name);
-      setSelection(Object.fromEntries(names.map((name) => [name, true as const])));
-    } else {
-      setListFilter("submitted");
-      const names = visible
-        .filter((row) => orderPickListState(row) === "submitted" && !row.pick_incomplete)
-        .map((row) => row.name);
-      setSelection(Object.fromEntries(names.map((name) => [name, true as const])));
-    }
-  };
-
-  const orderColumns = preparationOrderColumns({
-    today,
-    selection,
-    allFilteredSelected,
-    onToggle: toggle,
-    onToggleAll: toggleAll,
-    onOpenDetail: openDetail,
-  });
-
-  return (
-    <div className="flex flex-col gap-5">
-      {error && (
-        <Alert>
-          <AlertDescription>Impossible de charger les commandes à préparer.</AlertDescription>
-        </Alert>
-      )}
-
-      <PreparationStageKpis stages={stages} active={activeStage} onPick={pickStage} />
-
-      <PreparationQueueShell
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Rechercher une commande, un client, une ville…"
-        searchAriaLabel="Rechercher une commande"
-        chips={
-          <>
-            <button
-              type="button"
-              className={preparationChipClass(dateScope === "overdue")}
-              onClick={() => {
-                setDateScope((current) => (current === "overdue" ? "all" : "overdue"));
-                setActiveStage(null);
-              }}
-            >
-              <span className="size-1.5 rounded-full bg-destructive" /> Échéance dépassée
-            </button>
-            <button
-              type="button"
-              className={preparationChipClass(stockFilter === "complete")}
-              onClick={() => {
-                setStockFilter((current) => (current === "complete" ? "all" : "complete"));
-                setActiveStage((current) => (current === "toComplete" ? null : current));
-              }}
-            >
-              <span className="size-1.5 rounded-full bg-[#d97706]" /> À compléter
-            </button>
-          </>
-        }
-        moreFilters={
-          <PreparationMoreFilters>
-            <FilterSelect
-              label="Échéance"
-              value={dateScope}
-              onChange={(value) => {
-                setDateScope(value as DateScope);
-                setDateFrom("");
-                setDateTo("");
-              }}
-              options={[
-                { value: "all", label: "Toutes" },
-                { value: "today", label: "Aujourd’hui" },
-                { value: "tomorrow", label: "Demain" },
-                { value: "overdue", label: "En retard" },
-              ]}
-            />
-            <FilterSelect
-              label="Stock"
-              value={stockFilter}
-              onChange={(value) => setStockFilter(value as StockFilter)}
-              options={[
-                { value: "all", label: "Tous" },
-                { value: "shortage", label: "Rupture" },
-                { value: "complete", label: "À compléter" },
-              ]}
-            />
-            <FilterSelect
-              label="Liste"
-              value={listFilter}
-              onChange={(value) => setListFilter(value as ListFilter)}
-              options={[
-                { value: "all", label: "Toutes" },
-                { value: "draft", label: "Brouillon" },
-                { value: "submitted", label: "Soumise" },
-              ]}
-            />
-            <FilterSelect
-              label="Wilaya"
-              value={wilaya || "all"}
-              onChange={(value) => {
-                setWilaya(value === "all" ? "" : value);
-                setCommune("");
-              }}
-              options={[{ value: "all", label: "Toutes" }, ...wilayas.map((value) => ({ value, label: value }))]}
-            />
-            <FilterSelect
-              label="Commune"
-              value={commune || "all"}
-              onChange={(value) => setCommune(value === "all" ? "" : value)}
-              options={[{ value: "all", label: "Toutes" }, ...communes.map((option) => ({ value: option.value, label: option.label }))]}
-            />
-            <FilterSelect
-              label="Client"
-              value={customer || "all"}
-              onChange={(value) => setCustomer(value === "all" ? "" : value)}
-              options={[{ value: "all", label: "Tous" }, ...customers.map((value) => ({ value, label: value }))]}
-            />
-            <DateRangeFilter
-              from={dateFrom}
-              to={dateTo}
-              onChange={(range) => {
-                setDateFrom(range.from);
-                setDateTo(range.to);
-                setDateScope("all");
-              }}
-            />
-          </PreparationMoreFilters>
-        }
-        countLabel={`${filtered.length} / ${visible.length} commandes`}
-        heading={<h2 className="sr-only">Commandes ({filtered.length})</h2>}
-        filtersActive={filtersActive}
-        onReset={resetFilters}
-        selectionBar={
-          selectedIds.length > 0 ? (
-            <PreparationSelectionBar
-              summary={`${selectedIds.length} commande${selectedIds.length > 1 ? "s" : ""} sélectionnée${selectedIds.length > 1 ? "s" : ""}`}
-              hint={
-                remainingSelected > 0
-                  ? `${formatQuantity(remainingSelected)} article(s) à prélever`
-                  : "rien à prélever"
-              }
-              actionLabel={selectedListNames.length > 1 ? "Ouvrir les listes" : "Ouvrir la liste"}
-              actionDisabled={selectedListNames.length === 0}
-              onAction={() => onOpenPickLists(selectedListNames)}
-              onClear={() => setSelection({})}
-            />
-          ) : undefined
-        }
-      >
-        {isLoading && !orders.length ? (
-          <Skeleton className="h-72 w-full rounded-none" aria-hidden="true" />
-        ) : !filtered.length ? (
-          <div className="p-4">{emptyOrders}</div>
-        ) : (
-          <>
-            {!isMobile ? (
-              <div>
-                <PreparationSubTableGrid
-                  label="Commandes"
-                  columns={orderColumns}
-                  rows={filtered}
-                  getRowId={(row) => row.name}
-                  expandContent={(row) => <OrderItemsSubGrid items={row.items || []} />}
-                  canExpand={(row) => (row.items?.length ?? 0) > 0}
-                  isLoading={isLoading && !orders.length}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2 p-3">
-              {filtered.map((row) => {
-                const lists = orderPickListNames(row);
-                const desk = salesOrderDeskStatus(row.status);
-                const items = row.items || [];
-                const itemsOpen = expandedOrders.has(row.name);
-                const { picked, requested, percent } = orderPickProgress(row);
-                return (
-                  <div key={row.name} className="flex flex-col gap-3 rounded-lg border p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <Checkbox
-                          checked={Boolean(selection[row.name])}
-                          onCheckedChange={() => toggle(row.name)}
-                          aria-label={`Sélectionner ${row.name}`}
-                        />
-                        <button type="button" className="min-w-0 text-left" onClick={() => openDetail(row)}>
-                          <div className="num text-sm font-medium">{row.name}</div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {row.customer_name || row.customer} · {row.custom_commune_nom || row.custom_commune || "—"} ·{" "}
-                            {formatShortDate(row.delivery_date || row.transaction_date)} · {row.total_qty || 0} art.
-                          </div>
-                        </button>
-                      </div>
-                      {lists.length ? (
-                        <OpenDraftListsButton names={lists} onOpen={onOpenPickLists} disabled={orderIsModified(row)} />
-                      ) : null}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <ListStateIcon state={listStateForOrder(row)} orderChanged={orderIsModified(row)} />
-                      <StatusBadge tone={desk.tone} size="sm">{desk.label}</StatusBadge>
-                      {stockShortages(row).length > 0 ? (
-                        <StatusBadge tone="danger" size="sm">Stock insuffisant</StatusBadge>
-                      ) : null}
-                      {orderReadyToComplete(row) ? (
-                        <StatusBadge tone="warning" size="sm">À compléter</StatusBadge>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div
-                        role="progressbar"
-                        aria-label={`Prélèvement ${formatQuantity(picked)} sur ${formatQuantity(requested)}`}
-                        aria-valuemin={0}
-                        aria-valuemax={100}
-                        aria-valuenow={percent}
-                        className="h-1.5 min-w-12 flex-1 overflow-hidden rounded-full bg-muted"
-                      >
-                        <div className="h-full rounded-full bg-foreground" style={{ width: `${percent}%` }} />
-                      </div>
-                      <span className="num t-meta text-muted-foreground">
-                        {formatQuantity(picked)} / {formatQuantity(requested)} · {percent} %
-                      </span>
-                    </div>
-                    {items.length ? (
-                      <>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          aria-expanded={itemsOpen}
-                          onClick={() => toggleMobileItems(row.name)}
-                        >
-                          {itemsOpen ? "Masquer les articles" : `Afficher les articles (${items.length})`}
-                        </Button>
-                        {itemsOpen ? <OrderItemsList items={items} /> : null}
-                      </>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </div>
-            )}
-          </>
-        )}
-      </PreparationQueueShell>
-    </div>
-  );
-}
-
-
 function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickListNames: string[]; creationConfirmed: boolean; onBack: () => void }) {
   const [picked, setPicked] = useState<Record<string, number>>({});
   const [createdNotes, setCreatedNotes] = useState<DeliveryNoteResult[]>([]);
@@ -702,6 +191,9 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const [scanError, setScanError] = useState("");
   const [scanTone, setScanTone] = useState<ScanTone>("idle");
   const [scanIncrement, setScanIncrement] = useState(1);
+  const [scanMode, setScanMode] = useState<ScanEntryMode>("unit");
+  const [pendingQty, setPendingQty] = useState<(ScanQtyPrompt & { code: string; locationName: string; warehouse?: string }) | null>(null);
+  const [pendingReset, setPendingReset] = useState<PendingReset | null>(null);
   const [scanLog, setScanLog] = useState<ScanLogEntry[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [lastScan, setLastScan] = useState<ScanSnapshot | null>(null);
@@ -712,7 +204,9 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const scanInputRef = useRef<HTMLInputElement>(null);
   const confirmBlButtonRef = useRef<HTMLButtonElement>(null);
   const pickedRef = useRef<Record<string, number>>({});
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanSeq = useRef(0);
+  const qtyTouched = useRef(false);
 
   const isMobile = useIsMobile();
   const { data, mutate, error, isLoading } = usePickSession(pickListNames);
@@ -723,9 +217,52 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
   const draftOpen = pickLists.some((item) => item.docstatus === 0);
   const modificationPending = Boolean(session?.modification_pending);
   const floorMode = isMobile && draftOpen && !reviewing;
+  const locationKey = locationIdentity(pickLists);
+  const pickListsRef = useRef(pickLists);
+  const modificationPendingRef = useRef(modificationPending);
+  const updateQuantitiesRef = useRef(updateQuantities);
+  pickListsRef.current = pickLists;
+  modificationPendingRef.current = modificationPending;
+  updateQuantitiesRef.current = updateQuantities;
+
+  const persistQty = async () => {
+    if (modificationPendingRef.current || !qtyTouched.current) return;
+    const current = pickedRef.current;
+    try {
+      for (const pickList of pickListsRef.current.filter((item) => item.docstatus === 0)) {
+        await updateQuantitiesRef.current(
+          pickList.name,
+          (pickList.locations || []).map((location) => ({
+            name: location.name,
+            picked_qty: current[location.name] ?? 0,
+          })),
+        );
+      }
+    } catch (mutationError) {
+      setErrorMessage(apiErrorMessage(mutationError));
+    }
+  };
+
+  const flushPersist = () => {
+    if (persistTimer.current) {
+      clearTimeout(persistTimer.current);
+      persistTimer.current = null;
+    }
+    void persistQty();
+  };
+
+  const schedulePersist = () => {
+    if (modificationPendingRef.current) return;
+    if (persistTimer.current) clearTimeout(persistTimer.current);
+    persistTimer.current = setTimeout(() => {
+      persistTimer.current = null;
+      void persistQty();
+    }, PICK_QTY_SAVE_MS);
+  };
 
   usePickListOrderChanged(pickListNames, (reason) => {
     setOrderChangedNotice(reason || "Commande modifiée, la liste a été actualisée.");
+    flushPersist();
     mutate();
   });
 
@@ -739,15 +276,43 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     void import("html5-qrcode");
   }, []);
 
+  const mutateRef = useRef(mutate);
+  mutateRef.current = mutate;
+
   useEffect(() => {
-    if (!session?.pick_lists) return;
-    const next: Record<string, number> = {};
-    session.pick_lists.flatMap((pickList) => pickList.locations || []).forEach((loc) => {
-      next[loc.name] = loc.picked_qty ?? 0;
+    if (!locationKey) {
+      qtyTouched.current = false;
+      return;
+    }
+    let cancelled = false;
+    const apply = (lists: typeof pickLists) => {
+      if (cancelled || qtyTouched.current) return;
+      const next = qtyByLocation(lists.length ? lists : pickListsRef.current);
+      pickedRef.current = next;
+      setPicked(next);
+    };
+    apply(pickListsRef.current);
+    void Promise.resolve(mutateRef.current()).then((result) => {
+      const lists = (result as { message?: { pick_lists?: typeof pickLists } } | undefined)?.message?.pick_lists;
+      apply(Array.isArray(lists) ? lists : pickListsRef.current);
     });
-    pickedRef.current = next;
-    setPicked(next);
-  }, [session]);
+    return () => {
+      cancelled = true;
+    };
+  }, [locationKey]);
+
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flushPersist();
+    };
+    window.addEventListener("pagehide", flushPersist);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", flushPersist);
+      document.removeEventListener("visibilitychange", onHide);
+      flushPersist();
+    };
+  }, []);
 
   const grouped = session?.grouped || [];
   const blCount = session?.sales_orders?.length || pickLists.length;
@@ -805,17 +370,6 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     if (confirmingBl) confirmBlButtonRef.current?.focus();
   }, [confirmingBl]);
 
-  const persistQty = async () => {
-    if (modificationPending) return;
-    for (const pickList of pickLists.filter((item) => item.docstatus === 0)) {
-      await updateQuantities(
-        pickList.name,
-        (pickList.locations || []).map((location) => ({ name: location.name, picked_qty: picked[location.name] ?? 0 })),
-      );
-    }
-    mutate();
-  };
-
   const fillRequested = () => {
     if (!session || modificationPending) return;
     const next: Record<string, number> = {};
@@ -824,6 +378,8 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     });
     pickedRef.current = next;
     setPicked(next);
+    qtyTouched.current = true;
+    schedulePersist();
   };
 
   const handleAcknowledge = async () => {
@@ -847,6 +403,10 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     if (modificationPending) return;
     setErrorMessage("");
     try {
+      if (persistTimer.current) {
+        clearTimeout(persistTimer.current);
+        persistTimer.current = null;
+      }
       await persistQty();
       const notes: DeliveryNoteResult[] = [];
       for (const pickList of pickLists) {
@@ -868,40 +428,69 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
     setScanLog((current) => [{ ...entry, id: `scan-${scanSeq.current}`, time: scanClock() }, ...current].slice(0, 20));
   };
 
+  const snapshotFor = (
+    itemCode: string,
+    itemName: string,
+    warehouse: string | undefined,
+    pickedState: Record<string, number>,
+    increment: number,
+  ): ScanSnapshot => {
+    const group =
+      grouped.find((item) => item.item_code === itemCode && (item.warehouse || "") === (warehouse || "")) ||
+      grouped.find((item) => item.item_code === itemCode);
+    const requested = group?.stock_qty ?? 0;
+    const pickedQty = group ? groupPickedQty(group, pickedState) : 0;
+    return {
+      itemCode,
+      itemName,
+      warehouse: group?.warehouse || warehouse,
+      picked: pickedQty,
+      requested,
+      remaining: Math.max(0, requested - pickedQty),
+      increment,
+    };
+  };
+
+  const recordAppliedScan = (
+    applied: Extract<ReturnType<typeof applyBarcodeScan>, { ok: true }>,
+    itemName: string,
+    barcode: string,
+    increment: number,
+  ) => {
+    const previous = pickedRef.current[applied.locationName] ?? 0;
+    const next = { ...pickedRef.current, [applied.locationName]: applied.nextQty };
+    pickedRef.current = next;
+    setPicked(next);
+    setLastScannedKey(applied.locationName);
+    const snapshot = snapshotFor(applied.itemCode, itemName, applied.warehouse, next, increment);
+    setLastScan(snapshot);
+    const complete = applied.nextQty >= (locations.find((location) => location.name === applied.locationName)?.stock_qty ?? snapshot.requested);
+    setScanMessage(`${applied.itemCode} · ${applied.nextQty} / ${snapshot.requested}${complete ? " — ligne complète" : ""}`);
+    setScanTone("ok");
+    pushLog({
+      key: applied.locationName,
+      code: barcode,
+      label: itemName,
+      amount: applied.nextQty - previous,
+      tone: "ok",
+    });
+    qtyTouched.current = true;
+    schedulePersist();
+  };
+
   const applyScan = async (raw: string, restoreFocus = true) => {
     const value = raw.trim();
     if (!value || reviewing || scanning || !draftOpen || modificationPending) return;
     setScanMessage("");
     setScanError("");
     setScanTone("idle");
-    const snapshotFor = (
-      itemCode: string,
-      itemName: string,
-      warehouse: string | undefined,
-      pickedState: Record<string, number>,
-      increment: number,
-    ): ScanSnapshot => {
-      const group =
-        grouped.find((item) => item.item_code === itemCode && (item.warehouse || "") === (warehouse || "")) ||
-        grouped.find((item) => item.item_code === itemCode);
-      const requested = group?.stock_qty ?? 0;
-      const pickedQty = group ? groupPickedQty(group, pickedState) : 0;
-      return {
-        itemCode,
-        itemName,
-        warehouse: group?.warehouse || warehouse,
-        picked: pickedQty,
-        requested,
-        remaining: Math.max(0, requested - pickedQty),
-        increment,
-      };
-    };
+    let openedQty = false;
     try {
       const result = await scanPickItem(value, pickListNames);
       const increment = result.increment || 1;
       setScanIncrement(increment);
-      const applied = applyBarcodeScan(locations, pickedRef.current, result.item_code, increment);
       const itemName = result.item_name || result.item_code;
+      const applied = applyBarcodeScan(locations, pickedRef.current, result.item_code, increment);
       if (!applied.ok) {
         const matched = locations.find((location) => location.item_code === result.item_code);
         if (matched) setLastScannedKey(matched.name);
@@ -923,23 +512,27 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         }
         return;
       }
-      const previous = pickedRef.current[applied.locationName] ?? 0;
-      const next = { ...pickedRef.current, [applied.locationName]: applied.nextQty };
-      pickedRef.current = next;
-      setPicked(next);
-      setLastScannedKey(applied.locationName);
-      const snapshot = snapshotFor(applied.itemCode, itemName, applied.warehouse, next, increment);
-      setLastScan(snapshot);
-      const complete = applied.nextQty >= (locations.find((location) => location.name === applied.locationName)?.stock_qty ?? snapshot.requested);
-      setScanMessage(`${applied.itemCode} · ${applied.nextQty} / ${snapshot.requested}${complete ? " — ligne complète" : ""}`);
-      setScanTone("ok");
-      pushLog({
-        key: applied.locationName,
-        code: value,
-        label: itemName,
-        amount: applied.nextQty - previous,
-        tone: "ok",
-      });
+      if (scanMode === "qty") {
+        const current = pickedRef.current[applied.locationName] ?? 0;
+        const requested = locations.find((location) => location.name === applied.locationName)?.stock_qty ?? 0;
+        openedQty = true;
+        setPendingQty({
+          code: value,
+          locationName: applied.locationName,
+          warehouse: applied.warehouse,
+          itemCode: applied.itemCode,
+          itemName,
+          picked: current,
+          requested,
+          remaining: Math.max(0, requested - current),
+          increment,
+          uom: locations.find((location) => location.name === applied.locationName)?.stock_uom
+            || locations.find((location) => location.name === applied.locationName)?.uom,
+        });
+        setLastScannedKey(applied.locationName);
+        return;
+      }
+      recordAppliedScan(applied, itemName, value, increment);
     } catch (scanException) {
       const detail = apiErrorMessage(scanException);
       setScanError(
@@ -951,8 +544,30 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       pushLog({ code: value, label: "Code non reconnu", amount: 0, tone: "error" });
     } finally {
       setScanValue("");
-      if (restoreFocus) scanInputRef.current?.focus();
+      if (restoreFocus && !openedQty) scanInputRef.current?.focus();
     }
+  };
+
+  const confirmQtyScan = (qty: number) => {
+    const pending = pendingQty;
+    setPendingQty(null);
+    if (!pending) return;
+    const applied = applyBarcodeScan(locations, pickedRef.current, pending.itemCode, qty);
+    if (!applied.ok) {
+      if (applied.reason === "already_complete") {
+        setScanMessage(`Quantité déjà atteinte pour ${pending.itemCode} — scan ignoré.`);
+        setScanTone("warn");
+      }
+      scanInputRef.current?.focus();
+      return;
+    }
+    recordAppliedScan(applied, pending.itemName, pending.code, qty);
+    scanInputRef.current?.focus();
+  };
+
+  const cancelQtyScan = () => {
+    setPendingQty(null);
+    scanInputRef.current?.focus();
   };
 
   const openCamera = () => {
@@ -974,6 +589,53 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       return next;
     });
     setLastScannedKey(name);
+    qtyTouched.current = true;
+    schedulePersist();
+  };
+
+  const resetFloorLine = (key: string) => {
+    const group = grouped.find((item) => `${item.item_code}-${item.warehouse || ""}` === key);
+    if (!group || modificationPending) return;
+    const next = { ...pickedRef.current };
+    getPickGroupLocations(group).forEach((location) => {
+      next[location.name] = 0;
+    });
+    pickedRef.current = next;
+    setPicked(next);
+    qtyTouched.current = true;
+    if (lastScan && `${lastScan.itemCode}-${lastScan.warehouse || ""}` === key) {
+      setLastScan({ ...lastScan, picked: 0, remaining: lastScan.requested });
+    }
+    schedulePersist();
+  };
+
+  const requestResetLocation = (key: string) => {
+    const location = locations.find((item) => item.name === key);
+    setPendingReset({
+      key,
+      itemCode: location?.item_code || key,
+      itemName: location?.item_name || location?.item_code || "",
+      picked: pickedRef.current[key] ?? 0,
+      source: "location",
+    });
+  };
+
+  const requestResetFloor = (key: string) => {
+    const group = grouped.find((item) => `${item.item_code}-${item.warehouse || ""}` === key);
+    setPendingReset({
+      key,
+      itemCode: group?.item_code || key,
+      itemName: group?.item_name || group?.item_code || "",
+      picked: group ? groupPickedQty(group, pickedRef.current) : 0,
+      source: "floor",
+    });
+  };
+
+  const confirmPendingReset = () => {
+    if (!pendingReset) return;
+    if (pendingReset.source === "floor") resetFloorLine(pendingReset.key);
+    else setLocationQty(pendingReset.key, 0);
+    setPendingReset(null);
   };
 
   const undoScan = (entry: ScanLogEntry) => {
@@ -1095,10 +757,19 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               if (!modificationPending && totals.remaining === 0) setReviewing(true);
             }}
             onFillRequested={fillRequested}
+            onResetLine={requestResetFloor}
             busy={scanning || submitting || saving || modificationPending}
             scanInputRef={scanInputRef}
+            scanMode={scanMode}
+            onScanModeChange={setScanMode}
           />
         )}
+        <ScanQtyDialog prompt={pendingQty} onConfirm={confirmQtyScan} onCancel={cancelQtyScan} />
+        <ResetPickQtyDialog
+          target={pendingReset}
+          onClose={() => setPendingReset(null)}
+          onConfirm={confirmPendingReset}
+        />
       </div>
     );
   }
@@ -1110,7 +781,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         breadcrumb={
           <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
             <ArrowLeft />
-            Commandes
+            Listes
           </Button>
         }
         title={title}
@@ -1201,6 +872,8 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               scanValue={scanValue}
               onScanValueChange={setScanValue}
               onScan={(code) => void applyScan(code)}
+              scanMode={scanMode}
+              onScanModeChange={setScanMode}
               step={scanIncrement}
               totals={scanTotals}
               inputRef={scanInputRef}
@@ -1227,6 +900,7 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
               pendingOnly={pendingOnly}
               onPendingOnlyChange={setPendingOnly}
               onSetQuantity={setLocationQty}
+              onResetLine={requestResetLocation}
               readOnly={submitted || modificationPending}
             />
           ) : null}
@@ -1333,6 +1007,13 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         </DialogContent>
       </Dialog>
 
+      <ScanQtyDialog prompt={pendingQty} onConfirm={confirmQtyScan} onCancel={cancelQtyScan} />
+      <ResetPickQtyDialog
+        target={pendingReset}
+        onClose={() => setPendingReset(null)}
+        onConfirm={confirmPendingReset}
+      />
+
       {notes.length > 0 && (
         <Card>
           <CardHeader>
@@ -1370,24 +1051,20 @@ export function PreparationPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const pickListNames = (searchParams.get("pick_lists") || searchParams.get("pick_list") || "").split(",").filter(Boolean);
-  const tabParam = searchParams.get("tab");
-  const tab = tabParam === "listes" || tabParam === "retours" ? tabParam : "commandes";
+  const tab = searchParams.get("tab") === "retours" ? "retours" : "listes";
   const { routes: pendingReturns } = usePendingReturnRoutes();
   const { data: recentPickLists } = useRecentPickLists();
-  const { data: queueData } = usePreparationQueue();
   const returnCount = pendingReturns.length;
-  const draftListCount = (recentPickLists?.message || []).filter((row) => row.docstatus === 0).length;
-  const orders = queueData?.message || [];
+  const lists = recentPickLists?.message || [];
+  const draftListCount = lists.filter((row) => row.docstatus === 0).length;
   const today = isoDateWithOffset(0);
-  const shortageOrders = orders.filter((order) => (order.stock_shortages || []).length > 0);
-  const overdueOrders = orders.filter((order) => {
-    const due = order.delivery_date || order.transaction_date || "";
+  const completeLists = lists.filter((row) => pickListIncomplete(row));
+  const overdueLists = lists.filter((row) => {
+    const due = pickListDueDate(row);
     return Boolean(due && due < today);
   });
-  const alertCount = (shortageOrders.length ? 1 : 0) + (overdueOrders.length ? 1 : 0);
+  const alertCount = (completeLists.length ? 1 : 0) + (overdueLists.length ? 1 : 0);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [presetSelection, setPresetSelection] = useState<string[]>();
-  const [requestedDateScope, setRequestedDateScope] = useState<DateScope>();
 
   const openPickLists = (names: string[], created = false) => {
     setSearchParams({ pick_lists: names.join(","), ...(created ? { created: "1" } : {}) });
@@ -1412,53 +1089,55 @@ export function PreparationPage() {
         eyebrow={`Entrepôt · ${formatLongDate(today)}`}
         title="Préparation"
         meta={
-          tab === "commandes" ? (
+          tab === "listes" ? (
             <AlertsChip count={alertCount} open={alertsOpen} onToggle={() => setAlertsOpen((open) => !open)} />
           ) : undefined
         }
       />
-      {tab === "commandes" && alertsOpen && alertCount > 0 && (
+      {tab === "listes" && alertsOpen && alertCount > 0 && (
         <section aria-label="Anomalies" className="grid gap-3 sm:grid-cols-2">
-          {shortageOrders.length > 0 && (
+          {completeLists.length > 0 && (
             <div className="flex flex-col gap-1.5 rounded-xl border border-destructive/25 bg-destructive/5 p-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-3.5 text-destructive" />
-                <p className="text-sm font-semibold text-destructive">Stock manquant</p>
+                <p className="text-sm font-semibold text-destructive">À compléter</p>
                 <span className="num rounded bg-destructive/10 px-1.5 py-px text-[11px] text-destructive">
-                  {shortageOrders.length}
+                  {completeLists.length}
                 </span>
               </div>
               <p className="t-meta text-muted-foreground">
-                {shortageOrders.length} commande{shortageOrders.length > 1 ? "s" : ""} avec rupture de stock.
+                {completeLists.length} liste{completeLists.length > 1 ? "s" : ""} avec un reliquat à prélever.
               </p>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-auto w-fit p-0 text-xs font-medium text-destructive"
-                onClick={() => setPresetSelection(shortageOrders.map((order) => order.name))}
+                onClick={() => {
+                  setAlertsOpen(false);
+                  setSearchParams({ complete: "1" });
+                }}
               >
-                Sélectionner ces commandes
+                Filtrer les reliquats
               </Button>
             </div>
           )}
-          {overdueOrders.length > 0 && (
+          {overdueLists.length > 0 && (
             <div className="flex flex-col gap-1.5 rounded-xl border border-warning/30 bg-warning/5 p-3">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="size-3.5 text-warning-foreground" />
                 <p className="text-sm font-semibold text-warning-foreground">Échéances dépassées</p>
                 <span className="num rounded bg-warning/10 px-1.5 py-px text-[11px] text-warning-foreground">
-                  {overdueOrders.length}
+                  {overdueLists.length}
                 </span>
               </div>
               <p className="t-meta text-muted-foreground">
-                {overdueOrders.length} commande{overdueOrders.length > 1 ? "s" : ""} dont l’échéance est passée.
+                {overdueLists.length} liste{overdueLists.length > 1 ? "s" : ""} dont la livraison est passée.
               </p>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-auto w-fit p-0 text-xs font-medium"
                 onClick={() => {
-                  setRequestedDateScope("overdue");
                   setAlertsOpen(false);
                   setSearchParams({ dateScope: "overdue" });
                 }}
@@ -1472,12 +1151,11 @@ export function PreparationPage() {
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          setSearchParams(value === "commandes" ? {} : { tab: value });
+          setSearchParams(value === "retours" ? { tab: "retours" } : {});
         }}
         aria-label="Sections préparation"
       >
         <TabsList variant="line">
-          <TabsTrigger value="commandes">Commandes</TabsTrigger>
           <TabsTrigger value="listes">
             Listes
             <Badge variant={draftListCount > 0 ? "default" : "secondary"} aria-label={`${draftListCount} brouillon${draftListCount > 1 ? "s" : ""}`}>
@@ -1491,19 +1169,8 @@ export function PreparationPage() {
             </Badge>
           </TabsTrigger>
         </TabsList>
-        <TabsContent value="commandes" className="pt-5">
-          <SalesOrderPicker
-            onOpenPickLists={openPickLists}
-            onShowPickLists={() => setSearchParams({ tab: "listes" })}
-            presetSelection={presetSelection}
-            requestedDateScope={requestedDateScope}
-          />
-        </TabsContent>
         <TabsContent value="listes" className="pt-5">
-          <PickListQueue
-            onOpenPickLists={openPickLists}
-            onGoToOrders={() => setSearchParams({})}
-          />
+          <PickListQueue onOpenPickLists={openPickLists} />
         </TabsContent>
         <TabsContent value="retours" className="pt-5">
           <ReturnControlPanel />

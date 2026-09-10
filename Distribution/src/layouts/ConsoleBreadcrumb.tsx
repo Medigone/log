@@ -42,9 +42,9 @@ function CrumbInner({ crumb }: { crumb: Crumb }) {
 }
 
 export function ConsoleBreadcrumb() {
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   const { lastLabel } = useContext(LastCrumbContext)
-  const crumbs = crumbsFromPath(pathname).map((crumb, index, list) =>
+  const crumbs = crumbsFromPath(pathname, search).map((crumb, index, list) =>
     index === list.length - 1 && lastLabel ? { ...crumb, label: lastLabel } : crumb,
   )
 

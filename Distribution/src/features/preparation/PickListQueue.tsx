@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ClipboardList } from "lucide-react";
+import { DateRangeFilter } from "@/components/DateRangeFilter";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,8 +10,15 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DataGridFeatures } from "@/components/reui/data-grid/data-grid";
-import { usePickListQueueStats, useRecentPickLists, type RecentPickList } from "@/shared/api/preparation";
-import { formatDateTime, formatQuantity } from "@/shared/format";
+import {
+  pickListDueDate,
+  pickListIncomplete,
+  pickListRemaining,
+  usePickListQueueStats,
+  useRecentPickLists,
+  type RecentPickList,
+} from "@/shared/api/preparation";
+import { formatQuantity, formatShortDate } from "@/shared/format";
 import {
   PickListItemsSubGrid,
   PreparationSubTableGrid,
@@ -26,27 +35,66 @@ import {
 import { cn } from "@/lib/utils";
 
 type ListStatus = "all" | "draft" | "submitted";
+type DateScope = "all" | "today" | "tomorrow" | "overdue";
 
 function joinLabels(values?: string[], empty = "—") {
   return values?.filter(Boolean).join(" · ") || empty;
 }
 
-export function PickListQueue({
-  onOpenPickLists,
-  onGoToOrders,
-}: {
-  onOpenPickLists: (names: string[]) => void;
-  onGoToOrders: () => void;
-}) {
+function localIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isoDateWithOffset(days: number) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return localIsoDate(date);
+}
+
+function dateScopeFromParam(value: string | null): DateScope {
+  if (value === "today" || value === "tomorrow" || value === "overdue") return value;
+  return "all";
+}
+
+function completeFromParams(searchParams: URLSearchParams) {
+  return searchParams.get("complete") === "1" || searchParams.get("shortage") === "1";
+}
+
+export function PickListQueue({ onOpenPickLists }: { onOpenPickLists: (names: string[]) => void }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ListStatus>("all");
   const [changedOnly, setChangedOnly] = useState(false);
+  const [completeOnly, setCompleteOnly] = useState(() => completeFromParams(searchParams));
+  const [dateScope, setDateScope] = useState<DateScope>(() => dateScopeFromParam(searchParams.get("dateScope")));
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [customer, setCustomer] = useState("");
   const [wilaya, setWilaya] = useState("");
+  const [commune, setCommune] = useState("");
   const [selection, setSelection] = useState<Record<string, true>>({});
   const { data, error, isLoading } = useRecentPickLists();
   const { data: statsData } = usePickListQueueStats();
   const lists = useMemo(() => data?.message || [], [data?.message]);
+  const today = isoDateWithOffset(0);
+  const tomorrow = isoDateWithOffset(1);
+
+  const dateScopeParam = searchParams.get("dateScope");
+  const completeParam = searchParams.get("complete");
+  const shortageParam = searchParams.get("shortage");
+
+  useEffect(() => {
+    if (dateScopeParam) {
+      setDateScope(dateScopeFromParam(dateScopeParam));
+      setDateFrom("");
+      setDateTo("");
+    }
+    if (completeParam === "1" || shortageParam === "1") setCompleteOnly(true);
+  }, [completeParam, dateScopeParam, shortageParam]);
 
   const customers = useMemo(
     () =>
@@ -62,6 +110,26 @@ export function PickListQueue({
       ),
     [lists],
   );
+  const communes = useMemo(
+    () =>
+      Array.from(
+        lists
+          .filter((row) => (!wilaya || (row.wilayas || []).includes(wilaya)) && (row.communes?.length || row.custom_commune))
+          .reduce((values, row) => {
+            const ids = row.communes?.length ? row.communes : row.custom_commune ? [row.custom_commune] : [];
+            const labels = row.commune_noms?.length
+              ? row.commune_noms
+              : row.custom_commune_nom
+                ? [row.custom_commune_nom]
+                : ids;
+            ids.forEach((id, index) => values.set(id, labels[index] || id));
+            return values;
+          }, new Map<string, string>()),
+      )
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label, "fr")),
+    [lists, wilaya],
+  );
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("fr");
@@ -69,29 +137,69 @@ export function PickListQueue({
       if (status === "draft" && row.docstatus !== 0) return false;
       if (status === "submitted" && row.docstatus !== 1) return false;
       if (changedOnly && !row.custom_order_changed) return false;
+      if (completeOnly && !pickListIncomplete(row)) return false;
       if (customer && !(row.customer_names || []).includes(customer)) return false;
       if (wilaya && !(row.wilayas || []).includes(wilaya)) return false;
+      if (commune && !(row.communes || []).includes(commune) && row.custom_commune !== commune) return false;
+      const orderDate = pickListDueDate(row);
+      if (dateScope === "today" && orderDate !== today) return false;
+      if (dateScope === "tomorrow" && orderDate !== tomorrow) return false;
+      if (dateScope === "overdue" && (!orderDate || orderDate >= today)) return false;
+      if (dateFrom && (!orderDate || orderDate < dateFrom)) return false;
+      if (dateTo && (!orderDate || orderDate > dateTo)) return false;
       if (!query) return true;
       return [
         row.name,
         ...(row.sales_orders || []),
         ...(row.customer_names || []),
         ...(row.wilayas || []),
+        ...(row.commune_noms || []),
+        ...(row.communes || []),
         ...(row.delivery_notes || []),
       ]
         .filter(Boolean)
         .some((value) => String(value).toLocaleLowerCase("fr").includes(query));
     });
-  }, [changedOnly, customer, lists, search, status, wilaya]);
+  }, [
+    changedOnly,
+    commune,
+    completeOnly,
+    customer,
+    dateFrom,
+    dateScope,
+    dateTo,
+    lists,
+    search,
+    status,
+    today,
+    tomorrow,
+    wilaya,
+  ]);
 
-  const filtersActive = Boolean(search || status !== "all" || changedOnly || customer || wilaya);
+  const filtersActive = Boolean(
+    search ||
+      status !== "all" ||
+      changedOnly ||
+      completeOnly ||
+      dateScope !== "all" ||
+      dateFrom ||
+      dateTo ||
+      customer ||
+      wilaya ||
+      commune,
+  );
   const stats = statsData?.message;
   const drafts = stats?.drafts ?? lists.filter((list) => list.docstatus !== 1).length;
   const submitted = stats?.submitted ?? lists.filter((list) => list.docstatus === 1).length;
   const remaining =
     stats?.remainingQty ??
-    lists.reduce((sum, list) => sum + Math.max(0, (list.requested_qty ?? 0) - (list.picked_qty ?? 0)), 0);
+    lists.reduce((sum, list) => sum + pickListRemaining(list), 0);
   const changed = stats?.changed ?? lists.filter((list) => list.custom_order_changed).length;
+  const completeCount = lists.filter((list) => pickListIncomplete(list)).length;
+  const overdueCount = lists.filter((list) => {
+    const due = pickListDueDate(list);
+    return Boolean(due && due < today);
+  }).length;
   const listTotal = Math.max(1, drafts + submitted);
 
   const stages = useMemo((): PreparationStage[] => {
@@ -107,39 +215,91 @@ export function PickListQueue({
         barTone: "success",
       },
       {
-        id: "remaining",
+        id: "complete",
         step: 3,
-        title: "Articles restants",
-        value: formatQuantity(remaining),
-        unit: "à prélever",
-        ratio: 0,
+        title: "À compléter",
+        value: completeCount,
+        unit: "reliquats",
+        ratio: completeCount / listTotal,
+        exception: remaining ? { label: `${formatQuantity(remaining)} restants`, tone: "warning" } : undefined,
+        barTone: completeCount ? "danger" : "default",
+      },
+      {
+        id: "overdue",
+        step: 4,
+        title: "En retard",
+        value: overdueCount,
+        unit: "échéances",
+        ratio: overdueCount / listTotal,
         exception: changed ? { label: `${changed} modifiée${changed > 1 ? "s" : ""}`, tone: "warning" } : undefined,
+        barTone: overdueCount ? "danger" : "default",
       },
     ];
-  }, [changed, drafts, listTotal, remaining, submitted]);
+  }, [changed, completeCount, drafts, listTotal, overdueCount, remaining, submitted]);
 
-  const activeStage = changedOnly ? "remaining" : status === "all" ? null : status;
+  const activeStage = completeOnly
+    ? "complete"
+    : dateScope === "overdue"
+      ? "overdue"
+      : changedOnly
+        ? "overdue"
+        : status === "all"
+          ? null
+          : status;
+
+  const writeParams = (next: { dateScope?: DateScope; complete?: boolean }) => {
+    const params: Record<string, string> = {};
+    if (next.dateScope === "overdue") params.dateScope = "overdue";
+    if (next.complete) params.complete = "1";
+    setSearchParams(params);
+  };
 
   const pickStage = (id: string) => {
     if (id === "draft") {
       setStatus((current) => (current === "draft" ? "all" : "draft"));
       setChangedOnly(false);
+      setCompleteOnly(false);
+      setDateScope("all");
+      writeParams({});
       return;
     }
     if (id === "submitted") {
       setStatus((current) => (current === "submitted" ? "all" : "submitted"));
       setChangedOnly(false);
+      setCompleteOnly(false);
+      setDateScope("all");
+      writeParams({});
       return;
     }
-    setChangedOnly((value) => !value);
+    if (id === "complete") {
+      const next = !completeOnly;
+      setCompleteOnly(next);
+      setStatus("all");
+      setChangedOnly(false);
+      setDateScope("all");
+      writeParams({ complete: next });
+      return;
+    }
+    const nextOverdue = dateScope !== "overdue";
+    setDateScope(nextOverdue ? "overdue" : "all");
+    setChangedOnly(false);
+    setCompleteOnly(false);
+    setStatus("all");
+    writeParams({ dateScope: nextOverdue ? "overdue" : "all" });
   };
 
   const resetFilters = () => {
     setSearch("");
     setStatus("all");
     setChangedOnly(false);
+    setCompleteOnly(false);
+    setDateScope("all");
+    setDateFrom("");
+    setDateTo("");
     setCustomer("");
     setWilaya("");
+    setCommune("");
+    setSearchParams({});
   };
 
   const selectedIds = Object.keys(selection).filter((id) => filtered.some((row) => row.name === id));
@@ -160,6 +320,8 @@ export function PickListQueue({
     }
     setSelection(Object.fromEntries(filtered.map((row) => [row.name, true as const])));
   };
+
+  const openList = (row: RecentPickList) => onOpenPickLists([row.name]);
 
   const columns: Array<ColumnDef<DataGridFeatures, RecentPickList>> = [
     {
@@ -184,22 +346,31 @@ export function PickListQueue({
       enableHiding: false,
     },
     {
-      id: "name",
-      accessorKey: "name",
-      ...namedHeader("Liste · Entrepôt"),
-      cell: ({ row }) => (
-        <button
-          type="button"
-          className="flex min-w-0 flex-col text-left"
-          onClick={() => onOpenPickLists([row.original.name])}
-        >
-          <span className="num truncate text-[12.5px] font-medium">{row.original.name}</span>
-          <span className="truncate text-[11px] text-muted-foreground">
-            {joinLabels(row.original.warehouses, "Entrepôt non défini")}
-          </span>
-        </button>
-      ),
-      size: 200,
+      id: "list",
+      accessorFn: (row) => row.name,
+      ...namedHeader("Liste · Client"),
+      cell: ({ row }) => {
+        const orders = row.original.sales_orders || [];
+        const extra = orders.length > 1 ? ` +${orders.length - 1}` : "";
+        const orderLabel = orders[0] ? `${orders[0]}${extra}` : "";
+        return (
+          <button
+            type="button"
+            className="flex min-w-0 flex-col text-left"
+            onClick={() => openList(row.original)}
+          >
+            <span className="num truncate text-[12.5px] font-medium">{row.original.name}</span>
+            <span className="block truncate text-[11px] text-muted-foreground">
+              {joinLabels(row.original.customer_names)}
+              {orderLabel ? ` · ${orderLabel}` : ""}
+              {row.original.warehouses?.length
+                ? ` · ${joinLabels(row.original.warehouses, "Entrepôt non défini")}`
+                : ""}
+            </span>
+          </button>
+        );
+      },
+      size: 240,
       enableHiding: false,
     },
     {
@@ -210,7 +381,7 @@ export function PickListQueue({
       cell: ({ row }) => (
         <ListStateIcon
           state={
-            row.original.docstatus === 1 && (row.original.picked_qty ?? 0) < (row.original.requested_qty ?? 0)
+            row.original.docstatus === 1 && pickListIncomplete(row.original)
               ? "partial"
               : listStateFromDocstatus(row.original.docstatus)
           }
@@ -221,34 +392,40 @@ export function PickListQueue({
       enableSorting: false,
     },
     {
-      id: "customers",
-      accessorFn: (row) => joinLabels(row.customer_names),
-      ...namedHeader("Client"),
-      cell: ({ row }) => <span className="truncate text-[13px]">{joinLabels(row.original.customer_names)}</span>,
-      size: 140,
+      id: "place",
+      accessorFn: (row) => row.custom_commune_nom || row.custom_commune || joinLabels(row.commune_noms, ""),
+      ...namedHeader("Lieu"),
+      cell: ({ row }) => (
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate text-[13px]">
+            {row.original.custom_commune_nom || joinLabels(row.original.commune_noms) || "—"}
+          </span>
+          <span className="truncate text-[11px] text-muted-foreground">
+            {joinLabels(row.original.wilayas)}
+          </span>
+        </div>
+      ),
+      size: 160,
     },
     {
-      id: "wilaya",
-      accessorFn: (row) => joinLabels(row.wilayas),
-      ...namedHeader("Wilaya"),
-      cell: ({ row }) => <span className="truncate text-[13px]">{joinLabels(row.original.wilayas)}</span>,
-      size: 110,
-    },
-    {
-      id: "orders",
-      accessorFn: (row) => row.sales_order_count || row.sales_orders?.length || 0,
-      ...namedHeader("Commandes"),
+      id: "due",
+      accessorFn: (row) => pickListDueDate(row),
+      ...namedHeader("Livraison"),
       cell: ({ row }) => {
-        const orders = row.original.sales_orders || [];
-        if (!orders.length) return <span className="text-muted-foreground">—</span>;
+        const due = pickListDueDate(row.original);
+        const late = Boolean(due && due < today);
         return (
-          <span className="num truncate text-[12.5px]">
-            {orders.slice(0, 2).join(", ")}
-            {orders.length > 2 ? ` +${orders.length - 2}` : ""}
+          <span
+            className={cn(
+              "num whitespace-nowrap text-[12.5px]",
+              late ? "text-destructive" : "text-muted-foreground",
+            )}
+          >
+            {due ? formatShortDate(due) : "—"}
           </span>
         );
       },
-      size: 150,
+      size: 96,
     },
     {
       id: "progress",
@@ -260,7 +437,14 @@ export function PickListQueue({
         const pct = requested ? Math.round((picked / requested) * 100) : 0;
         return (
           <div className="flex min-w-0 items-center gap-2">
-            <div className="h-1 min-w-[34px] flex-1 overflow-hidden rounded-full bg-muted">
+            <div
+              role="progressbar"
+              aria-label={`Prélèvement ${formatQuantity(picked)} sur ${formatQuantity(requested)}`}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct}
+              className="h-1 min-w-[34px] flex-1 overflow-hidden rounded-full bg-muted"
+            >
               <div
                 className={cn(
                   "h-full",
@@ -282,18 +466,6 @@ export function PickListQueue({
       },
       size: 140,
     },
-    {
-      id: "modified",
-      accessorKey: "modified",
-      header: () => <span className="block pl-3.5">Modifié</span>,
-      meta: { headerTitle: "Modifié" },
-      cell: ({ row }) => (
-        <span className="num block whitespace-nowrap pl-3.5 text-[12.5px] text-muted-foreground">
-          {formatDateTime(row.original.modified)}
-        </span>
-      ),
-      size: 128,
-    },
   ];
 
   return (
@@ -309,7 +481,6 @@ export function PickListQueue({
         active={activeStage}
         onPick={pickStage}
         ariaLabel="État des listes"
-        columns={3}
       />
 
       <PreparationQueueShell
@@ -340,6 +511,61 @@ export function PickListQueue({
             >
               <span className="size-1.5 rounded-full bg-[#d97706]" /> Modifiée
             </button>
+            <button
+              type="button"
+              className={preparationChipClass(dateScope === "overdue")}
+              onClick={() => {
+                const next = dateScope === "overdue" ? "all" : "overdue";
+                setDateScope(next);
+                writeParams({ dateScope: next, complete: completeOnly && next !== "overdue" });
+              }}
+            >
+              <span className="size-1.5 rounded-full bg-destructive" /> Échéance dépassée
+            </button>
+            <button
+              type="button"
+              className={preparationChipClass(completeOnly)}
+              onClick={() => {
+                const next = !completeOnly;
+                setCompleteOnly(next);
+                writeParams({ complete: next, dateScope });
+              }}
+            >
+              <span className="size-1.5 rounded-full bg-[#d97706]" /> À compléter
+            </button>
+          </>
+        }
+        visibleFilters={
+          <>
+            <FilterSelect
+              label="Échéance"
+              value={dateScope}
+              className="h-[30px] shrink-0"
+              onChange={(value) => {
+                const next = value as DateScope;
+                setDateScope(next);
+                setDateFrom("");
+                setDateTo("");
+                writeParams({ dateScope: next, complete: completeOnly });
+              }}
+              options={[
+                { value: "all", label: "Toutes" },
+                { value: "today", label: "Aujourd’hui" },
+                { value: "tomorrow", label: "Demain" },
+                { value: "overdue", label: "En retard" },
+              ]}
+            />
+            <DateRangeFilter
+              label="Période"
+              className="h-[30px] shrink-0 rounded-lg text-xs"
+              from={dateFrom}
+              to={dateTo}
+              onChange={(range) => {
+                setDateFrom(range.from);
+                setDateTo(range.to);
+                setDateScope("all");
+              }}
+            />
           </>
         }
         moreFilters={
@@ -353,8 +579,17 @@ export function PickListQueue({
             <FilterSelect
               label="Wilaya"
               value={wilaya || "all"}
-              onChange={(value) => setWilaya(value === "all" ? "" : value)}
+              onChange={(value) => {
+                setWilaya(value === "all" ? "" : value);
+                setCommune("");
+              }}
               options={[{ value: "all", label: "Toutes" }, ...wilayas.map((value) => ({ value, label: value }))]}
+            />
+            <FilterSelect
+              label="Commune"
+              value={commune || "all"}
+              onChange={(value) => setCommune(value === "all" ? "" : value)}
+              options={[{ value: "all", label: "Toutes" }, ...communes.map((option) => ({ value: option.value, label: option.label }))]}
             />
           </PreparationMoreFilters>
         }
@@ -397,17 +632,13 @@ export function PickListQueue({
                       : "Les listes apparaissent automatiquement à la soumission d’une commande."}
                   </EmptyDescription>
                 </EmptyHeader>
-                <EmptyContent>
-                  {lists.length ? (
+                {lists.length ? (
+                  <EmptyContent>
                     <Button variant="outline" size="sm" onClick={resetFilters}>
                       Réinitialiser
                     </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" onClick={onGoToOrders}>
-                      Voir les commandes
-                    </Button>
-                  )}
-                </EmptyContent>
+                  </EmptyContent>
+                ) : null}
               </Empty>
             }
           />

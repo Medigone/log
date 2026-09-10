@@ -12,6 +12,7 @@ export function PickLinesTable({
   pendingOnly,
   onPendingOnlyChange,
   onSetQuantity,
+  onResetLine,
   readOnly,
 }: {
   lines: PickLine[];
@@ -23,6 +24,7 @@ export function PickLinesTable({
   pendingOnly: boolean;
   onPendingOnlyChange: (value: boolean) => void;
   onSetQuantity: (key: string, value: number) => void;
+  onResetLine: (key: string) => void;
   readOnly?: boolean;
 }) {
   const term = query.trim().toLowerCase();
@@ -41,7 +43,7 @@ export function PickLinesTable({
       return lc - rc;
     });
 
-  const grid = "grid grid-cols-[30px_minmax(0,1.6fr)_minmax(0,1.1fr)_152px_64px]";
+  const grid = "grid grid-cols-[minmax(0,1.6fr)_minmax(0,1.1fr)_152px_minmax(96px,auto)]";
 
   return (
     <section className="overflow-hidden rounded-xl border bg-card">
@@ -69,7 +71,6 @@ export function PickLinesTable({
       </div>
 
       <div className={cn(grid, "t-micro border-b bg-muted/40 px-3 text-muted-foreground")}>
-        <div className="py-2" />
         <div className="min-w-0 truncate py-2">Article</div>
         <div className="min-w-0 truncate py-2">Entrepôt · Cde</div>
         <div className="py-2 text-center">Prélevé / demandé</div>
@@ -90,25 +91,24 @@ export function PickLinesTable({
               done && "opacity-60",
             )}
           >
-            <div className="py-2.5">
-              <span
-                className={cn(
-                  "grid size-5 place-items-center rounded-full border-[1.5px] text-[11px] font-bold",
-                  done && "border-emerald-600 bg-emerald-100 text-emerald-700",
-                  !done && started && "border-amber-500 bg-amber-100 text-amber-700",
-                  !started && "border-border bg-background text-muted-foreground",
-                )}
-                aria-hidden
-              >
-                {done ? "✓" : started ? "◐" : "○"}
-              </span>
-            </div>
-
             <div className="flex min-w-0 flex-col gap-1 py-2 pr-2">
-              <span className="truncate text-[13px] font-medium">
-                {line.itemCode} · {line.itemName}
-              </span>
-              <div className="flex min-w-0 items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span
+                  className={cn(
+                    "grid size-5 shrink-0 place-items-center rounded-full border-[1.5px] text-[11px] font-bold",
+                    done && "border-emerald-600 bg-emerald-100 text-emerald-700",
+                    !done && started && "border-amber-500 bg-amber-100 text-amber-700",
+                    !started && "border-border bg-background text-muted-foreground",
+                  )}
+                  aria-hidden
+                >
+                  {done ? "✓" : started ? "◐" : "○"}
+                </span>
+                <span className="truncate text-[13px] font-medium leading-5">
+                  {line.itemCode} · {line.itemName}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-1.5 pl-7">
                 <div className="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-muted">
                   <div
                     className={cn("h-full", done ? "bg-emerald-600" : started ? "bg-amber-500" : "bg-border")}
@@ -165,18 +165,28 @@ export function PickLinesTable({
               )}
             </div>
 
-            <div className="py-2 text-right">
+            <div className="flex flex-col items-end gap-0.5 py-2">
               {readOnly ? null : (
-                <button
-                  type="button"
-                  onClick={() => onSetQuantity(line.key, done ? 0 : line.requested)}
-                  className={cn(
-                    "whitespace-nowrap text-[11.5px] font-medium hover:underline",
-                    done ? "text-muted-foreground" : "text-foreground",
-                  )}
-                >
-                  {done ? "Remettre à 0" : "Tout"}
-                </button>
+                <>
+                  {!done ? (
+                    <button
+                      type="button"
+                      onClick={() => onSetQuantity(line.key, line.requested)}
+                      className="whitespace-nowrap text-[11.5px] font-medium hover:underline"
+                    >
+                      Tout
+                    </button>
+                  ) : null}
+                  {started ? (
+                    <button
+                      type="button"
+                      onClick={() => onResetLine(line.key)}
+                      className="whitespace-nowrap text-[11.5px] font-medium text-muted-foreground hover:underline"
+                    >
+                      Remettre à 0
+                    </button>
+                  ) : null}
+                </>
               )}
             </div>
           </div>

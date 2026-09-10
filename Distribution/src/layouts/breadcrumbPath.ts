@@ -17,6 +17,7 @@ const GROUP_ICONS: Record<NavGroup, LucideIcon> = {
 const SECTION_LABELS: Record<string, string> = {
   today: "Tableau de bord",
   preparation: "Préparation",
+  "codes-barres": "Codes-barres",
   planning: "Planification",
   deliveries: "Livraisons",
   livreurs: "Livreurs",
@@ -35,7 +36,15 @@ function withNavContext(pathname: string, crumbs: Crumb[]): Crumb[] {
   return [{ label: navGroupLabels[item.group], icon: GROUP_ICONS[item.group] }, ...withPageIcon]
 }
 
-export function crumbsFromPath(pathname: string): Crumb[] {
+function pickListNamesFromSearch(search: string) {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search)
+  return (params.get("pick_lists") || params.get("pick_list") || "")
+    .split(",")
+    .map((name) => decodeURIComponent(name.trim()))
+    .filter(Boolean)
+}
+
+export function crumbsFromPath(pathname: string, search = ""): Crumb[] {
   const parts = pathname.split("/").filter(Boolean)
   const section = parts[0]
   if (!section) return withNavContext("/today", [{ label: "Tableau de bord" }])
@@ -43,8 +52,17 @@ export function crumbsFromPath(pathname: string): Crumb[] {
   if (section === "planning" && parts[1] === "routes" && parts[2]) {
     return withNavContext(pathname, [{ label, to: "/planning" }, { label: decodeURIComponent(parts[2]) }])
   }
-  if (section === "preparation" && parts[1] === "commandes" && parts[2]) {
-    return withNavContext(pathname, [{ label, to: "/preparation" }, { label: decodeURIComponent(parts[2]) }])
+  if (section === "preparation") {
+    const pickLists = pickListNamesFromSearch(search)
+    if (pickLists.length) {
+      return withNavContext("/preparation", [
+        { label, to: "/preparation" },
+        { label: pickLists.length === 1 ? pickLists[0] : pickLists.join(", ") },
+      ])
+    }
+    if (parts[1] === "commandes" && parts[2]) {
+      return withNavContext(pathname, [{ label, to: "/preparation" }, { label: decodeURIComponent(parts[2]) }])
+    }
   }
   if ((section === "livreurs" || section === "vehicules") && parts[1]) {
     return withNavContext(pathname, [{ label, to: `/${section}` }, { label: decodeURIComponent(parts[1]) }])

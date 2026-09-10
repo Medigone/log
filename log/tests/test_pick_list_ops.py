@@ -32,6 +32,7 @@ from log.pick_list_ops import (
 	serialize_pick_session,
 	stock_shortages_for_items,
 	unreserve_sales_order_stock,
+	update_picked_qty,
 	on_sales_order_submit,
 	on_stock_inbound,
 )
@@ -796,10 +797,30 @@ class TestRecentPickLists(unittest.TestCase):
 		]
 		dns = [frappe._dict(parent="DN-1", against_pick_list="PL-1")]
 		orders = [
-			frappe._dict(name="SO-1", customer="C-1", customer_name="Client Test 1", custom_wilaya="Alger"),
-			frappe._dict(name="SO-2", customer="C-2", customer_name="Client Test 2", custom_wilaya="Oran"),
+			frappe._dict(
+				name="SO-1",
+				customer="C-1",
+				customer_name="Client Test 1",
+				custom_wilaya="Alger",
+				custom_commune="COM-0001",
+				delivery_date="2026-09-11",
+				transaction_date="2026-09-01",
+			),
+			frappe._dict(
+				name="SO-2",
+				customer="C-2",
+				customer_name="Client Test 2",
+				custom_wilaya="Oran",
+				custom_commune="COM-0003",
+				delivery_date="2026-09-12",
+				transaction_date="2026-09-02",
+			),
 		]
-		get_all.side_effect = [items, dns, orders]
+		communes = [
+			frappe._dict(name="COM-0001", nom="Alger Centre"),
+			frappe._dict(name="COM-0003", nom="Oran"),
+		]
+		get_all.side_effect = [items, dns, orders, communes]
 
 		result = _enrich_recent_pick_lists(
 			[frappe._dict(name="PL-1", docstatus=0, status="Draft", modified="2026-09-01 10:00:00")]
@@ -809,6 +830,12 @@ class TestRecentPickLists(unittest.TestCase):
 		self.assertEqual(result[0]["sales_order_count"], 2)
 		self.assertEqual(result[0]["customer_names"], ["Client Test 1", "Client Test 2"])
 		self.assertEqual(result[0]["wilayas"], ["Alger", "Oran"])
+		self.assertEqual(result[0]["communes"], ["COM-0001", "COM-0003"])
+		self.assertEqual(result[0]["commune_noms"], ["Alger Centre", "Oran"])
+		self.assertEqual(result[0]["custom_commune"], "COM-0001")
+		self.assertEqual(result[0]["custom_commune_nom"], "Alger Centre")
+		self.assertEqual(result[0]["delivery_date"], "2026-09-11")
+		self.assertEqual(result[0]["transaction_date"], "2026-09-01")
 		self.assertEqual(result[0]["requested_qty"], 5)
 		self.assertEqual(result[0]["picked_qty"], 1)
 		self.assertEqual(result[0]["warehouses"], ["DEPOT"])
@@ -838,9 +865,20 @@ class TestRecentPickLists(unittest.TestCase):
 		)
 		self.assertEqual(
 			get_all.call_args_list[2].kwargs["fields"],
-			["name", "customer_name", "customer", "custom_wilaya"],
+			[
+				"name",
+				"customer_name",
+				"customer",
+				"custom_wilaya",
+				"custom_commune",
+				"delivery_date",
+				"transaction_date",
+			],
 		)
-		self.assertEqual([call.args[0] for call in get_all.call_args_list], ["Pick List Item", "Delivery Note Item", "Sales Order"])
+		self.assertEqual(
+			[call.args[0] for call in get_all.call_args_list],
+			["Pick List Item", "Delivery Note Item", "Sales Order", "Commune"],
+		)
 
 	@patch("log.pick_list_ops.frappe.get_doc")
 	@patch("log.pick_list_ops._require_preparation_role")
@@ -1122,6 +1160,44 @@ class TestAutoPickHooks(unittest.TestCase):
 		enqueue.assert_called_once()
 		self.assertEqual(enqueue.call_args.args[0], "log.pick_list_ops.ensure_open_order_pick_lists")
 		self.assertTrue(enqueue.call_args.kwargs["enqueue_after_commit"])
+
+
+class TestUpdatePickedQty(unittest.TestCase):
+	def _doc(self):
+		row = _PickListItemLike(name="PLI-1", item_code="ART-1", stock_qty=2, picked_qty=1)
+		doc = Mock()
+		doc.docstatus = 0
+		doc.locations = [row]
+		return doc, row
+
+	@patch("log.pick_list_ops.serialize_pick_list", return_value={"name": "PL-1"})
+	@patch("log.order_change_ops.sales_orders_from_pick_docs", return_value=["SO-1"])
+	@patch("log.order_change_ops.assert_preparation_modification_accepted")
+	@patch("log.pick_list_ops.frappe.get_doc")
+	@patch("log.pick_list_ops._require_preparation_role")
+	def test_allows_zero_picked_qty(self, _role, get_doc, _assert, _orders, _serialize):
+		doc, row = self._doc()
+		get_doc.return_value = doc
+
+		update_picked_qty("PL-1", [{"name": "PLI-1", "picked_qty": 0}])
+
+		self.assertEqual(row.picked_qty, 0)
+		doc.save.assert_called_once_with(ignore_permissions=True)
+
+	@patch("log.pick_list_ops.frappe.throw", side_effect=_raise_throw)
+	@patch("log.order_change_ops.sales_orders_from_pick_docs", return_value=["SO-1"])
+	@patch("log.order_change_ops.assert_preparation_modification_accepted")
+	@patch("log.pick_list_ops.frappe.get_doc")
+	@patch("log.pick_list_ops._require_preparation_role")
+	def test_rejects_negative_picked_qty(self, _role, get_doc, _assert, _orders, _throw):
+		doc, row = self._doc()
+		get_doc.return_value = doc
+
+		with self.assertRaises(Exception):
+			update_picked_qty("PL-1", [{"name": "PLI-1", "picked_qty": -1}])
+
+		self.assertEqual(row.picked_qty, 1)
+		doc.save.assert_not_called()
 
 
 if __name__ == "__main__":

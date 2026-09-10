@@ -6,6 +6,8 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { formatQuantity } from "@/shared/format"
 import { cn } from "@/lib/utils"
 import { ArrowLeft, Camera, CheckCircle, ChevronDown, ScanBarcode } from "lucide-react"
+import type { ScanEntryMode } from "@/features/preparation/pickScan"
+import { preparationChipClass } from "@/features/preparation/PreparationQueueShell"
 
 export type ScanSnapshot = ScanQtyResult & {
   itemCode: string
@@ -42,8 +44,11 @@ export function PickFloorView({
   onBack,
   onReview,
   onFillRequested,
+  onResetLine,
   busy,
   scanInputRef,
+  scanMode,
+  onScanModeChange,
 }: {
   title: string
   remainingArticles: number
@@ -62,8 +67,11 @@ export function PickFloorView({
   onBack: () => void
   onReview: () => void
   onFillRequested: () => void
+  onResetLine: (key: string) => void
   busy: boolean
   scanInputRef: RefObject<HTMLInputElement | null>
+  scanMode: ScanEntryMode
+  onScanModeChange: (mode: ScanEntryMode) => void
 }) {
   const [manualOpen, setManualOpen] = useState(false)
   const active = lastScan
@@ -119,10 +127,33 @@ export function PickFloorView({
               <ScanBarcode className="size-6" />
             </span>
             <p className="mt-3 text-sm font-medium">Scannez un article</p>
-            <p className="mt-1 text-sm text-muted-foreground">Le compteur se met à jour à chaque scan.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {scanMode === "qty"
+                ? "Scannez, puis saisissez la quantité."
+                : "Le compteur se met à jour à chaque scan."}
+            </p>
           </div>
         )}
       </section>
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className={cn(preparationChipClass(scanMode === "unit"), "flex-1 justify-center")}
+          aria-pressed={scanMode === "unit"}
+          onClick={() => onScanModeChange("unit")}
+        >
+          Unitaire
+        </button>
+        <button
+          type="button"
+          className={cn(preparationChipClass(scanMode === "qty"), "flex-1 justify-center")}
+          aria-pressed={scanMode === "qty"}
+          onClick={() => onScanModeChange("qty")}
+        >
+          Quantité
+        </button>
+      </div>
 
       <Button type="button" size="touch" className="w-full" onClick={onOpenCamera} disabled={busy}>
         <Camera />
@@ -160,7 +191,7 @@ export function PickFloorView({
       ) : null}
 
       <p className={`text-sm ${scanError ? "text-red-700" : "text-muted-foreground"}`} aria-live="polite">
-        {scanning ? "Lecture…" : scanError || scanMessage || "Chaque scan ajoute une unité (ou le pack)."}
+        {scanning ? "Lecture…" : scanError || scanMessage || (scanMode === "qty" ? "Scannez un article, puis saisissez la quantité." : "Chaque scan ajoute une unité (ou le pack).")}
       </p>
 
       <ul className="space-y-2">
@@ -194,9 +225,21 @@ export function PickFloorView({
                 <p className="truncate text-xs text-muted-foreground">{line.warehouse || "Entrepôt non défini"}</p>
               </div>
             </div>
-            <p className="num shrink-0 text-sm font-semibold">
-              {formatQuantity(line.picked)}/{formatQuantity(line.requested)}
-            </p>
+            <div className="flex shrink-0 flex-col items-end gap-0.5">
+              <p className="num text-sm font-semibold">
+                {formatQuantity(line.picked)}/{formatQuantity(line.requested)}
+              </p>
+              {line.picked > 0 ? (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-muted-foreground hover:underline"
+                  disabled={busy}
+                  onClick={() => onResetLine(line.key)}
+                >
+                  Remettre à 0
+                </button>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

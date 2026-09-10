@@ -11,6 +11,7 @@ export interface PickLine {
 }
 
 export type ScanTone = "idle" | "ok" | "warn" | "error";
+export type ScanEntryMode = "unit" | "qty";
 
 export interface ScanLogEntry {
   id: string;

@@ -10,7 +10,7 @@ from collections import defaultdict
 
 import frappe
 from frappe import _
-from frappe.utils import cint, flt
+from frappe.utils import cint, cstr, flt
 
 from log.delivery_note_ops import _apply_named_status, serialize_delivery_note
 
@@ -1047,19 +1047,36 @@ def _enrich_recent_pick_lists(rows):
 		frappe.get_all(
 			"Sales Order",
 			filters={"name": ["in", all_so]},
-			fields=["name", "customer_name", "customer", "custom_wilaya"],
+			fields=[
+				"name",
+				"customer_name",
+				"customer",
+				"custom_wilaya",
+				"custom_commune",
+				"delivery_date",
+				"transaction_date",
+			],
 		)
 		if all_so
 		else []
 	)
+	_attach_commune_names(so_rows)
 	name_by_so = {row.name: (row.customer_name or row.customer or "") for row in so_rows}
 	wilaya_by_so = {row.name: (row.get("custom_wilaya") or "") for row in so_rows}
+	commune_by_so = {row.name: (row.get("custom_commune") or "") for row in so_rows}
+	commune_nom_by_so = {row.name: (row.get("custom_commune_nom") or "") for row in so_rows}
+	delivery_by_so = {row.name: cstr(row.get("delivery_date") or "") for row in so_rows}
+	transaction_by_so = {row.name: cstr(row.get("transaction_date") or "") for row in so_rows}
 
 	customers_by_pl = {}
 	wilayas_by_pl = {}
+	communes_by_pl = {}
+	commune_noms_by_pl = {}
 	for pick_list, sales_orders in orders_by_pl.items():
 		customers_by_pl[pick_list] = _unique_labels(name_by_so.get(sales_order) for sales_order in sales_orders)
 		wilayas_by_pl[pick_list] = _unique_labels(wilaya_by_so.get(sales_order) for sales_order in sales_orders)
+		communes_by_pl[pick_list] = _unique_labels(commune_by_so.get(sales_order) for sales_order in sales_orders)
+		commune_noms_by_pl[pick_list] = _unique_labels(commune_nom_by_so.get(sales_order) for sales_order in sales_orders)
 
 	notes_by_pl = defaultdict(list)
 	seen_dn = defaultdict(set)
@@ -1074,6 +1091,13 @@ def _enrich_recent_pick_lists(rows):
 	for row in rows:
 		name = row.get("name")
 		sales_orders = list(orders_by_pl.get(name) or [])
+		delivery_dates = [delivery_by_so.get(sales_order) for sales_order in sales_orders if delivery_by_so.get(sales_order)]
+		transaction_dates = [
+			transaction_by_so.get(sales_order) for sales_order in sales_orders if transaction_by_so.get(sales_order)
+		]
+		due_dates = delivery_dates or transaction_dates
+		communes = communes_by_pl.get(name, [])
+		commune_noms = commune_noms_by_pl.get(name, [])
 		enriched.append(
 			{
 				"name": name,
@@ -1084,6 +1108,12 @@ def _enrich_recent_pick_lists(rows):
 				"sales_order_count": len(sales_orders),
 				"customer_names": customers_by_pl.get(name, []),
 				"wilayas": wilayas_by_pl.get(name, []),
+				"communes": communes,
+				"commune_noms": commune_noms,
+				"custom_commune": communes[0] if communes else None,
+				"custom_commune_nom": commune_noms[0] if commune_noms else None,
+				"delivery_date": min(due_dates) if due_dates else None,
+				"transaction_date": min(transaction_dates) if transaction_dates else None,
 				"requested_qty": requested_by_pl.get(name, 0),
 				"picked_qty": picked_by_pl.get(name, 0),
 				"warehouses": warehouses_by_pl.get(name, []),

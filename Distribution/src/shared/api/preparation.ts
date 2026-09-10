@@ -177,6 +177,12 @@ export interface RecentPickList {
   sales_orders?: string[];
   customer_names?: string[];
   wilayas?: string[];
+  communes?: string[];
+  commune_noms?: string[];
+  custom_commune?: string | null;
+  custom_commune_nom?: string | null;
+  delivery_date?: string | null;
+  transaction_date?: string | null;
   requested_qty?: number;
   picked_qty?: number;
   warehouses?: string[];
@@ -284,6 +290,18 @@ export function orderIsModified(row?: { custom_preparation_status?: string | nul
 
 export function orderReadyToComplete(row?: Pick<SalesOrderRow, "ready_to_complete"> | null) {
   return Boolean(row?.ready_to_complete);
+}
+
+export function pickListDueDate(row: Pick<RecentPickList, "delivery_date" | "transaction_date">) {
+  return row.delivery_date || row.transaction_date || "";
+}
+
+export function pickListRemaining(row: Pick<RecentPickList, "requested_qty" | "picked_qty">) {
+  return Math.max(0, (row.requested_qty ?? 0) - (row.picked_qty ?? 0));
+}
+
+export function pickListIncomplete(row: Pick<RecentPickList, "requested_qty" | "picked_qty">) {
+  return pickListRemaining(row) > 0.000001;
 }
 
 export type PickLineState = "shortage" | "on_list" | "to_pick" | "ok";

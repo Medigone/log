@@ -360,6 +360,18 @@ export function ReturnControlPanel() {
             </button>
           </>
         }
+        visibleFilters={
+          <DateRangeFilter
+            label="Période"
+            className="h-[30px] shrink-0 rounded-lg text-xs"
+            from={dateFrom}
+            to={dateTo}
+            onChange={(range) => {
+              setDateFrom(range.from);
+              setDateTo(range.to);
+            }}
+          />
+        }
         moreFilters={
           <PreparationMoreFilters>
             <FilterSelect
@@ -379,14 +391,6 @@ export function ReturnControlPanel() {
               value={vehicle || "all"}
               onChange={(value) => setVehicle(value === "all" ? "" : value)}
               options={[{ value: "all", label: "Tous" }, ...vehicles.map((value) => ({ value, label: value }))]}
-            />
-            <DateRangeFilter
-              from={dateFrom}
-              to={dateTo}
-              onChange={(range) => {
-                setDateFrom(range.from);
-                setDateTo(range.to);
-              }}
             />
           </PreparationMoreFilters>
         }
