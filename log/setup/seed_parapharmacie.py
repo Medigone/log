@@ -12,53 +12,35 @@ import frappe
 from frappe.utils import flt
 from frappe.utils.file_manager import save_file
 
-ROOT_GROUP = "Tous les Groupes d'Articles"
-PARENT_GROUP = "Parapharmacie"
+from log.setup.item_groups import CANONICAL_LEAF_GROUPS, DEFAULT_FEATURED_GROUPS, ensure_item_groups
+
 COMPANY = "Modern Pharma"
 WAREHOUSE = "Magasins - MP"
 STOCK_UOM = "N°"
 SELLING_PRICE_LIST = "Vente standard"
 BUYING_PRICE_LIST = "Achat standard"
 
-CATEGORIES = [
-	"Soins du visage",
-	"Soins du corps",
-	"Cheveux",
-	"Hygiène",
-	"Bébé & maman",
-	"Compléments alimentaires",
-	"Protection solaire",
-	"Premiers soins",
-]
-
-FEATURED_GROUPS = [
-	"Soins du visage",
-	"Bébé & maman",
-	"Protection solaire",
-	"Compléments alimentaires",
-]
-
 HERO_IMAGE_STEM = "PARA-HERO"
 
 # item_code, item_name, group, description, wholesale DZD, purchase DZD, PPA DZD, store_visible, show_price
 ARTICLES = [
-	("PARA-001", "Crème hydratante visage 50 ml", "Soins du visage", "Crème hydratante quotidienne pour peaux normales à sèches.", 1200, 720, 1650, 1, 1),
-	("PARA-002", "Sérum vitamine C 30 ml", "Soins du visage", "Sérum antioxydant pour un teint plus lumineux.", 2800, 1680, 3850, 1, 1),
-	("PARA-003", "Eau micellaire 500 ml", "Soins du visage", "Démaquillant doux sans rinçage, yeux et visage.", 850, 510, 1190, 1, 1),
-	("PARA-004", "Crème anti-âge nuit 50 ml", "Soins du visage", "Soin de nuit raffermissant à la rétinol-like.", 3200, 1920, 4450, 1, 1),
-	("PARA-005", "Gel nettoyant visage 200 ml", "Soins du visage", "Gel moussant pour peaux mixtes à grasses.", 780, 470, 1090, 1, 1),
-	("PARA-006", "Lait corporel hydratant 400 ml", "Soins du corps", "Lait nourrissant pour le corps, texture non grasse.", 980, 590, 1350, 1, 1),
-	("PARA-007", "Huile sèche multi-usages 150 ml", "Soins du corps", "Huile sèche corps et cheveux à l'huile d'argan.", 1450, 870, 1990, 1, 1),
-	("PARA-008", "Beurre de karité 200 ml", "Soins du corps", "Beurre de karité pur pour peaux très sèches.", 1100, 660, 1520, 1, 1),
-	("PARA-009", "Crème mains réparatrice 75 ml", "Soins du corps", "Crème mains pour peaux abîmées et gercées.", 620, 370, 860, 1, 1),
-	("PARA-010", "Shampooing doux 400 ml", "Cheveux", "Shampooing usage fréquent pour tous types de cheveux.", 740, 440, 1020, 1, 1),
-	("PARA-011", "Après-shampooing démêlant 200 ml", "Cheveux", "Soin démêlant pour cheveux secs et ternes.", 690, 410, 950, 1, 1),
-	("PARA-012", "Huile capillaire nourrissante 100 ml", "Cheveux", "Huile de soin pour pointes sèches et cheveux cassants.", 1280, 770, 1760, 1, 1),
-	("PARA-013", "Masque réparateur 250 ml", "Cheveux", "Masque nutrition intense, pose 5 minutes.", 1550, 930, 2140, 1, 1),
-	("PARA-014", "Gel douche surgras 500 ml", "Hygiène", "Gel douche dermatologique pour peaux sensibles.", 540, 320, 750, 1, 1),
-	("PARA-015", "Déodorant roll-on 50 ml", "Hygiène", "Déodorant 24 h sans sels d'aluminium.", 480, 290, 670, 1, 1),
-	("PARA-016", "Dentifrice protection complète 75 ml", "Hygiène", "Dentifrice fluoré pour dents et gencives.", 320, 190, 450, 1, 1),
-	("PARA-017", "Savon dermatologique 100 g", "Hygiène", "Pain dermatologique surgras, sans savon.", 290, 170, 410, 1, 1),
+	("PARA-001", "Crème hydratante visage 50 ml", "Visage & dermocosmétique", "Crème hydratante quotidienne pour peaux normales à sèches.", 1200, 720, 1650, 1, 1),
+	("PARA-002", "Sérum vitamine C 30 ml", "Visage & dermocosmétique", "Sérum antioxydant pour un teint plus lumineux.", 2800, 1680, 3850, 1, 1),
+	("PARA-003", "Eau micellaire 500 ml", "Visage & dermocosmétique", "Démaquillant doux sans rinçage, yeux et visage.", 850, 510, 1190, 1, 1),
+	("PARA-004", "Crème anti-âge nuit 50 ml", "Visage & dermocosmétique", "Soin de nuit raffermissant à la rétinol-like.", 3200, 1920, 4450, 1, 1),
+	("PARA-005", "Gel nettoyant visage 200 ml", "Visage & dermocosmétique", "Gel moussant pour peaux mixtes à grasses.", 780, 470, 1090, 1, 1),
+	("PARA-006", "Lait corporel hydratant 400 ml", "Corps & hydratation", "Lait nourrissant pour le corps, texture non grasse.", 980, 590, 1350, 1, 1),
+	("PARA-007", "Huile sèche multi-usages 150 ml", "Corps & hydratation", "Huile sèche corps et cheveux à l'huile d'argan.", 1450, 870, 1990, 1, 1),
+	("PARA-008", "Beurre de karité 200 ml", "Corps & hydratation", "Beurre de karité pur pour peaux très sèches.", 1100, 660, 1520, 1, 1),
+	("PARA-009", "Crème mains réparatrice 75 ml", "Corps & hydratation", "Crème mains pour peaux abîmées et gercées.", 620, 370, 860, 1, 1),
+	("PARA-010", "Shampooing doux 400 ml", "Cheveux & cuir chevelu", "Shampooing usage fréquent pour tous types de cheveux.", 740, 440, 1020, 1, 1),
+	("PARA-011", "Après-shampooing démêlant 200 ml", "Cheveux & cuir chevelu", "Soin démêlant pour cheveux secs et ternes.", 690, 410, 950, 1, 1),
+	("PARA-012", "Huile capillaire nourrissante 100 ml", "Cheveux & cuir chevelu", "Huile de soin pour pointes sèches et cheveux cassants.", 1280, 770, 1760, 1, 1),
+	("PARA-013", "Masque réparateur 250 ml", "Cheveux & cuir chevelu", "Masque nutrition intense, pose 5 minutes.", 1550, 930, 2140, 1, 1),
+	("PARA-014", "Gel douche surgras 500 ml", "Hygiène & toilette", "Gel douche dermatologique pour peaux sensibles.", 540, 320, 750, 1, 1),
+	("PARA-015", "Déodorant roll-on 50 ml", "Hygiène & toilette", "Déodorant 24 h sans sels d'aluminium.", 480, 290, 670, 1, 1),
+	("PARA-016", "Dentifrice protection complète 75 ml", "Hygiène bucco-dentaire", "Dentifrice fluoré pour dents et gencives.", 320, 190, 450, 1, 1),
+	("PARA-017", "Savon dermatologique 100 g", "Hygiène & toilette", "Pain dermatologique surgras, sans savon.", 290, 170, 410, 1, 1),
 	("PARA-018", "Liniment oléo-calcaire 250 ml", "Bébé & maman", "Liniment pour le change du nourrisson.", 890, 530, 1230, 1, 1),
 	("PARA-019", "Crème change 100 ml", "Bébé & maman", "Crème isolante contre les rougeurs du siège.", 760, 460, 1050, 1, 1),
 	("PARA-020", "Eau nettoyante bébé 500 ml", "Bébé & maman", "Eau nettoyante sans rinçage visage et siège.", 820, 490, 1140, 1, 1),
@@ -71,18 +53,18 @@ ARTICLES = [
 	("PARA-027", "Lait solaire corps SPF 30 200 ml", "Protection solaire", "Protection solaire quotidienne pour toute la famille.", 1890, 1130, 2610, 1, 1),
 	("PARA-028", "Lait après-soleil 150 ml", "Protection solaire", "Soin apaisant et hydratant après exposition.", 1120, 670, 1540, 1, 1),
 	("PARA-029", "Stick solaire lèvres SPF 50", "Protection solaire", "Stick compact pour lèvres et zones sensibles.", 680, 410, 940, 1, 1),
-	("PARA-030", "Solution antiseptique 125 ml", "Premiers soins", "Antiseptique cutané pour plaies superficielles.", 430, 260, 600, 1, 1),
-	("PARA-031", "Pansements assortis x20", "Premiers soins", "Boîte de 20 pansements de tailles variées.", 350, 210, 490, 1, 1),
-	("PARA-032", "Crème cicatrisante 40 g", "Premiers soins", "Crème réparatrice pour petites plaies et irritations.", 920, 550, 1270, 1, 1),
-	("PARA-033", "Spray brûlure 50 ml", "Premiers soins", "Spray apaisant pour brûlures superficielles.", 1340, 800, 1850, 1, 1),
+	("PARA-030", "Solution antiseptique 125 ml", "Premiers soins & pansements", "Antiseptique cutané pour plaies superficielles.", 430, 260, 600, 1, 1),
+	("PARA-031", "Pansements assortis x20", "Premiers soins & pansements", "Boîte de 20 pansements de tailles variées.", 350, 210, 490, 1, 1),
+	("PARA-032", "Crème cicatrisante 40 g", "Premiers soins & pansements", "Crème réparatrice pour petites plaies et irritations.", 920, 550, 1270, 1, 1),
+	("PARA-033", "Spray brûlure 50 ml", "Premiers soins & pansements", "Spray apaisant pour brûlures superficielles.", 1340, 800, 1850, 1, 1),
 	# Cas d'interface : visible sans prix, et article masqué du store
-	("PARA-034", "Crème contour des yeux 15 ml", "Soins du visage", "Soin contour des yeux anti-cernes — prix sur demande.", 1950, 1170, 2690, 1, 0),
+	("PARA-034", "Crème contour des yeux 15 ml", "Visage & dermocosmétique", "Soin contour des yeux anti-cernes — prix sur demande.", 1950, 1170, 2690, 1, 0),
 	("PARA-035", "Gant de toilette bébé x5", "Bébé & maman", "Article interne, non affiché dans le store.", 180, 110, 250, 0, 1),
 ]
 
 
 def execute():
-	_ensure_groups()
+	ensure_item_groups()
 	created, updated = _ensure_articles()
 	imaged = _ensure_article_images()
 	_ensure_store_settings()
@@ -93,41 +75,10 @@ def execute():
 		clear_storefront_cache()
 	except Exception:
 		pass
-	print(f"Groupes : {PARENT_GROUP} + {len(CATEGORIES)} catégories")
+	print(f"Groupes : {len(CANONICAL_LEAF_GROUPS)} rayons")
 	print(f"Articles créés : {created}, mis à jour : {updated}")
 	print(f"Images rattachées : {imaged}")
-	print("Rayons portail : " + ", ".join(FEATURED_GROUPS))
-
-
-def _ensure_groups():
-	if not frappe.db.exists("Item Group", ROOT_GROUP):
-		frappe.throw(f"Le groupe racine « {ROOT_GROUP} » est introuvable.")
-	_upsert_group(PARENT_GROUP, ROOT_GROUP, is_group=1)
-	for name in CATEGORIES:
-		_upsert_group(name, PARENT_GROUP, is_group=0)
-
-
-def _upsert_group(name: str, parent: str, *, is_group: int):
-	if frappe.db.exists("Item Group", name):
-		doc = frappe.get_doc("Item Group", name)
-		changed = False
-		if doc.parent_item_group != parent:
-			doc.parent_item_group = parent
-			changed = True
-		if int(doc.is_group or 0) != is_group:
-			doc.is_group = is_group
-			changed = True
-		if changed:
-			doc.save(ignore_permissions=True)
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Item Group",
-			"item_group_name": name,
-			"parent_item_group": parent,
-			"is_group": is_group,
-		}
-	).insert(ignore_permissions=True)
+	print("Rayons portail : " + ", ".join(DEFAULT_FEATURED_GROUPS))
 
 
 def _ensure_articles():
@@ -239,8 +190,11 @@ def _ensure_store_settings():
 	settings.show_featured = 1
 	if not settings.rail_limit:
 		settings.rail_limit = 8
+	settings.set("store_groups", [])
+	for index, group in enumerate(CANONICAL_LEAF_GROUPS):
+		settings.append("store_groups", {"item_group": group, "display_order": index})
 	settings.set("featured_groups", [])
-	for index, group in enumerate(FEATURED_GROUPS):
+	for index, group in enumerate(DEFAULT_FEATURED_GROUPS):
 		settings.append("featured_groups", {"item_group": group, "display_order": index})
 	hero = _find_image(HERO_IMAGE_STEM)
 	if hero:

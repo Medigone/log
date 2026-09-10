@@ -12,7 +12,7 @@ const SUCCESS_MESSAGE = "Demande envoyée. Un conseiller vous contactera pour va
 const SELECT_CLASS =
   "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none md:text-sm focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
 
-export function SignupForm() {
+export function SignupForm({ onSuccess }: { onSuccess?: () => void } = {}) {
   const { data, isLoading, error: optionsError } = useSignupOptions()
   const { submit, sending } = useCustomerSignup()
   const communes = data?.message?.communes || []
@@ -54,6 +54,7 @@ export function SignupForm() {
         email: email.trim(),
       })
       setSuccess(result.message || SUCCESS_MESSAGE)
+      onSuccess?.()
     } catch (submitError) {
       setError(apiErrorMessage(submitError))
     }

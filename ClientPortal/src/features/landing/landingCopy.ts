@@ -1,60 +1,92 @@
 export const ACCENT = "#09090b"
 
 export const heroPoints = [
-	"Détaillants et grossistes",
-	"Un délégué dédié",
-	"Commande suivie de bout en bout",
+	"Parapharmacie et nutrition infantile",
+	"Store B2B et espace client",
+	"Vente aux professionnels",
+] as const
+
+export const storePoints = [
+	{
+		tag: "Catalogue",
+		title: "Parcourez les gammes à votre rythme",
+		desc: "Retrouvez les produits par rayons, ouvrez chaque fiche et préparez votre sélection avant de commander.",
+	},
+	{
+		tag: "Commande",
+		title: "Passez commande en ligne",
+		desc: "Ajoutez les quantités au panier et transmettez votre commande, depuis un ordinateur ou un téléphone.",
+	},
+	{
+		tag: "Hors catalogue",
+		title: "Un article absent du catalogue ?",
+		desc: "Demandez un article hors catalogue en indiquant la désignation, la quantité et, si besoin, une photo. L’équipe reprend ensuite la demande.",
+	},
+	{
+		tag: "Suivi",
+		title: "Suivez votre commande",
+		desc: "Retrouvez le statut de vos commandes, de la validation jusqu’à la livraison.",
+	},
+] as const
+
+export const universeExtension =
+	"La gamme peut être étendue selon les besoins des clients."
+
+export const storePreviewItems = [
+	{ group: "Nutrition infantile", name: "Lait 1er âge", image: "/assets/log/images/store-preview-lait.jpg" },
+	{ group: "Nutrition infantile", name: "Compote fruits", image: "/assets/log/images/store-preview-compote.jpg" },
+	{ group: "Parapharmacie", name: "Soin quotidien", image: "/assets/log/images/store-preview-soin.jpg" },
+	{ group: "Parapharmacie", name: "Hygiène", image: "/assets/log/images/store-preview-hygiene.jpg" },
+] as const
+
+export const portalPoints = [
+	{
+		tag: "Commandes",
+		title: "Suivez vos commandes",
+		desc: "Retrouvez l’historique et le statut de vos commandes passées auprès de Modern Pharma.",
+	},
+	{
+		tag: "Livraisons",
+		title: "Vos bons de livraison",
+		desc: "Consultez les documents de livraison associés à votre activité.",
+	},
+	{
+		tag: "Compte",
+		title: "Solde et informations",
+		desc: "Accédez au solde, à l’historique des règlements et aux informations de votre magasin.",
+	},
+	{
+		tag: "Alertes",
+		title: "Notifications utiles",
+		desc: "Choisissez les alertes commandes, livraisons, paiements et offres à recevoir.",
+	},
+] as const
+
+export const universes = [
+	{
+		tag: "Nutrition infantile",
+		title: "Nutrition infantile",
+		desc: "Laits infantiles, compotes et solutions nutritionnelles destinées aux différentes étapes de la petite enfance.",
+	},
+	{
+		tag: "Parapharmacie",
+		title: "Parapharmacie",
+		desc: "Une sélection de produits de parapharmacie destinée aux pharmacies, parapharmacies et professionnels partenaires.",
+	},
+] as const
+
+export const storePreviewSteps = [
+	{ label: "Consulter les produits", time: "Catalogue", glyph: "✓", done: true, active: false },
+	{ label: "Préparer le panier", time: "Quantités", glyph: "✓", done: true, active: false },
+	{ label: "Passer commande", time: "en cours", glyph: "3", done: false, active: true },
+	{ label: "Suivre la livraison", time: "—", glyph: "4", done: false, active: false },
 ] as const
 
 export const trackSteps = [
-	{ label: "Commande reçue", time: "05/09 · 14:20", glyph: "✓", done: true, active: false },
-	{ label: "Préparée et contrôlée", time: "06/09 · 07:05", glyph: "✓", done: true, active: false },
-	{ label: "En cours de livraison", time: "en approche", glyph: "3", done: false, active: true },
-	{ label: "Livrée", time: "—", glyph: "4", done: false, active: false },
-] as const
-
-export const pillars = [
-	{
-		tag: "Disponibilité",
-		title: "Du stock, pas des promesses",
-		desc: "Nos volumes sont dimensionnés sur vos historiques de commande, pour éviter les ruptures sur vos références qui tournent.",
-	},
-	{
-		tag: "Réactivité",
-		title: "Commandé, puis livré",
-		desc: "Petits réassorts d’officine comme volumes de gros : la commande part dès qu’elle est prête, sans attendre un créneau.",
-	},
-	{
-		tag: "Traçabilité",
-		title: "Chaque livraison est documentée",
-		desc: "Quantités remises, écarts éventuels, situation de compte : tout est consigné et consultable à tout moment.",
-	},
-	{
-		tag: "Proximité",
-		title: "Un interlocuteur qui vous connaît",
-		desc: "Un délégué suit votre point de vente : conseil d’assortiment, réclamations, ouverture de nouvelles références.",
-	},
-] as const
-
-export const steps = [
-	{
-		n: "1",
-		title: "Vous nous contactez",
-		desc: "Par téléphone ou via le formulaire. Nous vérifions que votre adresse est dans notre zone de livraison.",
-		meta: "Réponse sous 48 h",
-	},
-	{
-		n: "2",
-		title: "Nous ouvrons le compte",
-		desc: "Registre de commerce, adresse de livraison, conditions convenues avec votre délégué.",
-		meta: "Réservé aux professionnels",
-	},
-	{
-		n: "3",
-		title: "Vous commandez",
-		desc: "Votre première commande est préparée et livrée à votre point de vente ou à votre dépôt.",
-		meta: "Détaillants et grossistes",
-	},
+	{ label: "En attente de validation", time: "statut", glyph: "✓", done: true, active: false },
+	{ label: "À livrer", time: "préparation", glyph: "✓", done: true, active: false },
+	{ label: "Livraison en cours", time: "terrain", glyph: "3", done: false, active: true },
+	{ label: "Livré", time: "—", glyph: "4", done: false, active: false },
 ] as const
 
 export const coverageNetwork = [

@@ -444,36 +444,46 @@ def campaign_item_groups(campaign, visible_rows: dict | None = None) -> list[str
 
 def get_store_settings() -> frappe._dict:
 	if not frappe.db.exists("DocType", "Parametres Boutique Portail"):
-		return frappe._dict(
-			fallback_headline="Commandez vos produits",
-			fallback_cta_label="Parcourir le catalogue",
-			fallback_body="",
-			fallback_image=None,
-			show_categories=1,
-			show_promotions=1,
-			show_featured=1,
-			rail_limit=RAIL_LIMIT_DEFAULT,
-			featured_groups=[],
-		)
+		return _default_store_settings()
 	try:
 		return frappe.get_single("Parametres Boutique Portail")
 	except frappe.DoesNotExistError:
-		return frappe._dict(
-			fallback_headline="Commandez vos produits",
-			fallback_cta_label="Parcourir le catalogue",
-			fallback_body="",
-			fallback_image=None,
-			show_categories=1,
-			show_promotions=1,
-			show_featured=1,
-			rail_limit=RAIL_LIMIT_DEFAULT,
-			featured_groups=[],
-		)
+		return _default_store_settings()
+
+
+def _default_store_settings() -> frappe._dict:
+	return frappe._dict(
+		fallback_headline="Commandez vos produits",
+		fallback_cta_label="Parcourir le catalogue",
+		fallback_body="",
+		fallback_image=None,
+		show_categories=1,
+		show_promotions=1,
+		show_featured=1,
+		rail_limit=RAIL_LIMIT_DEFAULT,
+		featured_groups=[],
+		store_groups=[],
+	)
 
 
 def rail_limit(settings=None) -> int:
 	settings = settings or get_store_settings()
 	return min(max(cint(settings.get("rail_limit") or RAIL_LIMIT_DEFAULT), 1), 24)
+
+
+def store_catalog_groups(settings=None) -> list[str]:
+	from log.setup.item_groups import effective_store_groups
+
+	settings = settings or get_store_settings()
+	return effective_store_groups(settings.get("store_groups") if settings else None)
+
+
+def store_featured_groups(settings=None) -> list[str]:
+	from log.setup.item_groups import effective_featured_groups
+
+	settings = settings or get_store_settings()
+	store = store_catalog_groups(settings)
+	return effective_featured_groups(settings.get("featured_groups") if settings else None, store_groups=store)
 
 
 def serialize_cta(campaign) -> dict[str, Any]:
@@ -774,7 +784,7 @@ def _build_storefront_payload(customer: str, portal_user: str, *, include_unpubl
 	rails = [row for row in serialized if row["placement"] == PLACEMENT_RAIL]
 	categories = []
 	if cint(settings.get("show_categories", 1)):
-		categories = [{"name": name} for name in frappe.get_all("Item Group", filters={"is_group": 0}, pluck="name", order_by="name asc")]
+		categories = [{"name": name} for name in store_featured_groups(settings)]
 
 	return {
 		"campaigns": serialized,

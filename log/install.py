@@ -16,7 +16,14 @@ def ensure_distribution_roles():
 
 def after_install():
 	"""Hook exécuté après l'installation de l'app Log"""
+	from log.setup.brands import ensure_brands
+	from log.setup.customer_groups import ensure_customer_groups
+	from log.setup.item_groups import ensure_item_groups
+
 	ensure_distribution_roles()
+	ensure_customer_groups()
+	ensure_item_groups()
+	ensure_brands()
 	frappe.msgprint("Installation de l'app Log terminée avec succès.")
 
 def before_install():
