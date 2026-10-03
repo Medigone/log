@@ -21,6 +21,7 @@ import {
   ArrowLeft,
   CheckCircle,
   ClipboardList,
+  FileText,
   Package,
   Printer,
   QrCode,
@@ -37,6 +38,8 @@ import {
   useRecentPickLists,
   applyBarcodeScan,
   getPickGroupLocations,
+  openDeliveryNotesPdf,
+  openPickListsPdf,
   orderIsModified,
   orderReadyToComplete,
   usePickListOrderChanged,
@@ -364,7 +367,6 @@ function SalesOrderPicker({
     setCustomer("");
     setListFilter("all");
     setStockFilter("all");
-    setNotPicked(false);
     setActiveStage(null);
   };
 
@@ -489,6 +491,18 @@ function SalesOrderPicker({
               }}
             >
               <span className="size-1.5 rounded-full bg-destructive" /> Échéance dépassée
+            </button>
+            <button
+              type="button"
+              className={preparationChipClass(dateScope === "tomorrow")}
+              onClick={() => {
+                setDateScope((current) => (current === "tomorrow" ? "all" : "tomorrow"));
+                setDateFrom("");
+                setDateTo("");
+                setActiveStage(null);
+              }}
+            >
+              <span className="size-1.5 rounded-full bg-primary" /> Livraison demain
             </button>
             <button
               type="button"
@@ -762,6 +776,9 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       salesOrder: location.sales_order,
       requested: location.stock_qty,
       uom: location.stock_uom || location.uom,
+      batchNo: location.batch_no || undefined,
+      expiryDate: location.expiry_date || undefined,
+      expirySoon: Boolean(location.expiry_soon),
     })),
   );
   const varianceGroups = grouped.filter((group) => groupPickedQty(group, picked) !== group.stock_qty);
@@ -1028,6 +1045,9 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
 
   const floorLines = grouped.map((group) => {
     const pickedQty = groupPickedQty(group, picked);
+    const groupLocations = getPickGroupLocations(group);
+    const batchNos = new Set(groupLocations.map((location) => location.batch_no).filter(Boolean));
+    const expiryDates = groupLocations.map((location) => location.expiry_date).filter((value): value is string => Boolean(value));
     return {
       key: `${group.item_code}-${group.warehouse || ""}`,
       itemCode: group.item_code,
@@ -1037,6 +1057,9 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
       requested: group.stock_qty,
       remaining: Math.max(0, group.stock_qty - pickedQty),
       complete: pickedQty >= group.stock_qty,
+      batchCount: batchNos.size,
+      expiryDate: expiryDates.sort()[0],
+      expirySoon: groupLocations.some((location) => location.expiry_soon),
     };
   });
   const remainingArticles = floorLines.filter((line) => !line.complete).length;
@@ -1123,22 +1146,30 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
         }
         description={description}
         actions={
-          draftOpen && !reviewing ? (
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={fillRequested} disabled={modificationPending}>
-                Tout prélever
+          <div className="flex flex-wrap gap-2">
+            {pickListNames.length ? (
+              <Button variant="outline" size="sm" onClick={() => openPickListsPdf(pickListNames)}>
+                <Printer className="w-4 h-4 mr-1" />
+                Bon de préparation
               </Button>
-              <Button
-                size="sm"
-                onClick={() => setReviewing(true)}
-                disabled={submitting || saving || isLoading || modificationPending || reviewBlocked}
-                title={reviewBlocked ? `Encore ${formatQty(totals.remaining)} unité${totals.remaining > 1 ? "s" : ""} à prélever` : undefined}
-              >
-                <CheckCircle className="w-4 h-4 mr-2" />
-                Contrôle final
-              </Button>
-            </div>
-          ) : undefined
+            ) : null}
+            {draftOpen && !reviewing ? (
+              <>
+                <Button variant="outline" size="sm" onClick={fillRequested} disabled={modificationPending}>
+                  Tout prélever
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setReviewing(true)}
+                  disabled={submitting || saving || isLoading || modificationPending || reviewBlocked}
+                  title={reviewBlocked ? `Encore ${formatQty(totals.remaining)} unité${totals.remaining > 1 ? "s" : ""} à prélever` : undefined}
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Contrôle final
+                </Button>
+              </>
+            ) : null}
+          </div>
         }
       />
 
@@ -1335,18 +1366,37 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
 
       {notes.length > 0 && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle className="text-base">Bons créés ({notes.length})</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => openDeliveryNotesPdf(notes.map((note) => note.name))}>
+              <FileText className="w-4 h-4 mr-1" />
+              {notes.length > 1 ? "Imprimer les BL" : "Imprimer le BL"}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-2">
-            {notes.map((note) => (
+            {notes.map((note) => {
+              const soonCount = (note.articles || []).filter((article) => article.expiry_soon).length;
+              return (
               <div key={note.name} className="flex items-center justify-between gap-3 rounded-lg border p-3">
                 <div>
                   <div className="font-medium text-sm">{note.name}</div>
                   <div className="text-xs text-muted-foreground">{note.customer_name || note.customer}</div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {soonCount > 0 ? (
+                    <StatusBadge tone="warning" size="sm">
+                      {soonCount} DLC proche{soonCount > 1 ? "s" : ""}
+                    </StatusBadge>
+                  ) : null}
                   <Badge>{note.custom_statut || note.status || "Préparé"}</Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-label={`Imprimer le BL ${note.name}`}
+                    onClick={() => openDeliveryNotesPdf([note.name])}
+                  >
+                    <FileText className="w-4 h-4" />
+                  </Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -1358,7 +1408,8 @@ function PickListWorkspace({ pickListNames, creationConfirmed, onBack }: { pickL
                   </Button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}

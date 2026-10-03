@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { crumbsFromPath } from "@/layouts/breadcrumbPath"
-import { LayoutDashboard, Package, Truck, UserRound, Wallet } from "lucide-react"
+import { LayoutDashboard, Truck, UserRound } from "lucide-react"
 
 function labels(pathname: string) {
   return crumbsFromPath(pathname).map((crumb) => crumb.label)
@@ -12,15 +12,26 @@ function hops(pathname: string) {
 
 describe("crumbsFromPath", () => {
   it("préfixe la liste par la catégorie du menu", () => {
-    expect(labels("/today")).toEqual(["Exploitation", "Tableau de bord"])
-    expect(labels("/deliveries")).toEqual(["Exploitation", "Livraisons"])
-    expect(labels("/stock")).toEqual(["Ressources", "Stock véhicules"])
-    expect(labels("/cashier")).toEqual(["Caisse", "Caisse Tournées"])
+    expect(labels("/today")).toEqual(["Opérationnel", "Tableau de bord"])
+    expect(labels("/deliveries")).toEqual(["Opérationnel", "Livraisons"])
+    expect(labels("/stock")).toEqual(["Opérationnel", "Stock véhicules"])
+    expect(labels("/cashier")).toEqual(["Opérationnel", "Caisse Tournées"])
+    expect(labels("/articles")).toEqual(["Ventes", "Articles"])
+    expect(labels("/articles/prix")).toEqual(["Ventes", "Prix"])
+    expect(labels("/articles/referentiels")).toEqual(["Ventes", "Référentiels"])
+  })
+
+  it("relie une fiche article au catalogue", () => {
+    expect(hops("/articles/PARA-001")).toEqual([
+      { label: "Ventes", to: undefined },
+      { label: "Articles", to: "/articles" },
+      { label: "PARA-001", to: undefined },
+    ])
   })
 
   it("garde le lien vers la liste sur une fiche détail", () => {
     expect(hops("/planning/routes/LIV-26-09-00001")).toEqual([
-      { label: "Exploitation", to: undefined },
+      { label: "Opérationnel", to: undefined },
       { label: "Planification", to: "/planning" },
       { label: "LIV-26-09-00001", to: undefined },
     ])
@@ -30,17 +41,37 @@ describe("crumbsFromPath", () => {
       { label: "i1m9bh99va", to: undefined },
     ])
     expect(hops("/cashier/LIV-1")).toEqual([
-      { label: "Caisse", to: undefined },
+      { label: "Opérationnel", to: undefined },
       { label: "Caisse Tournées", to: "/cashier" },
       { label: "LIV-1", to: undefined },
     ])
     expect(hops("/caisses/i1m9bh99va")).toEqual([
-      { label: "Caisse", to: undefined },
+      { label: "Opérationnel", to: undefined },
       { label: "Caisses livreurs", to: "/caisses" },
       { label: "i1m9bh99va", to: undefined },
     ])
+    expect(hops("/commandes/nouvelle")).toEqual([
+      { label: "Ventes", to: undefined },
+      { label: "Commandes", to: "/commandes" },
+      { label: "Nouvelle commande", to: undefined },
+    ])
+    expect(hops("/commandes/SAL-ORD-2026-00002")).toEqual([
+      { label: "Ventes", to: undefined },
+      { label: "Commandes", to: "/commandes" },
+      { label: "SAL-ORD-2026-00002", to: undefined },
+    ])
+    expect(hops("/clients/CUST-2026-00012")).toEqual([
+      { label: "Ventes", to: undefined },
+      { label: "Clients", to: "/clients" },
+      { label: "CUST-2026-00012", to: undefined },
+    ])
+    expect(hops("/receptions/MAT-PRE-2026-00001")).toEqual([
+      { label: "Achats", to: undefined },
+      { label: "Réceptions", to: "/receptions" },
+      { label: "MAT-PRE-2026-00001", to: undefined },
+    ])
     expect(hops("/preparation/commandes/SAL-ORD-1")).toEqual([
-      { label: "Exploitation", to: undefined },
+      { label: "Opérationnel", to: undefined },
       { label: "Préparation", to: "/preparation" },
       { label: "SAL-ORD-1", to: undefined },
     ])
@@ -51,10 +82,10 @@ describe("crumbsFromPath", () => {
     expect(deliveries[0].icon).toBe(LayoutDashboard)
     expect(deliveries[1].icon).toBe(Truck)
     const livreurs = crumbsFromPath("/livreurs/abc")
-    expect(livreurs[0].icon).toBe(Package)
+    expect(livreurs[0].icon).toBe(Truck)
     expect(livreurs[1].icon).toBe(UserRound)
     expect(livreurs[2].icon).toBeUndefined()
-    expect(crumbsFromPath("/caisses")[0].icon).toBe(Wallet)
+    expect(crumbsFromPath("/caisses")[0].icon).toBe(LayoutDashboard)
   })
 
   it("laisse un chemin hors nav sans catégorie", () => {

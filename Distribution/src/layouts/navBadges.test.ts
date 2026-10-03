@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { navBadgesFromDashboard, operationalNavAlerts } from "@/layouts/navBadges"
+import { navBadgesFromDashboard, operationalNavAlerts, orderNavBadge, receiptNavBadge } from "@/layouts/navBadges"
 import type { ActivityDashboardData } from "@/shared/types/distribution"
 
 function dashboard(partial: Partial<ActivityDashboardData>): ActivityDashboardData {
@@ -39,5 +39,20 @@ describe("navBadges", () => {
         { id: "prep-overdue", tone: "danger", title: "Préparation en retard", detail: "1 commande" },
       ]).map((alert) => alert.id),
     ).toEqual(["prep-overdue"])
+  })
+
+  it("affiche les réceptions à valider au responsable et en saisie au magasinier", () => {
+    const counts = { en_cours: 2, a_valider: 3, valide_30j: 9 }
+    expect(receiptNavBadge("responsable", counts)).toEqual({ receiptsToValidate: { count: 3, alert: false } })
+    expect(receiptNavBadge("magasinier", counts)).toEqual({ receiptsToValidate: { count: 2, alert: false } })
+    expect(receiptNavBadge("preparateur", counts)).toEqual({})
+    expect(receiptNavBadge("responsable", undefined)).toEqual({})
+  })
+
+  it("affiche au responsable les commandes à valider", () => {
+    const counts = { a_livrer: 2, brouillons: 4, brouillons_portail: 1, soumises_aujourdhui: 2, montant_aujourdhui: 1000 }
+    expect(orderNavBadge("responsable", counts)).toEqual({ ordersToValidate: { count: 4, alert: false } })
+    expect(orderNavBadge("commercial", counts)).toEqual({})
+    expect(orderNavBadge("responsable", { ...counts, brouillons: 0 })).toEqual({})
   })
 })

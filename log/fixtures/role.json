@@ -33,5 +33,26 @@
   "doctype": "Role",
   "name": "Caissier",
   "role_name": "Caissier"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Magasinier",
+  "role_name": "Magasinier"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Commercial",
+  "role_name": "Commercial"
+ },
+ {
+  "desk_access": 1,
+  "disabled": 0,
+  "doctype": "Role",
+  "name": "Gestionnaire catalogue",
+  "role_name": "Gestionnaire catalogue"
  }
 ]

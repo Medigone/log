@@ -3,6 +3,9 @@ export type DistributionRole =
   | "planificateur"
   | "livreur"
   | "caissier"
+  | "magasinier"
+  | "commercial"
+  | "catalogue"
   | "responsable"
   | "none";
 
@@ -11,6 +14,8 @@ export interface DistributionUser {
   fullName: string;
   email: string;
   role: DistributionRole;
+  /** Accès au catalogue articles, même si le rôle principal est un autre (Magasinier + Gestionnaire catalogue). */
+  canManageCatalog?: boolean;
 }
 
 export type RouteLifecycle = "Brouillon" | "Publiée" | "En cours" | "Retour dépôt" | "Contrôle caisse" | "Terminée" | "Annulée";

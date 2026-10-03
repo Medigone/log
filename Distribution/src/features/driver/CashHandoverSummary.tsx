@@ -1,4 +1,4 @@
-import { LogOut, Undo2 } from "lucide-react";
+import { Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 export function CashHandoverSkeleton() {
   return (
     <div aria-busy="true" aria-label="Chargement du bilan">
-      <div className="bg-foreground px-4 pb-8 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <div className="bg-foreground px-4 py-5">
         <Skeleton className="h-3 w-44 bg-white/15" />
         <Skeleton className="mt-4 h-10 w-56 bg-white/15" />
         <div className="mt-4 grid grid-cols-2 gap-2.5">
@@ -37,14 +37,12 @@ export function CashHandoverSummary({
   onDeclare,
   onOpenHistory,
   weeklyDeliveryCount,
-  onLogout,
 }: {
   route?: DistributionRoute | null;
   cashBoxValidated: boolean;
   onDeclare?: () => void;
   onOpenHistory: () => void;
   weeklyDeliveryCount?: number;
-  onLogout?: () => void;
 }) {
   const stops = route?.stops || [];
   const progress = routeProgress(stops);
@@ -56,24 +54,12 @@ export function CashHandoverSummary({
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
-      <header className="bg-foreground px-4 pb-5 pt-[max(0.75rem,env(safe-area-inset-top))] text-background">
+      <section className="bg-foreground px-4 py-5 text-background">
         <div className="flex items-center justify-between gap-2.5">
           <p className="t-micro tracking-[0.09em] text-background/60 uppercase">À remettre au dépôt</p>
-          <div className="flex items-center gap-2">
-            <StatusBadge tone={cashBoxValidated ? "success" : "warning"} size="sm">
-              {cashBoxValidated ? "Caisse validée" : "Caisse non validée"}
-            </StatusBadge>
-            {onLogout ? (
-              <button
-                type="button"
-                onClick={onLogout}
-                aria-label="Se déconnecter"
-                className="grid size-11 place-items-center rounded-xl bg-white/10"
-              >
-                <LogOut className="size-4" />
-              </button>
-            ) : null}
-          </div>
+          <StatusBadge tone={cashBoxValidated ? "success" : "warning"} size="sm">
+            {cashBoxValidated ? "Caisse validée" : "Caisse non validée"}
+          </StatusBadge>
         </div>
         <p className="num mt-2 text-[40px] leading-none font-medium tracking-tight">{formatDriverMoney(remaining.total, true)}</p>
         <dl className="mt-4 grid grid-cols-2 gap-2.5">
@@ -86,7 +72,7 @@ export function CashHandoverSummary({
             <dd className="num mt-0.5 whitespace-nowrap text-[17px] font-medium">{formatDriverMoney(remaining.cheque, false)}</dd>
           </div>
         </dl>
-      </header>
+      </section>
 
       <div className="flex flex-col gap-3 px-4 pt-3.5">
         <Card density="touch" className="shrink-0 overflow-hidden p-0">
@@ -177,7 +163,7 @@ export function CashHandoverSummary({
         </div>
       </div>
 
-      <div className="sticky bottom-20 mt-auto border-t bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="sticky bottom-[calc(var(--mobile-tab-bar-height)+env(safe-area-inset-bottom))] mt-auto border-t bg-background px-4 py-3">
         {onDeclare ? (
           <Button size="touch" className="h-14 w-full text-base" onClick={onDeclare} disabled={cashBoxValidated}>
             {cashBoxValidated ? "Remise de caisse déclarée" : "Déclarer ma remise de caisse"}

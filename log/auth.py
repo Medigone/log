@@ -8,7 +8,7 @@ from frappe.utils.user import is_website_user
 from log.compat import desk_home_route, home_path
 
 DISTRIBUTION_HOME_ROLES = frozenset(
-	{"Livreur", "Préparateur", "Caissier", "Planificateur", "Responsable"}
+	{"Livreur", "Préparateur", "Caissier", "Planificateur", "Responsable", "Magasinier", "Commercial", "Gestionnaire catalogue"}
 )
 
 LANDING_PATH = "/"

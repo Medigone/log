@@ -17,6 +17,14 @@ vi.mock("@/shared/api/distribution", () => ({
   useActivityDashboard: () => dashboardState,
 }));
 
+vi.mock("@/shared/api/receipts", () => ({
+  useReceiptCounts: () => ({ data: undefined }),
+}));
+
+vi.mock("@/shared/api/orders", () => ({
+  useOrderCounts: () => ({ data: undefined }),
+}));
+
 const manager = { name: "manager@test", email: "manager@test", fullName: "Responsable Test", role: "responsable" as const };
 
 const dashboard: ActivityDashboardData = {
@@ -61,9 +69,9 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/planning");
     expect(hrefs).not.toContain("/livreurs");
     expect(hrefs).not.toContain("/caisses");
-    expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
-    expect(screen.getByText("Ressources")).toBeInTheDocument();
-    expect(screen.queryByText("Caisse")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Opérationnel").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Ressources")).not.toBeInTheDocument();
+    expect(screen.queryByText("Caisse Tournées")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", deskRoot());
   });
 
@@ -71,9 +79,12 @@ describe("DesktopShell", () => {
     renderShell(manager);
     const hrefs = navHrefs();
     expect(hrefs).toEqual(expect.arrayContaining(["/today", "/preparation", "/planning", "/deliveries", "/livreurs", "/vehicules", "/stock", "/cashier", "/caisses"]));
-    expect(screen.getAllByText("Exploitation").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Opérationnel").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
-    expect(screen.getByText("Caisse")).toBeInTheDocument();
+    expect(screen.getByText("Ventes")).toBeInTheDocument();
+    expect(screen.getByText("Achats")).toBeInTheDocument();
+    expect(screen.queryByText("Caisse")).not.toBeInTheDocument();
+    expect(hrefs.indexOf("/cashier")).toBeGreaterThan(hrefs.indexOf("/deliveries"));
     expect(screen.queryByText("Console")).not.toBeInTheDocument();
   });
 
@@ -92,8 +103,8 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/livreurs");
     expect(hrefs).not.toContain("/preparation");
     expect(hrefs).not.toContain("/stock");
-    expect(screen.getAllByText("Caisse").length).toBeGreaterThan(0);
-    expect(screen.queryByText("Exploitation")).not.toBeInTheDocument();
+    expect(screen.getAllByText("Opérationnel").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Ventes")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Bureau" })).toHaveAttribute("href", deskRoot());
   });
 

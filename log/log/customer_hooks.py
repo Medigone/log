@@ -8,6 +8,7 @@ def uppercase_customer_name(doc, method):
 
 @frappe.whitelist()
 def get_customer_contacts(customer):
+    frappe.has_permission("Customer", "read", doc=customer, throw=True)
     contacts_data = frappe.db.sql("""
         SELECT 
             c.name AS docname,

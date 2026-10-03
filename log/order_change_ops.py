@@ -326,6 +326,27 @@ def get_repreparation_impact_data(sales_order: str):
 	}
 
 
+def discard_order_preparation(impact, *, delete_cancelled_pick_lists=False):
+	"""Supprime les BL brouillons et défait les listes de préparation d'une commande (impact déjà contrôlé)."""
+	previous = frappe.flags.in_distribution_repreparation
+	frappe.flags.in_distribution_repreparation = True
+	try:
+		for name in impact["deliveryNotes"]:
+			if frappe.db.exists("Delivery Note", name) and frappe.db.get_value("Delivery Note", name, "docstatus") == 0:
+				frappe.delete_doc("Delivery Note", name, ignore_permissions=True, force=True)
+		for name in impact["pickLists"]:
+			if not frappe.db.exists("Pick List", name):
+				continue
+			pick_list = frappe.get_doc("Pick List", name)
+			if pick_list.docstatus == 1:
+				pick_list.flags.ignore_permissions = True
+				pick_list.cancel()
+			if pick_list.docstatus == 0 or (delete_cancelled_pick_lists and pick_list.docstatus == 2):
+				frappe.delete_doc("Pick List", name, ignore_permissions=True, force=True)
+	finally:
+		frappe.flags.in_distribution_repreparation = previous
+
+
 def reprepare_order(sales_order: str, expected_revision=None):
 	impact = get_repreparation_impact_data(sales_order)
 	if expected_revision not in (None, "") and cint(expected_revision) != impact["revision"]:
@@ -337,18 +358,7 @@ def reprepare_order(sales_order: str, expected_revision=None):
 
 	frappe.flags.in_distribution_repreparation = True
 	try:
-		for name in impact["deliveryNotes"]:
-			if frappe.db.exists("Delivery Note", name):
-				frappe.delete_doc("Delivery Note", name, ignore_permissions=True, force=True)
-		for name in impact["pickLists"]:
-			if not frappe.db.exists("Pick List", name):
-				continue
-			pick_list = frappe.get_doc("Pick List", name)
-			if pick_list.docstatus == 1:
-				pick_list.flags.ignore_permissions = True
-				pick_list.cancel()
-			if pick_list.docstatus == 0:
-				frappe.delete_doc("Pick List", name, ignore_permissions=True, force=True)
+		discard_order_preparation(impact)
 
 		from erpnext.selling.doctype.sales_order.sales_order import create_pick_list
 		from log.pick_list_ops import unreserve_sales_order_stock

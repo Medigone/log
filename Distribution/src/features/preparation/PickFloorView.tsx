@@ -3,6 +3,7 @@ import { BarcodeScannerDialog, type ScanQtyResult } from "@/components/BarcodeSc
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StatusBadge } from "@/components/ui/status-badge"
+import { BatchExpiry } from "@/features/preparation/BatchExpiry"
 import { formatQuantity } from "@/shared/format"
 import { cn } from "@/lib/utils"
 import { ArrowLeft, Camera, CheckCircle, ChevronDown, ScanBarcode } from "lucide-react"
@@ -22,6 +23,9 @@ export type FloorLine = {
   requested: number
   remaining: number
   complete: boolean
+  batchCount?: number
+  expiryDate?: string
+  expirySoon?: boolean
 }
 
 export function PickFloorView({
@@ -67,6 +71,7 @@ export function PickFloorView({
 }) {
   const [manualOpen, setManualOpen] = useState(false)
   const active = lastScan
+  const activeLine = active ? lines.find((line) => line.key === `${active.itemCode}-${active.warehouse || ""}`) : undefined
   const remainingSorted = [...lines].sort((a, b) => Number(a.complete) - Number(b.complete))
   const progress = active && active.requested > 0 ? Math.min(100, (active.picked / active.requested) * 100) : 0
 
@@ -101,6 +106,14 @@ export function PickFloorView({
             </p>
             {active.warehouse ? (
               <p className="mt-0.5 truncate text-xs text-muted-foreground">{active.warehouse}</p>
+            ) : null}
+            {activeLine ? (
+              <BatchExpiry
+                className="mt-1"
+                batchCount={activeLine.batchCount}
+                expiryDate={activeLine.expiryDate}
+                expirySoon={activeLine.expirySoon}
+              />
             ) : null}
             <p className="num mt-3 text-4xl font-semibold tracking-tight">
               {formatQuantity(active.picked)}
@@ -192,6 +205,7 @@ export function PickFloorView({
                   {line.itemCode} · {line.itemName}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">{line.warehouse || "Entrepôt non défini"}</p>
+                <BatchExpiry batchCount={line.batchCount} expiryDate={line.expiryDate} expirySoon={line.expirySoon} />
               </div>
             </div>
             <p className="num shrink-0 text-sm font-semibold">

@@ -1,0 +1,141 @@
+{#- Bon de préparation (Pick List). Contexte : `pages` (liste de pick_list_print_context), `standalone` (document PDF complet). -#}
+{%- if standalone %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>{% if pages|length == 1 %}{{ pages[0].pick_list.name }}{% else %}Bons de préparation{% endif %}</title>
+{%- endif %}
+{% include "log/templates/print/_styles.html" %}
+{%- if standalone %}
+</head>
+<body>
+{%- endif %}
+{%- for p in pages %}
+<div class="mp-doc{% if not loop.last %} mp-break{% endif %}">
+	{%- if p.pick_list.is_cancelled %}
+	<div class="mp-watermark">ANNULÉE</div>
+	{%- endif %}
+
+	<table class="mp-head">
+		<tr>
+			<td class="mp-brand">
+				{%- if p.logo %}<img src="{{ p.logo }}" alt="">{% endif -%}
+				<div class="mp-brand-name">
+					<strong>{{ p.company.name }}</strong>
+					{%- for line in p.company.lines %}<span>{{ line }}</span>{% endfor %}
+				</div>
+			</td>
+			<td class="mp-title">
+				<span class="mp-label">Bon de préparation</span>
+				<strong>{{ p.pick_list.name }}</strong>
+				<span class="mp-pill{% if not p.pick_list.is_draft and not p.pick_list.is_cancelled %} mp-pill-dark{% endif %}">{{ p.pick_list.status }}</span>
+			</td>
+		</tr>
+	</table>
+
+	<div class="mp-rule"></div>
+
+	<table class="mp-cards">
+		<tr>
+			<td class="mp-card-cell">
+				<div class="mp-card">
+					<div class="mp-label">Préparation</div>
+					<table class="mp-kv">
+						<tr><td class="mp-k">Créée le</td><td>{{ p.pick_list.date }}</td></tr>
+						{%- if p.pick_list.warehouse %}<tr><td class="mp-k">Entrepôt</td><td>{{ p.pick_list.warehouse }}</td></tr>{% endif %}
+						{%- if p.pick_list.owner %}<tr><td class="mp-k">Créée par</td><td>{{ p.pick_list.owner }}</td></tr>{% endif %}
+						<tr><td class="mp-k">À prélever</td><td><strong>{{ p.totals.lines }} ligne{% if p.totals.lines > 1 %}s{% endif %} · {{ p.totals.qty }} unités</strong></td></tr>
+					</table>
+				</div>
+			</td>
+			<td class="mp-gap"></td>
+			<td class="mp-card-cell">
+				<div class="mp-card">
+					<div class="mp-label">Commande{% if p.orders|length > 1 %}s{% endif %} ({{ p.orders|length }})</div>
+					<table class="mp-orders">
+						{%- for order in p.orders %}
+						<tr>
+							<td style="width: 38%"><strong>{{ order.name }}</strong></td>
+							<td>{{ order.customer }}{% if order.place %} <span class="mp-muted">· {{ order.place }}</span>{% endif %}</td>
+							<td class="mp-num mp-muted">{{ order.delivery_date }}</td>
+						</tr>
+						{%- endfor %}
+					</table>
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	{%- if p.pick_list.order_changed %}
+	<div class="mp-alert">Commande modifiée depuis la création de cette liste : vérifiez les quantités dans l'application avant de préparer.</div>
+	{%- endif %}
+
+	{%- set cols = 5 + (2 if p.has_batches else 0) %}
+	<table class="mp-lines">
+		<thead>
+			<tr>
+				<th style="width: 18px"></th>
+				<th>#</th>
+				<th>Article</th>
+				{%- if p.has_batches %}<th style="width: 92px">Lot</th><th style="width: 92px">DLC</th>{% endif %}
+				<th class="mp-num" style="width: 82px">À prélever</th>
+				<th class="mp-num" style="width: 70px">Prélevé</th>
+			</tr>
+		</thead>
+		<tbody>
+			{%- set ns = namespace(warehouse=None) %}
+			{%- for line in p.lines %}
+			{%- if line.warehouse != ns.warehouse %}
+			{%- set ns.warehouse = line.warehouse %}
+			<tr class="mp-wh"><td colspan="{{ cols }}">{{ line.warehouse or "Entrepôt non défini" }}</td></tr>
+			{%- endif %}
+			<tr>
+				<td><span class="mp-check"></span></td>
+				<td class="mp-idx">{{ line.idx }}</td>
+				<td>
+					<div class="mp-item-name">{{ line.item_name }}</div>
+					<div class="mp-item-code">
+						{%- if line.item_code %}{{ line.item_code }}{% endif %}
+						{%- if line.orders %}{% if line.item_code %} · {% endif %}{{ line.orders | join(", ") }}{% endif %}
+					</div>
+				</td>
+				{%- if p.has_batches %}
+				<td class="mp-batch">{{ line.batch_no or "—" }}</td>
+				<td class="mp-batch">{{ line.expiry_date or "—" }}{% if line.expiry_soon %}<span class="mp-soon">proche</span>{% endif %}</td>
+				{%- endif %}
+				<td class="mp-num"><strong>{{ line.qty }}</strong> <span class="mp-muted">{{ line.uom }}</span></td>
+				<td class="mp-num">{% if line.picked %}{{ line.picked }}{% else %}<span class="mp-write"></span>{% endif %}</td>
+			</tr>
+			{%- endfor %}
+		</tbody>
+		<tfoot>
+			<tr>
+				<td></td>
+				<td></td>
+				<td colspan="{{ 3 if p.has_batches else 1 }}">{{ p.totals.lines }} ligne{% if p.totals.lines > 1 %}s{% endif %}</td>
+				<td class="mp-num">{{ p.totals.qty }} unités</td>
+				<td></td>
+			</tr>
+		</tfoot>
+	</table>
+
+	<table class="mp-sign">
+		<tr>
+			<td class="mp-sign-cell"><div class="mp-sign-box"><span class="mp-label">Préparé par — date et heure</span></div></td>
+			<td class="mp-gap"></td>
+			<td class="mp-sign-cell"><div class="mp-sign-box"><span class="mp-label">Contrôlé par</span></div></td>
+		</tr>
+	</table>
+
+	<table class="mp-foot">
+		<tr>
+			<td>{{ p.company.name }} · {{ p.pick_list.name }}</td>
+			<td class="mp-num">Imprimé le {{ p.printed_at }}</td>
+		</tr>
+	</table>
+</div>
+{%- endfor %}
+{%- if standalone %}
+</body>
+</html>
+{%- endif %}

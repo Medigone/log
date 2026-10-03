@@ -63,6 +63,11 @@ STOCK_ROLES = PLANNING_ROLES | PREPARATION_ROLES
 ACTIVITY_ROLES = PLANNING_ROLES | PREPARATION_ROLES
 FLEET_ROLES = PLANNING_ROLES
 FLEET_WRITE_ROLES = {"Responsable", "System Manager"}
+RECEIPT_ROLES = {"Magasinier", "Responsable", "System Manager"}
+RECEIPT_VALIDATION_ROLES = MANAGER_ROLES
+ORDER_ROLES = {"Commercial", "Responsable", "System Manager"}
+ORDER_VALIDATION_ROLES = MANAGER_ROLES
+CATALOG_ROLES = {"Gestionnaire catalogue", "Responsable", "System Manager"}
 ACTIVE_ROUTE_STATES = ("Brouillon", "Publiée", "En cours", "Retour dépôt", "Contrôle caisse")
 TERMINAL_STOP_STATES = {"Livré", "Partiellement Livré", "Non Livré", "Annulé"}
 OPEN_PLANNING_FOR_OVERDUE = {"Non planifié", "Planifié", "Publié"}
@@ -81,6 +86,9 @@ ROLE_PRIORITY = (
 	({"Responsable", "System Manager"}, "responsable"),
 	({"Planificateur"}, "planificateur"),
 	({"Préparateur"}, "preparateur"),
+	({"Magasinier"}, "magasinier"),
+	({"Gestionnaire catalogue"}, "catalogue"),
+	({"Commercial"}, "commercial"),
 	({"Livreur"}, "livreur"),
 	({"Caissier"}, "caissier"),
 )
@@ -174,6 +182,7 @@ def get_current_distribution_user():
 		"email": email or frappe.session.user,
 		"fullName": full_name or email or frappe.session.user,
 		"role": role,
+		"canManageCatalog": bool(roles & CATALOG_ROLES),
 	}
 
 

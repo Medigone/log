@@ -9,6 +9,7 @@ from frappe import _
 from frappe.utils import flt, get_url, now_datetime
 
 from log.api.distribution_rules import public_tracking_payload
+from log.utils.batches import batch_display
 
 STATUS_FIELD = "custom_statut"
 QR_FIELD = "custom_qr_image"
@@ -102,6 +103,7 @@ def _recalculate_bl_status(doc):
 
 def serialize_delivery_note(doc):
 	articles = []
+	batches = batch_display(item.get("batch_no") for item in doc.get("items") or [])
 	for item in doc.get("items") or []:
 		qty = flt(item.qty)
 		delivered = flt(item.get("custom_quantite_livree") or 0)
@@ -118,6 +120,9 @@ def serialize_delivery_note(doc):
 				"statut_article": item.get("custom_statut_article") or _article_status(qty, delivered),
 				"raison_non_livraison": item.get("custom_raison_non_livraison"),
 				"commentaire_article": item.get("custom_commentaire_article"),
+				"batch_no": item.get("batch_no"),
+				"expiry_date": (batches.get(item.get("batch_no")) or {}).get("expiry_date"),
+				"expiry_soon": bool((batches.get(item.get("batch_no")) or {}).get("expiry_soon")),
 			}
 		)
 

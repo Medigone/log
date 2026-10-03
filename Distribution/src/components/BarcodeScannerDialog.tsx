@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import {
   cameraErrorDetail,
@@ -25,6 +25,8 @@ export function BarcodeScannerDialog({
   feedback,
   feedbackTone,
   scanResult,
+  paused,
+  prompt,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -32,6 +34,10 @@ export function BarcodeScannerDialog({
   feedback?: string
   feedbackTone?: "success" | "error"
   scanResult?: ScanQtyResult | null
+  /** Ignore les lectures (ex. pendant la saisie d’une quantité) sans couper la caméra. */
+  paused?: boolean
+  /** Panneau affiché à la place du retour de scan (ex. saisie de la quantité). */
+  prompt?: ReactNode
 }) {
   const reactId = useId()
   const regionId = `barcode-scanner-${reactId.replace(/:/g, "")}`
@@ -44,7 +50,7 @@ export function BarcodeScannerDialog({
   const lastScanRef = useRef({ text: "", at: 0 })
   const stopQueueRef = useRef(Promise.resolve())
 
-  onScanRef.current = onScan
+  onScanRef.current = paused ? () => undefined : onScan
 
   useEffect(() => {
     if (!open) {
@@ -136,7 +142,8 @@ export function BarcodeScannerDialog({
       />
 
       <div className="shrink-0 space-y-3 border-t bg-background px-4 py-4">
-        {scanResult ? (
+        {prompt && !cameraError ? prompt : null}
+        {!prompt && scanResult ? (
           <div className="rounded-xl border bg-muted/50 p-3" aria-live="polite">
             <p className="truncate text-sm font-medium">{scanResult.itemName}</p>
             <p className="num mt-1 text-2xl font-semibold tracking-tight">
@@ -148,7 +155,7 @@ export function BarcodeScannerDialog({
           </div>
         ) : null}
 
-        {cameraError ? (
+        {prompt && !cameraError ? null : cameraError ? (
           <div className="flex flex-col gap-2">
             <p role="alert" className="text-sm text-destructive">
               {cameraError}

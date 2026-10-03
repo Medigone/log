@@ -69,6 +69,10 @@ export interface PickLocation {
   sales_order?: string;
   uom?: string;
   stock_uom?: string;
+  batch_no?: string | null;
+  /** DLC du lot (`YYYY-MM-DD`). */
+  expiry_date?: string | null;
+  expiry_soon?: boolean;
 }
 
 export interface PickGroup {
@@ -134,6 +138,43 @@ export interface DeliveryNoteResult {
   image?: string;
   custom_statut?: string;
   status?: string;
+  articles?: Array<{
+    item_code: string;
+    item_name?: string;
+    batch_no?: string | null;
+    expiry_date?: string | null;
+    expiry_soon?: boolean;
+  }>;
+}
+
+/** PDF d'un ou plusieurs bons de livraison (lot + DLC par ligne), ouvert dans un nouvel onglet. */
+export function deliveryNotePdfUrl(names: string[]) {
+  return `/api/method/log.delivery_note_print.download_delivery_notes_pdf?names=${encodeURIComponent(JSON.stringify(names))}`;
+}
+
+export function openDeliveryNotesPdf(names: string[]) {
+  if (!names.length) return;
+  window.open(deliveryNotePdfUrl(names), "_blank", "noopener");
+}
+
+/** Tous les BL d'une tournée en un PDF, dans l'ordre des arrêts. */
+export function routeDeliveryNotesPdfUrl(route: string) {
+  return `/api/method/log.delivery_note_print.download_route_delivery_notes_pdf?route=${encodeURIComponent(route)}`;
+}
+
+export function openRouteDeliveryNotesPdf(route: string) {
+  if (!route) return;
+  window.open(routeDeliveryNotesPdfUrl(route), "_blank", "noopener");
+}
+
+/** PDF du bon de préparation d'une ou plusieurs listes (article, entrepôt, lot, DLC), ouvert dans un nouvel onglet. */
+export function pickListPdfUrl(names: string[]) {
+  return `/api/method/log.pick_list_print.download_pick_lists_pdf?names=${encodeURIComponent(JSON.stringify(names))}`;
+}
+
+export function openPickListsPdf(names: string[]) {
+  if (!names.length) return;
+  window.open(pickListPdfUrl(names), "_blank", "noopener");
 }
 
 export interface PickListData {

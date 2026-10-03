@@ -1,8 +1,9 @@
-import { AlertTriangle, ArrowRight, Check, Circle, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Check, Circle, FileText, X } from "lucide-react";
 import { Badge } from "@/components/reui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { openRouteDeliveryNotesPdf } from "@/shared/api/preparation";
 import {
   Timeline,
   TimelineContent,
@@ -171,6 +172,10 @@ export function SelectedRouteRail({
           <Button className="w-full" onClick={() => onOpenRoute(route.name)}>
             Ouvrir la tournée
             <ArrowRight />
+          </Button>
+          <Button variant="outline" size="sm" className="w-full" onClick={() => openRouteDeliveryNotesPdf(route.name)}>
+            <FileText />
+            Imprimer les BL
           </Button>
           {onCall || onTracking ? (
             <div className="flex gap-2">

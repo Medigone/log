@@ -2,8 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFrappeAuth } from "frappe-react-sdk";
 import {
   Check,
-  ChevronLeft,
-  LogOut,
   RefreshCw,
   ScanLine,
   Truck,
@@ -27,7 +25,6 @@ import {
   useDriverRoute,
   useDriverRouteBoard,
 } from "@/shared/api/distribution";
-import { BrandLogo } from "@/shared/ui/BrandLogo";
 import { goToLanding } from "@/shared/session";
 import {
   clearPendingOperations,
@@ -39,6 +36,7 @@ import type { DistributionRoute, RouteStop, StopCompletionResult } from "@/share
 import { CashHandoverSummary, CashHandoverSkeleton } from "@/features/driver/CashHandoverSummary";
 import { DepartureBoard, departureStep } from "@/features/driver/DepartureBoard";
 import { DriverRouteList } from "@/features/driver/DriverRouteList";
+import { DriverMobileHeader, driverHeaderTitle } from "@/features/driver/DriverMobileHeader";
 import { DriverTabBar, type DriverTab } from "@/features/driver/DriverTabBar";
 import { RouteMapTab } from "@/features/driver/RouteMapTab";
 import { RouteProgressBar } from "@/features/driver/RouteProgressBar";
@@ -63,17 +61,6 @@ function localDate() {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function DepartureControlHeader({ route }: { route: DistributionRoute }) {
-  return (
-    <div className="min-w-0 flex-1">
-      <p className="text-[15px] font-semibold tracking-tight">Contrôle départ</p>
-      <p className="num truncate text-xs text-white/70">
-        {route.name} · rév. {route.publishedRevision} {route.acknowledged ? "acceptée" : "à accepter"}
-      </p>
-    </div>
-  );
-}
-
 function DepartureStepper({ step }: { step: 1 | 2 | 3 }) {
   const items = [
     { n: 1, label: "Vérifier" },
@@ -81,14 +68,14 @@ function DepartureStepper({ step }: { step: 1 | 2 | 3 }) {
     { n: 3, label: "Départ" },
   ] as const;
   return (
-    <div className="mt-3 flex gap-1.5" aria-label="Étapes du départ">
+    <div className="flex gap-1.5" aria-label="Étapes du départ">
       {items.map((item) => {
         const active = item.n === step;
         const done = item.n < step;
         return (
           <div key={item.n} className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className={cn("h-[3px] rounded-sm", active || done ? "bg-white" : "bg-white/20")} />
-            <span className={cn("truncate text-xs font-semibold", active || done ? "text-white" : "text-white/45")}>
+            <span className={cn("h-[3px] rounded-sm", active || done ? "bg-foreground" : "bg-border")} />
+            <span className={cn("truncate text-xs font-semibold", active || done ? "text-foreground" : "text-muted-foreground")}>
               {item.n} · {item.label}
             </span>
           </div>
@@ -115,19 +102,19 @@ function DriverRouteStats({ route }: { route: DistributionRoute }) {
             {progress.done} / {progress.total}
           </p>
           {route.lifecycle === "En cours" ? (
-            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-xs font-semibold">En cours</span>
+            <span className="rounded-full bg-emerald-500 px-2.5 py-0.5 text-xs font-semibold text-white">En cours</span>
           ) : (
-            <span className="truncate text-xs text-white/70">{route.lifecycle}</span>
+            <span className="truncate text-xs text-muted-foreground">{route.lifecycle}</span>
           )}
         </div>
-        <p className="mt-1 truncate text-xs text-white/70">
+        <p className="mt-1 truncate text-xs text-muted-foreground">
           {remaining}
           {end && end !== "—" ? ` · fin estimée ${end}` : ""}
         </p>
       </div>
       <div className="text-right">
         <p className="num whitespace-nowrap text-sm font-medium">{formatDriverMoney(progress.collectedAmount)}</p>
-        <p className="text-xs text-white/55">encaissé</p>
+        <p className="text-xs text-muted-foreground">encaissé</p>
       </div>
     </div>
   );
@@ -464,77 +451,39 @@ export function DriverApp() {
     await refresh();
   };
 
+  const tabBarPad = "pb-[calc(var(--mobile-tab-bar-height)+env(safe-area-inset-bottom))]";
+  const showRouteContext = (showDetail || tab === "map") && Boolean(routeData);
+
   return (
     <div
       className={cn(
-        "mx-auto flex max-w-xl flex-col bg-surface-subtle text-foreground",
-        tab === "map" || departureMode
-          ? "h-svh overflow-hidden pb-20"
-          : tab === "bilan"
-            ? "min-h-screen pb-20"
-            : "min-h-screen pb-24",
+        "flex flex-col bg-surface-subtle text-foreground",
+        tab === "map" || departureMode ? "h-svh overflow-hidden" : "min-h-svh",
       )}
     >
-      {tab !== "bilan" ? (
-        <header className="sticky top-0 z-30 shrink-0 bg-brand-600 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white">
-        <div className="flex items-start gap-3">
-          {showDetail ? (
-            <button
-              type="button"
-              onClick={closeRoute}
-              aria-label="Retour aux tournées"
-              className="grid size-11 place-items-center rounded-xl bg-white/10 transition-colors hover:bg-white/20"
-            >
-              <ChevronLeft className="size-5" />
-            </button>
-          ) : (
-            <div className="rounded-lg bg-white p-1.5">
-              <BrandLogo compact className="h-7 w-7" alt="IntraPro Distribution" />
-            </div>
-          )}
-          <div className="min-w-0 flex-1">
-            {showingList ? (
-              <>
-                <p className="text-sm font-semibold tracking-tight">Tournées</p>
-                <p className="t-meta text-brand-100">
-                  {programmed.length
-                    ? `${programmed.length} programmée${programmed.length > 1 ? "s" : ""}`
-                    : "Aucune tournée programmée"}
-                </p>
-              </>
-            ) : showDetail && routeData?.lifecycle === "Publiée" ? (
-              <DepartureControlHeader route={routeData} />
-            ) : routeData ? (
-              <DriverRouteStats route={routeData} />
-            ) : (
-              <>
-                <p className="text-sm font-semibold tracking-tight">Tournée</p>
-                <p className="t-meta text-brand-100">Aucune tournée publiée</p>
-              </>
-            )}
-          </div>
-          {pendingCount > 0 ? (
-            <span className="num rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-amber-950">
-              {pendingCount}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => logout().then(() => goToLanding())}
-            aria-label="Se déconnecter"
-            className="grid size-11 place-items-center rounded-xl bg-white/10 transition-colors hover:bg-white/20"
-          >
-            <LogOut className="size-4" />
-          </button>
-        </div>
-        {departureMode && routeData ? (
-          <DepartureStepper step={controlStep} />
-        ) : (showDetail || tab === "map") && routeData?.stops.length ? (
-          <RouteProgressBar stops={routeData.stops} className="mt-3" />
-        ) : null}
-        </header>
-      ) : null}
+      <DriverMobileHeader
+        title={driverHeaderTitle({
+          tab,
+          showingList,
+          showDetail,
+          routeName: routeData?.name,
+          lifecycle: routeData?.lifecycle,
+        })}
+        showBack={showDetail}
+        onBack={closeRoute}
+        onLogout={() => logout().then(() => goToLanding())}
+      />
 
+      <div
+        className={cn(
+          "mx-auto flex w-full min-w-0 max-w-xl flex-1 flex-col",
+          tab === "map" || departureMode
+            ? cn("min-h-0 overflow-hidden", tabBarPad)
+            : tab === "bilan"
+              ? tabBarPad
+              : "pb-[calc(var(--mobile-tab-bar-height)+env(safe-area-inset-bottom)+1.5rem)]",
+        )}
+      >
       <main
         className={cn(
           tab === "map" || departureMode
@@ -544,7 +493,20 @@ export function DriverApp() {
               : "space-y-4 p-4",
         )}
       >
-        <div className={tab === "map" || departureMode ? "shrink-0 space-y-2 px-4 pt-3" : "contents"}>
+        <div className={tab === "map" || departureMode ? "shrink-0 space-y-3 px-4 pt-3" : "contents"}>
+        {departureMode && routeData ? (
+          <>
+            <p className="num truncate text-xs text-muted-foreground">
+              {routeData.name} · rév. {routeData.publishedRevision} {routeData.acknowledged ? "acceptée" : "à accepter"}
+            </p>
+            <DepartureStepper step={controlStep} />
+          </>
+        ) : showRouteContext && routeData ? (
+          <>
+            <DriverRouteStats route={routeData} />
+            {routeData.stops.length ? <RouteProgressBar stops={routeData.stops} /> : null}
+          </>
+        ) : null}
         {message && (
           <div role="status" className="rounded-xl border border-brand-200 bg-brand-50 p-3 text-sm text-brand-900">
             {message}
@@ -589,7 +551,6 @@ export function DriverApp() {
               setTab("route");
             }}
             weeklyDeliveryCount={dashboardData?.message?.week.deliveredStops}
-            onLogout={() => logout().then(() => goToLanding())}
           />
         ))}
 
@@ -701,6 +662,7 @@ export function DriverApp() {
           </Card>
         )}
       </main>
+      </div>
 
       <DriverTabBar
         tab={tab}

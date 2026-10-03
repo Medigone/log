@@ -16,6 +16,8 @@
   "depot_principal_html",
   "section_stock_retour",
   "entrepot_retour_livraison",
+  "section_lots_peremption",
+  "seuil_dlc_proche_jours",
   "section_heritage",
   "section_break_1",
   "seuil_local_km",
@@ -96,6 +98,19 @@
    "fieldtype": "Link",
    "label": "Entrepôt retour livraison",
    "options": "Warehouse"
+  },
+  {
+   "fieldname": "section_lots_peremption",
+   "fieldtype": "Section Break",
+   "label": "Lots & péremption"
+  },
+  {
+   "default": "30",
+   "description": "Un lot dont la date de péremption tombe dans ce nombre de jours (ou moins) est signalé « DLC proche » en préparation et sur le bon de livraison.",
+   "fieldname": "seuil_dlc_proche_jours",
+   "fieldtype": "Int",
+   "label": "Seuil DLC proche (jours)",
+   "non_negative": 1
   },
   {
    "collapsible": 1,
@@ -183,7 +198,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-08-29 01:37:23.661148",
+ "modified": "2026-10-04 00:10:00.000000",
  "modified_by": "Administrator",
  "module": "Log",
  "name": "Parametres Livraison",

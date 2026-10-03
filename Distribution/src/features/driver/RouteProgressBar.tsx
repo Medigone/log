@@ -6,11 +6,11 @@ const SEGMENT_CLASS: Record<StopVisualState, string> = {
   delivered: "bg-emerald-500",
   partial: "bg-emerald-500",
   failed: "bg-rose-500",
-  current: "bg-white",
-  upcoming: "bg-white/20",
+  current: "bg-foreground",
+  upcoming: "bg-muted",
 };
 
-/** Un segment par arrêt, coloré par résultat — à poser dans l’en-tête sombre. */
+/** Un segment par arrêt, coloré par résultat. */
 export function RouteProgressBar({ stops, className }: { stops: RouteStop[]; className?: string }) {
   const progress = routeProgress(stops);
   return (

@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  FileText,
   Gauge,
   LoaderCircle,
   Navigation,
@@ -42,6 +43,7 @@ import { canDeleteDraftRoute } from "@/features/planning/kanbanHelpers";
 import { RouteMap } from "@/features/planning/RouteMap";
 import { routeVisits } from "@/features/driver/visitHelpers";
 import { printRouteLabels } from "@/features/planning/qrPrinting";
+import { openRouteDeliveryNotesPdf } from "@/shared/api/preparation";
 import { getStopVisualStyle, type StopVisualState } from "@/features/planning/stopStatus";
 import { cn } from "@/lib/utils";
 import { apiErrorMessage, useDistributionMutations, useRouteDetails } from "@/shared/api/distribution";
@@ -512,6 +514,10 @@ export function RouteDetailsPage({ canResolveAccounting = false }: { canResolveA
             >
               <Printer />
               Imprimer les QR
+            </Button>
+            <Button variant="outline" onClick={() => openRouteDeliveryNotesPdf(route.name)} disabled={!route.stops.length}>
+              <FileText />
+              Imprimer les BL
             </Button>
             {route.lifecycle === "Brouillon" && (
               <Button

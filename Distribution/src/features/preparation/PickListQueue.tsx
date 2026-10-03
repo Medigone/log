@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Printer } from "lucide-react";
 import { FilterSelect } from "@/components/FilterSelect";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,7 +8,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { DataGridFeatures } from "@/components/reui/data-grid/data-grid";
-import { usePickListQueueStats, useRecentPickLists, type RecentPickList } from "@/shared/api/preparation";
+import { openPickListsPdf, usePickListQueueStats, useRecentPickLists, type RecentPickList } from "@/shared/api/preparation";
 import { formatDateTime, formatQuantity } from "@/shared/format";
 import {
   PickListItemsSubGrid,
@@ -369,6 +369,7 @@ export function PickListQueue({
               actionLabel={selectedIds.length > 1 ? "Ouvrir les listes" : "Ouvrir la liste"}
               onAction={() => onOpenPickLists(selectedIds)}
               onClear={() => setSelection({})}
+              secondaryAction={{ label: "Imprimer", icon: <Printer />, onClick: () => openPickListsPdf(selectedIds) }}
             />
           ) : undefined
         }

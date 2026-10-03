@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { LayoutDashboard, Package, Wallet } from "lucide-react"
+import { LayoutDashboard, PackageCheck, ShoppingCart, Truck } from "lucide-react"
 import { isNavItemActive, navGroupLabels, navItems, type NavGroup } from "@/layouts/navItems"
 
 export type Crumb = {
@@ -9,9 +9,10 @@ export type Crumb = {
 }
 
 const GROUP_ICONS: Record<NavGroup, LucideIcon> = {
-  exploitation: LayoutDashboard,
-  ressources: Package,
-  encaissement: Wallet,
+  ventes: ShoppingCart,
+  operations: LayoutDashboard,
+  achats: PackageCheck,
+  ressources: Truck,
 }
 
 const SECTION_LABELS: Record<string, string> = {
@@ -22,8 +23,18 @@ const SECTION_LABELS: Record<string, string> = {
   livreurs: "Livreurs",
   vehicules: "Véhicules",
   stock: "Stock véhicules",
+  receptions: "Réceptions",
+  commandes: "Commandes",
   cashier: "Caisse Tournées",
   caisses: "Caisses livreurs",
+  articles: "Articles",
+  clients: "Clients",
+}
+
+const CATALOG_PAGES: Record<string, string> = {
+  prix: "Prix",
+  promotions: "Promotions",
+  referentiels: "Référentiels",
 }
 
 function withNavContext(pathname: string, crumbs: Crumb[]): Crumb[] {
@@ -48,6 +59,21 @@ export function crumbsFromPath(pathname: string): Crumb[] {
   }
   if ((section === "livreurs" || section === "vehicules") && parts[1]) {
     return withNavContext(pathname, [{ label, to: `/${section}` }, { label: decodeURIComponent(parts[1]) }])
+  }
+  if (section === "commandes" && parts[1]) {
+    const detail = parts[1] === "nouvelle" ? "Nouvelle commande" : decodeURIComponent(parts[1])
+    return withNavContext(pathname, [{ label, to: "/commandes" }, { label: detail }])
+  }
+  if (section === "clients" && parts[1]) {
+    return withNavContext(pathname, [{ label, to: "/clients" }, { label: decodeURIComponent(parts[1]) }])
+  }
+  if (section === "receptions" && parts[1]) {
+    return withNavContext(pathname, [{ label, to: "/receptions" }, { label: decodeURIComponent(parts[1]) }])
+  }
+  if (section === "articles" && parts[1]) {
+    const page = CATALOG_PAGES[parts[1]]
+    if (page && !parts[2]) return withNavContext(pathname, [{ label: page }])
+    return withNavContext(pathname, [{ label, to: "/articles" }, { label: decodeURIComponent(parts.slice(1).join("/")) }])
   }
   if (section === "cashier" && parts[1]) {
     return withNavContext(pathname, [{ label, to: "/cashier" }, { label: decodeURIComponent(parts[1]) }])

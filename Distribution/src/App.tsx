@@ -17,15 +17,27 @@ import { CashierRoutePage } from "@/features/cashier/CashierRoutePage";
 import { DriverCashPage } from "@/features/cashier/DriverCashPage";
 import { DriverCashBoxPage } from "@/features/cashier/DriverCashBoxPage";
 import { VehicleStockPage } from "@/features/stock/VehicleStockPage";
+import { ReceiptsPage } from "@/features/receipts/ReceiptsPage";
+import { OrdersPage } from "@/features/orders/OrdersPage";
+import { OrderEntryPage } from "@/features/orders/OrderEntryPage";
+import { ReceiptDetailPage } from "@/features/receipts/ReceiptDetailPage";
 import { DriversPage } from "@/features/fleet/DriversPage";
 import { DriverDetailsPage } from "@/features/fleet/DriverDetailsPage";
 import { VehiclesPage } from "@/features/fleet/VehiclesPage";
 import { VehicleDetailsPage } from "@/features/fleet/VehicleDetailsPage";
+import { ItemsPage } from "@/features/catalog/ItemsPage";
+import { CustomersPage } from "@/features/customers/CustomersPage";
+import { CustomerDetailPage } from "@/features/customers/CustomerDetailPage";
+import { ItemDetailPage } from "@/features/catalog/ItemDetailPage";
+import { PriceGridPage } from "@/features/catalog/PriceGridPage";
+import { PricingRulesPage } from "@/features/catalog/PricingRulesPage";
+import { CatalogSettingsPage } from "@/features/catalog/CatalogSettingsPage";
 import { PublicTrackingPage } from "@/features/tracking/PublicTrackingPage";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { DesktopShell } from "@/layouts/DesktopShell";
+import { canAccessCatalog } from "@/layouts/navItems";
 import { goToLanding } from "@/shared/session";
-import type { DistributionRole } from "@/shared/types/distribution";
+import type { DistributionRole, DistributionUser } from "@/shared/types/distribution";
 
 const RouteDetailsPage = lazy(() => import("@/features/planning/RouteDetailsPage").then((module) => ({ default: module.RouteDetailsPage })));
 
@@ -55,7 +67,7 @@ function AccessDenied() {
         <ShieldAlert className="mx-auto mb-4 size-10 text-amber-600" />
         <h1 className="t-display text-foreground">Accès non configuré</h1>
         <p className="mt-2 t-body text-muted-foreground">
-          Votre compte doit recevoir un rôle Préparateur, Planificateur, Livreur, Caissier ou Responsable.
+          Votre compte doit recevoir un rôle Préparateur, Planificateur, Commercial, Magasinier, Gestionnaire catalogue, Livreur, Caissier ou Responsable.
         </p>
         <Button className="mt-6" variant="outline" onClick={() => logout().then(() => goToLanding())}>
           Se déconnecter
@@ -68,11 +80,18 @@ function AccessDenied() {
 function defaultRoute(role: string) {
   if (role === "livreur") return "/driver";
   if (role === "caissier") return "/cashier";
+  if (role === "magasinier") return "/receptions";
+  if (role === "commercial") return "/commandes";
+  if (role === "catalogue") return "/articles";
   return "/today";
 }
 
 function RoleGuard({ role, allowed, children }: { role: DistributionRole; allowed: DistributionRole[]; children: ReactNode }) {
   return allowed.includes(role) ? children : <Navigate to={defaultRoute(role)} replace />;
+}
+
+function CatalogGuard({ user, children }: { user: DistributionUser; children: ReactNode }) {
+  return canAccessCatalog(user) ? children : <Navigate to={defaultRoute(user.role)} replace />;
 }
 
 function AuthenticatedApp({ currentUser }: { currentUser: string }) {
@@ -98,6 +117,18 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/vehicules" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><VehiclesPage canWrite={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/vehicules/:vehicleId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><VehicleDetailsPage canWrite={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/stock" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><VehicleStockPage canLinkRoutes={user.role !== "preparateur"} /></RoleGuard>} />
+        <Route path="/commandes" element={<RoleGuard role={user.role} allowed={["commercial", "responsable"]}><OrdersPage /></RoleGuard>} />
+        <Route path="/commandes/nouvelle" element={<RoleGuard role={user.role} allowed={["commercial", "responsable"]}><OrderEntryPage key="nouvelle" /></RoleGuard>} />
+        <Route path="/commandes/:orderId" element={<RoleGuard role={user.role} allowed={["commercial", "responsable"]}><OrderEntryPage /></RoleGuard>} />
+        <Route path="/clients" element={<RoleGuard role={user.role} allowed={["commercial", "responsable"]}><CustomersPage /></RoleGuard>} />
+        <Route path="/clients/:customerId" element={<RoleGuard role={user.role} allowed={["commercial", "responsable"]}><CustomerDetailPage /></RoleGuard>} />
+        <Route path="/receptions" element={<RoleGuard role={user.role} allowed={["magasinier", "responsable"]}><ReceiptsPage /></RoleGuard>} />
+        <Route path="/receptions/:receiptId" element={<RoleGuard role={user.role} allowed={["magasinier", "responsable"]}><ReceiptDetailPage /></RoleGuard>} />
+        <Route path="/articles" element={<CatalogGuard user={user}><ItemsPage /></CatalogGuard>} />
+        <Route path="/articles/prix" element={<CatalogGuard user={user}><PriceGridPage /></CatalogGuard>} />
+        <Route path="/articles/promotions" element={<CatalogGuard user={user}><PricingRulesPage /></CatalogGuard>} />
+        <Route path="/articles/referentiels" element={<CatalogGuard user={user}><CatalogSettingsPage /></CatalogGuard>} />
+        <Route path="/articles/:itemCode" element={<CatalogGuard user={user}><ItemDetailPage /></CatalogGuard>} />
         <Route path="/cashier" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierPage /></RoleGuard>} />
         <Route path="/cashier/:routeId" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierRoutePage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["responsable"]}><DriverCashPage /></RoleGuard>} />

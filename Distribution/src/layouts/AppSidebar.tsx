@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import { BrandLogo } from "@/shared/ui/BrandLogo"
 import {
@@ -18,8 +19,8 @@ import {
 import { NavAlertCard } from "@/layouts/NavAlertCard"
 import { NavSearch } from "@/layouts/NavSearch"
 import { NavUser } from "@/layouts/NavUser"
-import { groupedNavItems, isNavItemActive } from "@/layouts/navItems"
-import { useNavBadges } from "@/layouts/navBadges"
+import { groupedNavItems, isNavItemActive, userCapabilities } from "@/layouts/navItems"
+import { useNavBadges, useOrderNavBadge, useReceiptNavBadge } from "@/layouts/navBadges"
 import { cn } from "@/lib/utils"
 import type { DistributionUser } from "@/shared/types/distribution"
 
@@ -28,9 +29,15 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
   const collapsed = state === "collapsed" && !isMobile
   const toggleLabel = isMobile ? "Ouvrir le menu de navigation" : open ? "Réduire le menu" : "Déplier le menu"
   const { pathname } = useLocation()
-  const groups = groupedNavItems(user.role)
-  const badges = useNavBadges()
-  const homePath = groups[0]?.items[0]?.to || "/today"
+  const capabilities = useMemo(() => userCapabilities(user), [user])
+  const groups = groupedNavItems(user.role, capabilities)
+  const dashboardBadges = useNavBadges()
+  const receiptBadges = useReceiptNavBadge(user.role)
+  const orderBadges = useOrderNavBadge(user.role)
+  const badges = { ...dashboardBadges, ...receiptBadges, ...orderBadges }
+  // Le logo ramène au tableau de bord quand il est accessible, sinon à la première page du menu.
+  const visiblePaths = groups.flatMap((group) => group.items.map((item) => item.to))
+  const homePath = visiblePaths.includes("/today") ? "/today" : visiblePaths[0] || "/today"
 
   return (
     <Sidebar collapsible="icon">
@@ -50,7 +57,7 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
             <SidebarTrigger aria-label={toggleLabel} title={toggleLabel} />
           </div>
         )}
-        <NavSearch role={user.role} showTrigger={!collapsed} />
+        <NavSearch role={user.role} capabilities={capabilities} showTrigger={!collapsed} />
       </SidebarHeader>
 
       <SidebarContent>

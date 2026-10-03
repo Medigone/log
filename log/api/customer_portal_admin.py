@@ -11,7 +11,6 @@ import frappe
 from frappe import _
 from frappe.utils import cint, cstr, validate_email_address
 
-
 PASSWORD_LENGTH = 24
 PASSWORD_CHANGE_FIELD = "custom_portal_password_change_required"
 
@@ -27,7 +26,8 @@ def _payload(value: Any) -> dict[str, Any]:
 	return value
 
 
-def _customer_for_access(customer_name: Any):
+def _customer_for_access(customer_name: Any, *, check_permission: bool = True, require_active: bool = True):
+	"""`check_permission=False` : l'appelant (module Clients Distribution) a déjà contrôlé le rôle."""
 	if not frappe.session.user or frappe.session.user == "Guest":
 		frappe.throw(_("Authentification requise."), frappe.PermissionError)
 
@@ -36,11 +36,13 @@ def _customer_for_access(customer_name: Any):
 		frappe.throw(_("La fiche client demandée n'existe pas."), frappe.DoesNotExistError)
 
 	customer = frappe.get_doc("Customer", name)
-	if not frappe.has_permission("Customer", "write", doc=customer, user=frappe.session.user):
+	if check_permission and not frappe.has_permission("Customer", "write", doc=customer, user=frappe.session.user):
 		frappe.throw(
 			_("Vous ne disposez pas du droit de modifier ce client."),
 			frappe.PermissionError,
 		)
+	if not require_active:
+		return customer
 	if cint(customer.disabled):
 		frappe.throw(_("Un accès portail ne peut pas être créé pour un client désactivé."))
 	if customer.meta.has_field("custom_status") and customer.get("custom_status") != "Actif":
@@ -121,6 +123,8 @@ def _create_contact(customer: str, first_name: str, last_name: str, email: str):
 
 
 def _link_contact(contact, user: str):
+	# La création du User met à jour le Contact de même e-mail : on repart de la version enregistrée.
+	contact.reload()
 	if contact.user and contact.user != user:
 		frappe.throw(_("Ce contact est déjà rattaché à un autre utilisateur."))
 	if contact.user != user:
@@ -159,7 +163,10 @@ def _safe_access_result(status: str, user: str, contact: str | None = None) -> d
 
 @frappe.whitelist()
 def get_customer_portal_access_setup(customer):
-	customer_doc = _customer_for_access(customer)
+	return portal_access_setup(_customer_for_access(customer))
+
+
+def portal_access_setup(customer_doc) -> dict[str, Any]:
 	contact_names = frappe.get_all(
 		"Dynamic Link",
 		filters={
@@ -223,7 +230,10 @@ def get_customer_portal_access_setup(customer):
 @frappe.whitelist(methods=["POST"])
 def create_customer_portal_user(payload):
 	data = _payload(payload)
-	customer = _customer_for_access(data.get("customer"))
+	return create_portal_user_for(_customer_for_access(data.get("customer")), data)
+
+
+def create_portal_user_for(customer, data: dict[str, Any]) -> dict[str, Any]:
 	contact_name = cstr(data.get("contact")).strip()
 
 	contact = None

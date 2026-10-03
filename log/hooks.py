@@ -87,10 +87,14 @@ extend_bootinfo = "log.compat.extend_bootinfo"
 # ----------
 
 # add methods and filters to jinja environment
-# jinja = {
-# 	"methods": "log.utils.jinja_methods",
-# 	"filters": "log.utils.jinja_filters"
-# }
+jinja = {
+	"methods": [
+		"log.order_print.order_print_context",
+		"log.delivery_note_print.delivery_note_print_context",
+		"log.pick_list_print.pick_list_print_context",
+		"log.delivery_note_print.route_delivery_notes_print_pages",
+	],
+}
 
 # Installation
 # ------------
@@ -334,7 +338,7 @@ fixtures = [
     "Workflow",
     {
         "dt": "Role",
-        "filters": [["name", "in", ["Préparateur", "Planificateur", "Livreur", "Responsable", "Caissier"]]],
+        "filters": [["name", "in", ["Préparateur", "Planificateur", "Livreur", "Responsable", "Caissier", "Magasinier", "Commercial", "Gestionnaire catalogue"]]],
     },
     {
         "dt": "Customer Group",
@@ -367,6 +371,10 @@ after_migrate = [
     "log.setup.customer_groups.ensure_customer_groups",
     "log.setup.item_groups.ensure_item_groups",
     "log.setup.brands.ensure_brands",
+    "log.setup.payment_terms.ensure_payment_terms",
+    "log.setup.taxes.ensure_algeria_vat",
+    "log.setup.permissions.ensure_order_permissions",
+    "log.setup.permissions.ensure_catalog_permissions",
 ]
 
 page_renderer = ["log.pwa.ServiceWorkerRenderer"]

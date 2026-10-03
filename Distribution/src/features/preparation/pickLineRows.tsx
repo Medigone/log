@@ -1,5 +1,6 @@
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BatchExpiry } from "@/features/preparation/BatchExpiry";
 import type { PickLine } from "@/features/preparation/pickScan";
 
 export function PickLinesTable({
@@ -31,7 +32,7 @@ export function PickLinesTable({
       const value = picked[line.key] ?? 0;
       if (pendingOnly && value >= line.requested) return false;
       if (!term) return true;
-      return [line.itemCode, line.itemName, line.barcode, line.warehouse, line.salesOrder]
+      return [line.itemCode, line.itemName, line.barcode, line.warehouse, line.salesOrder, line.batchNo]
         .filter(Boolean)
         .some((field) => String(field).toLowerCase().includes(term));
     })
@@ -51,7 +52,7 @@ export function PickLinesTable({
         <input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Article, entrepôt, commande…"
+          placeholder="Article, lot, entrepôt, commande…"
           aria-label="Filtrer les lignes"
           className="ml-auto h-[30px] w-[200px] rounded-lg border px-2.5 text-[12.5px] outline-none focus:border-muted-foreground"
         />
@@ -108,6 +109,7 @@ export function PickLinesTable({
               <span className="truncate text-[13px] font-medium">
                 {line.itemCode} · {line.itemName}
               </span>
+              <BatchExpiry batchNo={line.batchNo} expiryDate={line.expiryDate} expirySoon={line.expirySoon} />
               <div className="flex min-w-0 items-center gap-1.5">
                 <div className="h-1 min-w-6 flex-1 overflow-hidden rounded-full bg-muted">
                   <div

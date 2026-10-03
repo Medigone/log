@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { groupedNavItems } from "@/layouts/navItems"
+import { groupedNavItems, type NavCapability } from "@/layouts/navItems"
 import type { DistributionRole } from "@/shared/types/distribution"
 
 function isMacShortcut() {
@@ -21,15 +21,17 @@ function matchesQuery(label: string, query: string) {
 
 export function NavSearch({
   role,
+  capabilities = [],
   showTrigger = true,
 }: {
   role: DistributionRole
+  capabilities?: readonly NavCapability[]
   showTrigger?: boolean
 }) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
-  const groups = useMemo(() => groupedNavItems(role), [role])
+  const groups = useMemo(() => groupedNavItems(role, capabilities), [role, capabilities])
   const shortcut = isMacShortcut() ? "⌘K" : "Ctrl K"
 
   const results = useMemo(

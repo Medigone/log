@@ -1,0 +1,157 @@
+{#- Bon de livraison. Contexte : `pages` (liste de delivery_note_print_context), `standalone` (document PDF complet). -#}
+{%- if standalone %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>{% if pages|length == 1 %}{{ pages[0].note.name }}{% else %}Bons de livraison{% endif %}</title>
+{%- endif %}
+{% include "log/templates/print/_styles.html" %}
+{%- if standalone %}
+</head>
+<body>
+{%- endif %}
+{%- for p in pages %}
+<div class="mp-doc{% if not loop.last %} mp-break{% endif %}">
+	{%- if p.note.is_draft or p.note.is_cancelled %}
+	<div class="mp-watermark">{{ "ANNULÉ" if p.note.is_cancelled else "BROUILLON" }}</div>
+	{%- endif %}
+
+	<table class="mp-head">
+		<tr>
+			<td class="mp-brand">
+				{%- if p.logo %}<img src="{{ p.logo }}" alt="">{% endif -%}
+				<div class="mp-brand-name">
+					<strong>{{ p.company.name }}</strong>
+					{%- for line in p.company.lines %}<span>{{ line }}</span>{% endfor %}
+					{%- if p.company.contacts %}<span>{{ p.company.contacts | join(" · ") }}</span>{% endif %}
+					{%- if p.company.tax_id %}<span>NIF {{ p.company.tax_id }}</span>{% endif %}
+				</div>
+			</td>
+			<td class="mp-title">
+				<span class="mp-label">Bon de livraison</span>
+				<strong>{{ p.note.name }}</strong>
+				<span class="mp-pill{% if not p.note.is_draft and not p.note.is_cancelled %} mp-pill-dark{% endif %}">{{ p.note.status }}</span>
+			</td>
+			{%- if p.qr %}
+			<td class="mp-qr" style="width: 84px; text-align: right"><img src="{{ p.qr }}" alt=""></td>
+			{%- endif %}
+		</tr>
+	</table>
+
+	<div class="mp-rule"></div>
+
+	<table class="mp-cards">
+		<tr>
+			<td class="mp-card-cell">
+				<div class="mp-card">
+					<div class="mp-label">Client</div>
+					<div class="mp-card-title">{{ p.customer.name }}</div>
+					<table class="mp-kv">
+						{%- if p.customer.place %}<tr><td class="mp-k">Commune</td><td>{{ p.customer.place }}</td></tr>{% endif %}
+						{%- for line in p.customer.address %}<tr><td class="mp-k">{% if loop.first %}Adresse{% endif %}</td><td>{{ line }}</td></tr>{% endfor %}
+						{%- if p.customer.phone %}<tr><td class="mp-k">Téléphone</td><td>{{ p.customer.phone }}</td></tr>{% endif %}
+						{%- for label, value in p.customer.ids %}<tr><td class="mp-k">{{ label }}</td><td>{{ value }}</td></tr>{% endfor %}
+					</table>
+				</div>
+			</td>
+			<td class="mp-gap"></td>
+			<td class="mp-card-cell">
+				<div class="mp-card">
+					<div class="mp-label">Livraison</div>
+					<table class="mp-kv">
+						<tr><td class="mp-k">Date du BL</td><td>{{ p.note.date }}</td></tr>
+						{%- if p.note.delivery_date %}<tr><td class="mp-k">Livraison prévue</td><td><strong>{{ p.note.delivery_date }}</strong></td></tr>{% endif %}
+						{%- if p.note.orders %}<tr><td class="mp-k">Commande{% if p.note.orders|length > 1 %}s{% endif %}</td><td>{{ p.note.orders | join(", ") }}</td></tr>{% endif %}
+						{%- if p.note.driver %}<tr><td class="mp-k">Livreur</td><td>{{ p.note.driver }}</td></tr>{% endif %}
+					</table>
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	<table class="mp-lines">
+		<thead>
+			<tr>
+				<th>#</th>
+				<th>Article</th>
+				{%- if p.has_batches %}<th style="width: 96px">Lot</th><th style="width: 92px">DLC</th>{% endif %}
+				<th class="mp-num" style="width: 76px">Qté</th>
+				<th class="mp-num" style="width: 84px">P.U. HT</th>
+				<th class="mp-num" style="width: 96px">Montant HT</th>
+			</tr>
+		</thead>
+		<tbody>
+			{%- for line in p.lines %}
+			<tr>
+				<td class="mp-idx">{{ line.idx }}</td>
+				<td>
+					<div class="mp-item-name">{{ line.item_name }}</div>
+					{%- if line.item_code %}<div class="mp-item-code">{{ line.item_code }}</div>{% endif %}
+				</td>
+				{%- if p.has_batches %}
+				<td class="mp-batch">{{ line.batch_no or "—" }}</td>
+				<td class="mp-batch">{{ line.expiry_date or "—" }}{% if line.expiry_soon %}<span class="mp-soon">proche</span>{% endif %}</td>
+				{%- endif %}
+				<td class="mp-num">{{ line.qty }} <span class="mp-muted">{{ line.uom }}</span></td>
+				<td class="mp-num">{{ line.rate }}</td>
+				<td class="mp-num"><strong>{{ line.amount }}</strong></td>
+			</tr>
+			{%- endfor %}
+		</tbody>
+		<tfoot>
+			<tr>
+				<td></td>
+				<td colspan="{{ 3 if p.has_batches else 1 }}">{{ p.totals["items"] }} ligne{% if p.totals["items"] > 1 %}s{% endif %}</td>
+				<td class="mp-num">{{ p.totals.qty }} unités</td>
+				<td colspan="2"></td>
+			</tr>
+		</tfoot>
+	</table>
+
+	<table class="mp-bottom">
+		<tr>
+			<td class="mp-left">
+				{%- if p.remarks %}
+				<div class="mp-terms" style="margin-top: 0">
+					<div class="mp-label">Remarques</div>
+					{%- for line in p.remarks %}<div>{{ line }}</div>{% endfor %}
+				</div>
+				{%- endif %}
+			</td>
+			<td>
+				<table class="mp-totals">
+					<tr class="mp-sub"><td>Net HT</td><td class="mp-num">{{ p.totals.net_total }}</td></tr>
+					{%- for tax in p.totals.taxes %}<tr><td class="mp-muted">{{ tax.label }}</td><td class="mp-num">{{ tax.amount }}</td></tr>{% endfor %}
+				</table>
+				<div class="mp-grand">
+					<table>
+						<tr>
+							<td><span class="mp-label">Total TTC</span></td>
+							<td class="mp-num"><strong>{{ p.totals.grand_total }}</strong> {{ p.note.currency }}</td>
+						</tr>
+					</table>
+				</div>
+			</td>
+		</tr>
+	</table>
+
+	<table class="mp-sign">
+		<tr>
+			<td class="mp-sign-cell"><div class="mp-sign-box"><span class="mp-label">Livré par</span></div></td>
+			<td class="mp-gap"></td>
+			<td class="mp-sign-cell"><div class="mp-sign-box"><span class="mp-label">Reçu conforme — cachet et signature du client</span></div></td>
+		</tr>
+	</table>
+
+	<table class="mp-foot">
+		<tr>
+			<td>{{ p.company.name }} · {{ p.note.name }}</td>
+			<td class="mp-num">Imprimé le {{ p.printed_at }}</td>
+		</tr>
+	</table>
+</div>
+{%- endfor %}
+{%- if standalone %}
+</body>
+</html>
+{%- endif %}

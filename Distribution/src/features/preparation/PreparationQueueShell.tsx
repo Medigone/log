@@ -105,6 +105,7 @@ export function PreparationSelectionBar({
   actionDisabled,
   onAction,
   onClear,
+  secondaryAction,
 }: {
   summary: string;
   hint?: string;
@@ -112,12 +113,19 @@ export function PreparationSelectionBar({
   actionDisabled?: boolean;
   onAction: () => void;
   onClear: () => void;
+  secondaryAction?: { label: string; icon?: ReactNode; onClick: () => void };
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2.5 bg-foreground px-3 py-2 text-background">
       <span className="text-sm font-medium">{summary}</span>
       {hint ? <span className="text-xs text-background/60">{hint}</span> : null}
       <div className="flex-1" />
+      {secondaryAction ? (
+        <Button size="sm" variant="ghost" className="text-background hover:bg-background/10 hover:text-background" onClick={secondaryAction.onClick}>
+          {secondaryAction.icon}
+          {secondaryAction.label}
+        </Button>
+      ) : null}
       <Button size="sm" variant="secondary" disabled={actionDisabled} onClick={onAction}>
         {actionLabel}
       </Button>

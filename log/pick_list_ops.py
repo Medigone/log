@@ -13,6 +13,7 @@ from frappe import _
 from frappe.utils import cint, flt
 
 from log.delivery_note_ops import _apply_named_status, serialize_delivery_note
+from log.utils.batches import batch_display, batch_expiry_map, is_expired
 
 LOG_SO_TO_DN_FIELDS = (
 	("custom_commune", "custom_commune"),
@@ -691,10 +692,16 @@ def _attach_commune_names(orders):
 	return orders
 
 
+def _expiry_sort_key(location) -> str:
+	"""Lot à DLC la plus courte d'abord (FEFO) ; sans DLC en dernier."""
+	return location.get("expiry_date") or "9999-12-31"
+
+
 def serialize_pick_list(doc):
 	locations = []
 	grouped_map = defaultdict(lambda: {"qty": 0, "stock_qty": 0, "picked_qty": 0, "rows": []})
 	sales_orders = []
+	batches = batch_display(_child_get(loc, "batch_no") for loc in doc.get("locations") or [])
 	for loc in doc.get("locations") or []:
 		item_code = _child_get(loc, "item_code")
 		warehouse = _child_get(loc, "warehouse")
@@ -715,6 +722,7 @@ def serialize_pick_list(doc):
 			"sales_order_item": _child_get(loc, "sales_order_item"),
 			"batch_no": _child_get(loc, "batch_no"),
 			"serial_no": _child_get(loc, "serial_no"),
+			**_location_batch_fields(batches, _child_get(loc, "batch_no")),
 		}
 		locations.append(row)
 		if sales_order and sales_order not in sales_orders:
@@ -739,7 +747,7 @@ def serialize_pick_list(doc):
 			"qty": data["qty"],
 			"stock_qty": data["stock_qty"],
 			"picked_qty": data["picked_qty"],
-			"locations": data["rows"],
+			"locations": sorted(data["rows"], key=_expiry_sort_key),
 		}
 		for data in grouped_map.values()
 	]
@@ -757,6 +765,14 @@ def serialize_pick_list(doc):
 		"delivery_notes": _serialize_linked_delivery_notes(doc.name),
 		"custom_order_changed": cint(doc.get("custom_order_changed")),
 		"custom_order_changed_reason": doc.get("custom_order_changed_reason") or None,
+	}
+
+
+def _location_batch_fields(batches, batch_no) -> dict:
+	info = batches.get(batch_no) or {}
+	return {
+		"expiry_date": info.get("expiry_date"),
+		"expiry_soon": bool(info.get("expiry_soon")),
 	}
 
 
@@ -788,7 +804,10 @@ def serialize_pick_session(docs):
 		"name": "SESSION-" + "-".join(item["name"] for item in serialized),
 		"pick_lists": serialized,
 		"sales_orders": list(dict.fromkeys(so for item in serialized for so in item["sales_orders"])),
-		"grouped": list(grouped_map.values()),
+		"grouped": [
+			{**group, "locations": sorted(group["locations"], key=_expiry_sort_key)}
+			for group in grouped_map.values()
+		],
 		"delivery_notes": notes,
 	}
 
@@ -1266,6 +1285,69 @@ def _enrich_draft_pick_list(doc, so_name):
 	return doc
 
 
+def _available_batch_locations(item_code, warehouse, company):
+	"""Lots disponibles d'un article (non périmés, ordre Stock Settings → FEFO)."""
+	from erpnext.stock.doctype.pick_list.pick_list import get_available_item_locations_for_batched_item
+
+	return get_available_item_locations_for_batched_item(item_code, [warehouse] if warehouse else None, company)
+
+
+def _reallocate_expired_batches(doc) -> bool:
+	"""Remplace, sur une Pick List brouillon, les lignes non prélevées dont le lot est périmé.
+
+	Une ligne déjà prélevée sur un lot périmé bloque : la marchandise est à retirer du stock.
+	"""
+	if cint(doc.docstatus) != 0:
+		return False
+	locations = list(doc.get("locations") or [])
+	expiry = batch_expiry_map(_child_get(loc, "batch_no") for loc in locations)
+	expired_rows = [loc for loc in locations if is_expired(expiry.get(_child_get(loc, "batch_no")))]
+	if not expired_rows:
+		return False
+
+	for loc in expired_rows:
+		if flt(_child_get(loc, "picked_qty")) > 0.000001:
+			frappe.throw(
+				_("Le lot {0} de l'article {1} est périmé depuis le {2} : retirez-le avant de préparer.").format(
+					loc.batch_no, loc.item_code, frappe.utils.formatdate(expiry.get(loc.batch_no))
+				)
+			)
+
+	# Quantités déjà engagées par les lignes conservées, par (article, entrepôt, lot).
+	used = defaultdict(float)
+	for loc in locations:
+		if loc not in expired_rows:
+			used[(loc.item_code, loc.warehouse, loc.batch_no)] += flt(loc.stock_qty)
+
+	for loc in expired_rows:
+		needed = flt(loc.stock_qty)
+		conversion = flt(_child_get(loc, "conversion_factor")) or 1
+		for candidate in _available_batch_locations(loc.item_code, loc.warehouse, doc.company):
+			if needed <= 0.000001:
+				break
+			key = (loc.item_code, candidate.warehouse, candidate.batch_no)
+			free = flt(candidate.qty) - used[key]
+			if free <= 0.000001 or candidate.batch_no == loc.batch_no:
+				continue
+			take = min(free, needed)
+			new_row = _append_pick_location(doc, loc, qty=take / conversion)
+			new_row.batch_no = candidate.batch_no
+			new_row.warehouse = candidate.warehouse
+			new_row.serial_and_batch_bundle = None
+			used[key] += take
+			needed -= take
+		if needed > 0.000001 and needed >= flt(loc.stock_qty) - 0.000001:
+			frappe.throw(
+				_("Aucun lot valide en stock pour l'article {0} (lot {1} périmé).").format(
+					loc.item_code, loc.batch_no
+				)
+			)
+		doc.remove(loc)
+
+	doc.save(ignore_permissions=True)
+	return True
+
+
 def _background_context() -> bool:
 	flags = getattr(frappe, "flags", None)
 	if not flags:
@@ -1456,6 +1538,8 @@ def get_pick_session(pick_lists):
 	if not names:
 		frappe.throw(_("La session de préparation est vide."))
 	docs = [frappe.get_doc("Pick List", name) for name in names]
+	for doc in docs:
+		_reallocate_expired_batches(doc)
 	session = serialize_pick_session(docs)
 	from log.order_change_ops import pending_modified_sales_orders, pending_order_change_notice, sales_orders_from_pick_docs
 
@@ -1593,6 +1677,7 @@ def submit_pick_list_and_create_dns(pick_list):
 		frappe.throw(_("La Pick List ne contient aucune ligne."))
 
 	if doc.docstatus == 0:
+		_reallocate_expired_batches(doc)
 		for loc in doc.locations:
 			if loc.picked_qty is None:
 				loc.picked_qty = flt(loc.stock_qty)

@@ -1,0 +1,167 @@
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, MapPin, MapPinOff, Phone, Search, UserPlus, UserRound } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
+import { useCustomerSearch, type CustomerSummary } from "@/shared/api/orders";
+
+function useDebounced<T>(value: T, delay = 250) {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delay);
+    return () => window.clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
+
+export function CustomerPicker({
+  customer,
+  readOnly,
+  onSelect,
+  onCreate,
+}: {
+  customer: CustomerSummary | null;
+  readOnly?: boolean;
+  onSelect: (customer: CustomerSummary | null) => void;
+  onCreate: (name: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const debounced = useDebounced(query.trim());
+  const { data, isLoading } = useCustomerSearch(debounced, !customer && open);
+  const results = data?.message ?? [];
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => setActive(0), [debounced]);
+
+  if (customer) {
+    return (
+      <section className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm" aria-label="Client">
+        <div className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700">
+          <UserRound className="size-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold">{customer.customer_name}</p>
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 t-meta text-muted-foreground">
+            {customer.customer_group ? <span>{customer.customer_group}</span> : null}
+            {customer.commune_name || customer.wilaya ? (
+              <span>{[customer.commune_name, customer.wilaya].filter(Boolean).join(", ")}</span>
+            ) : null}
+            {customer.phone ? (
+              <span className="inline-flex items-center gap-1">
+                <Phone className="size-3" /> {customer.phone}
+              </span>
+            ) : null}
+            <span className={cn("inline-flex items-center gap-1", !customer.has_gps && "text-amber-700")}>
+              {customer.has_gps ? <MapPin className="size-3" /> : <MapPinOff className="size-3" />}
+              {customer.has_gps ? "GPS connu" : "Sans GPS"}
+            </span>
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          nativeButton={false}
+          render={<a href={`#/clients/${encodeURIComponent(customer.name)}`} target="_blank" rel="noreferrer" />}
+        >
+          <ExternalLink /> Fiche
+        </Button>
+        {readOnly ? null : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              onSelect(null);
+              setQuery("");
+              setOpen(true);
+              window.setTimeout(() => inputRef.current?.focus(), 0);
+            }}
+          >
+            Changer de client
+          </Button>
+        )}
+      </section>
+    );
+  }
+
+  const choose = (row: CustomerSummary) => {
+    onSelect(row);
+    setOpen(false);
+  };
+
+  return (
+    <section className="rounded-xl border bg-card p-3.5 shadow-sm" aria-label="Client">
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <div className="relative min-w-0 flex-1">
+          <InputGroup className="h-11 bg-background">
+            <InputGroupAddon>{isLoading ? <Spinner /> : <Search />}</InputGroupAddon>
+            <InputGroupInput
+              ref={inputRef}
+              value={query}
+              autoFocus
+              autoComplete="off"
+              placeholder="Client : nom, téléphone ou commune…"
+              aria-label="Rechercher un client"
+              onFocus={() => setOpen(true)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setOpen(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActive((index) => Math.min(index + 1, Math.max(results.length - 1, 0)));
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActive((index) => Math.max(index - 1, 0));
+                } else if (event.key === "Enter" && results[active]) {
+                  event.preventDefault();
+                  choose(results[active]);
+                } else if (event.key === "Escape") {
+                  setOpen(false);
+                }
+              }}
+            />
+          </InputGroup>
+          {open ? (
+            <div
+              role="listbox"
+              aria-label="Clients"
+              className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-lg border bg-popover shadow-lg"
+            >
+              {results.map((row, index) => (
+                <button
+                  key={row.name}
+                  type="button"
+                  role="option"
+                  aria-selected={index === active}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => choose(row)}
+                  className={cn(
+                    "flex w-full items-center gap-3 border-b px-3 py-2 text-left last:border-b-0 hover:bg-muted",
+                    index === active && "bg-muted",
+                  )}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{row.customer_name}</span>
+                    <span className="block truncate t-meta text-muted-foreground">
+                      {[row.customer_group, row.commune_name, row.wilaya, row.phone].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                </button>
+              ))}
+              {!isLoading && results.length === 0 ? (
+                <p className="px-3 py-3 text-center text-[12.5px] text-muted-foreground">Aucun client trouvé.</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <Button variant="outline" className="h-11" onClick={() => onCreate(query.trim())}>
+          <UserPlus /> Nouveau client
+        </Button>
+      </div>
+    </section>
+  );
+}

@@ -268,6 +268,8 @@ describe("DriverApp", () => {
     render(<DriverApp />);
 
     expect(screen.getByRole("navigation", { name: /navigation livreur/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Tournées" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /se déconnecter/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^tournée$/i })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("button", { name: /^accueil$/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/tournée du jour/i)).not.toBeInTheDocument();
@@ -283,6 +285,7 @@ describe("DriverApp", () => {
     await openListedRoute(user);
 
     expect(screen.queryByText(/arrêt en cours/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "LIV-1" })).toBeInTheDocument();
     expect(screen.getByText(/1 arrêt restant/i)).toBeInTheDocument();
     expect(screen.getByText(/^encaissé$/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /à livrer/i })).toBeInTheDocument();
@@ -311,6 +314,7 @@ describe("DriverApp", () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await user.click(screen.getByRole("button", { name: /^carte$/i }));
+    expect(screen.getByRole("heading", { level: 1, name: "Carte" })).toBeInTheDocument();
     expect(screen.getAllByText(/1 \/ 2/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /recentrer/i })).toBeInTheDocument();
     expect(screen.getByText(/choisissez le prochain client/i)).toBeInTheDocument();
@@ -333,6 +337,8 @@ describe("DriverApp", () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await user.click(screen.getByRole("button", { name: /^bilan$/i }));
+    expect(screen.getByRole("heading", { level: 1, name: "Bilan" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /se déconnecter/i })).toHaveLength(1);
     expect(screen.getByText(/à remettre au dépôt/i)).toBeInTheDocument();
     expect(screen.getByText(/rapprochement/i)).toBeInTheDocument();
     expect(screen.getByText(/la remise se fait au dépôt avec le caissier/i)).toBeInTheDocument();
@@ -356,9 +362,9 @@ describe("DriverApp", () => {
     const user = userEvent.setup();
     render(<DriverApp />);
     await user.click(screen.getByRole("button", { name: /^bilan$/i }));
-    const header = screen.getByText(/à remettre au dépôt/i).closest("header");
-    expect(header).toHaveTextContent(/caisse validée/i);
-    expect(header?.querySelector("p.num")).toHaveTextContent(/0\s*DZD/);
+    const hero = screen.getByText(/à remettre au dépôt/i).closest("section");
+    expect(hero).toHaveTextContent(/caisse validée/i);
+    expect(hero?.querySelector("p.num")).toHaveTextContent(/0\s*DZD/);
     expect(screen.getByText(/encaissé sur 1 arrêts/i)).toBeInTheDocument();
   });
 

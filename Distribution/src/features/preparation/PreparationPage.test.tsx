@@ -331,6 +331,25 @@ describe("PreparationPage", () => {
     expect(screen.queryByRole("option", { name: "COM-0001" })).not.toBeInTheDocument();
   });
 
+  it("filtre rapidement les commandes à livrer demain", async () => {
+    const user = userEvent.setup();
+    renderPrep();
+
+    const tomorrowFilter = screen.getByRole("button", { name: /livraison demain/i });
+    expect(screen.getByRole("row", { name: /SO-3/ })).toBeInTheDocument();
+
+    await user.click(tomorrowFilter);
+
+    expect(tomorrowFilter).toHaveClass("bg-foreground");
+    expect(screen.getByRole("row", { name: /SO-1/ })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /SO-2/ })).toBeInTheDocument();
+    expect(screen.queryByRole("row", { name: /SO-3/ })).not.toBeInTheDocument();
+
+    await user.click(tomorrowFilter);
+
+    expect(screen.getByRole("row", { name: /SO-3/ })).toBeInTheDocument();
+  });
+
   it("filtre les commandes en retard depuis l’URL", () => {
     mocks.queueData.message[0] = { ...mocks.queueData.message[0], name: "SO-LATE", delivery_date: "2020-01-01" };
     renderPrep("/preparation?dateScope=overdue");
@@ -471,6 +490,57 @@ describe("PreparationPage", () => {
     expect(screen.getByText(/plus rien à prélever/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /réinitialiser les filtres/i }));
     expect(screen.getAllByText(/article test/i).length).toBeGreaterThan(0);
+  });
+
+  it("affiche le lot, la DLC et le badge DLC proche sur la ligne à prélever", async () => {
+    const location = { ...mocks.location, batch_no: "L-2026-07", expiry_date: "2026-10-20", expiry_soon: true };
+    mocks.pickListData.message.pick_lists[0].locations = [location];
+    mocks.pickListData.message.grouped[0].locations = [location];
+    const user = userEvent.setup();
+    renderWorkspace();
+    expect(await screen.findByText(/Lot L-2026-07 · DLC 20\/10\/2026/)).toBeInTheDocument();
+    expect(screen.getByText("DLC proche")).toBeInTheDocument();
+    await user.type(screen.getByLabelText(/filtrer les lignes/i), "L-2026");
+    expect(screen.getByText(/Lot L-2026-07/)).toBeInTheDocument();
+  });
+
+  it("imprime le bon de préparation de la session", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    renderWorkspace();
+    await user.click(await screen.findByRole("button", { name: /bon de préparation/i }));
+    expect(open).toHaveBeenCalledWith(
+      `/api/method/log.pick_list_print.download_pick_lists_pdf?names=${encodeURIComponent(JSON.stringify(["PL-1"]))}`,
+      "_blank",
+      "noopener",
+    );
+    open.mockRestore();
+  });
+
+  it("imprime le PDF des BL créés depuis le récap", async () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const location = { ...mocks.location, picked_qty: 2 };
+    const note = {
+      name: "DN-1",
+      customer_name: "Client Test 1",
+      articles: [{ item_code: "ART-1", batch_no: "L1", expiry_date: "2026-10-20", expiry_soon: true }],
+    };
+    mocks.pickListData.message = {
+      ...structuredClone(mocks.draftSession),
+      pick_lists: [{ name: "PL-1", docstatus: 1, sales_orders: ["SO-1"], locations: [location], grouped: [], delivery_notes: [note] }],
+      grouped: [{ item_code: "ART-1", item_name: "Article test", warehouse: "DEPOT", stock_qty: 2, picked_qty: 2, locations: [location] }],
+      delivery_notes: [note],
+    };
+    const user = userEvent.setup();
+    renderWorkspace();
+    expect(await screen.findByText("1 DLC proche")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /imprimer le bl$/i }));
+    expect(open).toHaveBeenCalledWith(
+      `/api/method/log.delivery_note_print.download_delivery_notes_pdf?names=${encodeURIComponent(JSON.stringify(["DN-1"]))}`,
+      "_blank",
+      "noopener",
+    );
+    open.mockRestore();
   });
 
   it("affiche le recap BL d'une liste déjà soumise sans saisie", async () => {

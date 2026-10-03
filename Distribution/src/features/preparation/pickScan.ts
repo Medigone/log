@@ -8,6 +8,10 @@ export interface PickLine {
   salesOrder?: string;
   requested: number;
   uom?: string;
+  batchNo?: string;
+  /** DLC du lot (`YYYY-MM-DD`). */
+  expiryDate?: string;
+  expirySoon?: boolean;
 }
 
 export type ScanTone = "idle" | "ok" | "warn" | "error";

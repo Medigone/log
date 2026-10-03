@@ -6,6 +6,9 @@ const rolePriority: Array<{ names: string[]; role: DistributionRole }> = [
   { names: ["Administrator", "System Manager", "Responsable", "Responsable Distribution"], role: "responsable" },
   { names: ["Planificateur", "Planificateur Distribution"], role: "planificateur" },
   { names: ["Préparateur", "Préparateur Distribution", "Preparateur Distribution"], role: "preparateur" },
+  { names: ["Magasinier"], role: "magasinier" },
+  { names: ["Gestionnaire catalogue"], role: "catalogue" },
+  { names: ["Commercial"], role: "commercial" },
   { names: ["Livreur", "Livreur Distribution"], role: "livreur" },
   { names: ["Caissier", "Caissier Distribution"], role: "caissier" },
 ];

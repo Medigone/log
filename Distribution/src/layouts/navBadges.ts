@@ -1,6 +1,8 @@
 import { useActivityDashboard } from "@/shared/api/distribution"
+import { useOrderCounts, type OrderCounts } from "@/shared/api/orders"
+import { useReceiptCounts, type ReceiptCounts } from "@/shared/api/receipts"
 import type { NavBadgeKey } from "@/layouts/navItems"
-import type { ActivityAlert, ActivityDashboardData } from "@/shared/types/distribution"
+import type { ActivityAlert, ActivityDashboardData, DistributionRole } from "@/shared/types/distribution"
 
 export interface NavBadge {
   count: number
@@ -53,4 +55,33 @@ export function useNavBadges(): Partial<Record<NavBadgeKey, NavBadge>> {
 export function useNavAlertCount() {
   const { data } = useActivityDashboard(localDate())
   return operationalNavAlerts(data?.message?.alerts)
+}
+
+/** Réceptions : le responsable voit celles à valider, le magasinier celles encore en saisie. */
+export function receiptNavBadge(
+  role: DistributionRole,
+  counts: ReceiptCounts | undefined,
+): Partial<Record<NavBadgeKey, NavBadge>> {
+  if (!counts) return {}
+  const count = role === "magasinier" ? counts.en_cours : role === "responsable" ? counts.a_valider : 0
+  return count > 0 ? { receiptsToValidate: { count, alert: false } } : {}
+}
+
+export function useReceiptNavBadge(role: DistributionRole) {
+  const { data } = useReceiptCounts(role === "magasinier" || role === "responsable")
+  return receiptNavBadge(role, data?.message)
+}
+
+/** Commandes : le responsable voit les brouillons à valider. */
+export function orderNavBadge(
+  role: DistributionRole,
+  counts: OrderCounts | undefined,
+): Partial<Record<NavBadgeKey, NavBadge>> {
+  if (role !== "responsable" || !counts?.brouillons) return {}
+  return { ordersToValidate: { count: counts.brouillons, alert: false } }
+}
+
+export function useOrderNavBadge(role: DistributionRole) {
+  const { data } = useOrderCounts(role === "responsable")
+  return orderNavBadge(role, data?.message)
 }
