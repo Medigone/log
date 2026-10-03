@@ -65,6 +65,7 @@ describe("DesktopShell", () => {
     const hrefs = navHrefs();
     expect(hrefs).toContain("/today");
     expect(hrefs).toContain("/preparation");
+    expect(hrefs).toContain("/codes-barres");
     expect(hrefs).toContain("/stock");
     expect(hrefs).not.toContain("/planning");
     expect(hrefs).not.toContain("/livreurs");
@@ -78,7 +79,7 @@ describe("DesktopShell", () => {
   it("donne au responsable les parcours opérationnels groupés", () => {
     renderShell(manager);
     const hrefs = navHrefs();
-    expect(hrefs).toEqual(expect.arrayContaining(["/today", "/preparation", "/planning", "/deliveries", "/livreurs", "/vehicules", "/stock", "/cashier", "/caisses"]));
+    expect(hrefs).toEqual(expect.arrayContaining(["/today", "/preparation", "/codes-barres", "/planning", "/deliveries", "/livreurs", "/vehicules", "/stock", "/cashier", "/caisses"]));
     expect(screen.getAllByText("Opérationnel").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
     expect(screen.getByText("Ventes")).toBeInTheDocument();
@@ -102,6 +103,7 @@ describe("DesktopShell", () => {
     expect(hrefs).not.toContain("/planning");
     expect(hrefs).not.toContain("/livreurs");
     expect(hrefs).not.toContain("/preparation");
+    expect(hrefs).not.toContain("/codes-barres");
     expect(hrefs).not.toContain("/stock");
     expect(screen.getAllByText("Opérationnel").length).toBeGreaterThan(0);
     expect(screen.queryByText("Ventes")).not.toBeInTheDocument();
@@ -127,6 +129,13 @@ describe("DesktopShell", () => {
     expect(screen.getByText("Préparation en retard")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Masquer les anomalies" }));
     expect(screen.queryByText("1 anomalie")).not.toBeInTheDocument();
+  });
+
+  it("affiche l’id de la pick list dans le fil d’Ariane", () => {
+    renderShell(manager, "/preparation?pick_lists=PL-42");
+    const trail = screen.getByRole("navigation", { name: "breadcrumb" });
+    expect(within(trail).getByText("PL-42")).toBeInTheDocument();
+    expect(within(trail).getByRole("link", { name: /préparation/i })).toHaveAttribute("href", "/preparation");
   });
 
   it("affiche un lien Bureau vers le desk pour les rôles internes", () => {

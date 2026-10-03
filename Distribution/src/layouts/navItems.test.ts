@@ -23,7 +23,7 @@ describe("navItems", () => {
   })
 
   it("filtre les pages selon le rôle", () => {
-    expect(visibleNavItems("preparateur").map((item) => item.to)).toEqual(["/today", "/preparation", "/stock"])
+    expect(visibleNavItems("preparateur").map((item) => item.to)).toEqual(["/today", "/preparation", "/stock", "/codes-barres"])
     expect(visibleNavItems("caissier").map((item) => item.to)).toEqual(["/cashier"])
     expect(groupedNavItems("commercial").map((group) => group.group)).toEqual(["ventes"])
     expect(visibleNavItems("commercial").map((item) => item.to)).toEqual(["/commandes/nouvelle", "/commandes", "/clients"])

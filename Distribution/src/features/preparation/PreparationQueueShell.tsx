@@ -40,6 +40,7 @@ export function PreparationQueueShell({
   searchPlaceholder,
   searchAriaLabel,
   chips,
+  visibleFilters,
   moreFilters,
   countLabel,
   heading,
@@ -53,6 +54,7 @@ export function PreparationQueueShell({
   searchPlaceholder: string;
   searchAriaLabel: string;
   chips?: ReactNode;
+  visibleFilters?: ReactNode;
   moreFilters?: ReactNode;
   countLabel: string;
   heading: ReactNode;
@@ -67,7 +69,7 @@ export function PreparationQueueShell({
     <PreparationToolbarEndContext.Provider value={toolbarEnd}>
     <Card className="gap-0 overflow-hidden py-0">
       <div className="flex flex-wrap items-center gap-2 border-b border-muted px-3 py-2.5">
-        <InputGroup className="h-[30px] w-[280px] min-w-48 bg-background">
+        <InputGroup className="h-[30px] w-[220px] min-w-40 bg-background">
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
@@ -78,6 +80,7 @@ export function PreparationQueueShell({
             aria-label={searchAriaLabel}
           />
         </InputGroup>
+        {visibleFilters ? <div className="flex shrink-0 flex-wrap items-center gap-2">{visibleFilters}</div> : null}
         {chips}
         {moreFilters}
         <div className="flex-1" />

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatShortDate } from "@/shared/format"
+import { cn } from "@/lib/utils"
 
 function parseDay(value?: string) {
   if (!value) return undefined
@@ -18,11 +19,13 @@ export function DateRangeFilter({
   to,
   onChange,
   label = "Période",
+  className,
 }: {
   from: string
   to: string
   onChange: (range: { from: string; to: string }) => void
   label?: string
+  className?: string
 }) {
   const selected: DateRange | undefined = from || to ? { from: parseDay(from), to: parseDay(to) } : undefined
   const labelText =
@@ -37,7 +40,7 @@ export function DateRangeFilter({
   return (
     <Popover>
       <PopoverTrigger
-        render={<Button variant="outline" className="justify-start bg-background font-normal" />}
+        render={<Button variant="outline" className={cn("justify-start bg-background font-normal", className)} />}
         aria-label={label}
       >
         <CalendarIcon data-icon="inline-start" />

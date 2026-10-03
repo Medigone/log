@@ -21,6 +21,7 @@ import { ReceiptsPage } from "@/features/receipts/ReceiptsPage";
 import { OrdersPage } from "@/features/orders/OrdersPage";
 import { OrderEntryPage } from "@/features/orders/OrderEntryPage";
 import { ReceiptDetailPage } from "@/features/receipts/ReceiptDetailPage";
+import { ItemBarcodesPage } from "@/features/barcodes/ItemBarcodesPage";
 import { DriversPage } from "@/features/fleet/DriversPage";
 import { DriverDetailsPage } from "@/features/fleet/DriverDetailsPage";
 import { VehiclesPage } from "@/features/fleet/VehiclesPage";
@@ -109,6 +110,7 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/today" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><TodayPage role={user.role} /></RoleGuard>} />
         <Route path="/preparation" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><PreparationPage /></RoleGuard>} />
         <Route path="/preparation/commandes/:orderId" element={<RoleGuard role={user.role} allowed={["preparateur", "responsable"]}><SalesOrderDetailPage /></RoleGuard>} />
+        <Route path="/codes-barres" element={<RoleGuard role={user.role} allowed={["preparateur", "planificateur", "responsable"]}><ItemBarcodesPage /></RoleGuard>} />
         <Route path="/planning" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><PlanningPage /></RoleGuard>} />
         <Route path="/planning/routes/:routeId" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><Suspense fallback={<div className="grid min-h-80 place-items-center"><LoaderCircle className="size-7 animate-spin text-brand-600" /></div>}><RouteDetailsPage canResolveAccounting={user.role === "responsable"} /></Suspense></RoleGuard>} />
         <Route path="/deliveries" element={<RoleGuard role={user.role} allowed={["planificateur", "responsable"]}><DeliveriesPage /></RoleGuard>} />

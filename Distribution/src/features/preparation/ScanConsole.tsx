@@ -2,7 +2,8 @@ import type { RefObject } from "react";
 import { ScanBarcode } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import type { PickLine, ScanTone } from "@/features/preparation/pickScan";
+import type { PickLine, ScanEntryMode, ScanTone } from "@/features/preparation/pickScan";
+import { preparationChipClass } from "@/features/preparation/PreparationQueueShell";
 
 const TONE_TEXT: Record<ScanTone, string> = {
   idle: "text-muted-foreground",
@@ -19,6 +20,8 @@ export function ScanConsole({
   scanValue,
   onScanValueChange,
   onScan,
+  scanMode,
+  onScanModeChange,
   step,
   totals,
   inputRef,
@@ -31,6 +34,8 @@ export function ScanConsole({
   scanValue: string;
   onScanValueChange: (value: string) => void;
   onScan: (code: string) => void;
+  scanMode: ScanEntryMode;
+  onScanModeChange: (mode: ScanEntryMode) => void;
   step: number;
   totals: { picked: number; requested: number; percent: number; complete: boolean; partialLines: number };
   inputRef: RefObject<HTMLInputElement | null>;
@@ -50,11 +55,29 @@ export function ScanConsole({
     >
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(272px, 1fr))" }}>
         <div className="flex min-w-0 flex-col gap-2.5 border-r p-3.5">
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <span className="t-micro whitespace-nowrap text-muted-foreground">Scan article</span>
-            <span className="num whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
-              +{step} / scan
-            </span>
+            <button
+              type="button"
+              className={preparationChipClass(scanMode === "unit")}
+              aria-pressed={scanMode === "unit"}
+              onClick={() => onScanModeChange("unit")}
+            >
+              Unitaire
+            </button>
+            <button
+              type="button"
+              className={preparationChipClass(scanMode === "qty")}
+              aria-pressed={scanMode === "qty"}
+              onClick={() => onScanModeChange("qty")}
+            >
+              Quantité
+            </button>
+            {scanMode === "unit" ? (
+              <span className="num whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
+                +{step} / scan
+              </span>
+            ) : null}
           </div>
 
           <Input
@@ -82,7 +105,10 @@ export function ScanConsole({
           />
 
           <p className={cn("text-[12.5px] leading-snug", TONE_TEXT[feedback.tone])} aria-live="polite">
-            {feedback.text || `Chaque scan ajoute ${step} unité${step > 1 ? "s" : ""} jusqu’à la quantité demandée.`}
+            {feedback.text ||
+              (scanMode === "qty"
+                ? "Scannez un article, puis saisissez la quantité à prélever."
+                : `Chaque scan ajoute ${step} unité${step > 1 ? "s" : ""} jusqu’à la quantité demandée.`)}
           </p>
         </div>
 

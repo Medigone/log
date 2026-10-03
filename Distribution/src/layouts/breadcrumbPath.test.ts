@@ -2,18 +2,19 @@ import { describe, expect, it } from "vitest"
 import { crumbsFromPath } from "@/layouts/breadcrumbPath"
 import { LayoutDashboard, Truck, UserRound } from "lucide-react"
 
-function labels(pathname: string) {
-  return crumbsFromPath(pathname).map((crumb) => crumb.label)
+function labels(pathname: string, search = "") {
+  return crumbsFromPath(pathname, search).map((crumb) => crumb.label)
 }
 
-function hops(pathname: string) {
-  return crumbsFromPath(pathname).map((crumb) => ({ label: crumb.label, to: crumb.to }))
+function hops(pathname: string, search = "") {
+  return crumbsFromPath(pathname, search).map((crumb) => ({ label: crumb.label, to: crumb.to }))
 }
 
 describe("crumbsFromPath", () => {
   it("préfixe la liste par la catégorie du menu", () => {
     expect(labels("/today")).toEqual(["Opérationnel", "Tableau de bord"])
     expect(labels("/deliveries")).toEqual(["Opérationnel", "Livraisons"])
+    expect(labels("/codes-barres")).toEqual(["Opérationnel", "Codes-barres"])
     expect(labels("/stock")).toEqual(["Opérationnel", "Stock véhicules"])
     expect(labels("/cashier")).toEqual(["Opérationnel", "Caisse Tournées"])
     expect(labels("/articles")).toEqual(["Ventes", "Articles"])
@@ -74,6 +75,19 @@ describe("crumbsFromPath", () => {
       { label: "Opérationnel", to: undefined },
       { label: "Préparation", to: "/preparation" },
       { label: "SAL-ORD-1", to: undefined },
+    ])
+  })
+
+  it("affiche l’id de la pick list ouverte", () => {
+    expect(hops("/preparation", "?pick_lists=PL-1")).toEqual([
+      { label: "Opérationnel", to: undefined },
+      { label: "Préparation", to: "/preparation" },
+      { label: "PL-1", to: undefined },
+    ])
+    expect(labels("/preparation", "?pick_lists=PL-1,PL-2")).toEqual([
+      "Opérationnel",
+      "Préparation",
+      "PL-1, PL-2",
     ])
   })
 
