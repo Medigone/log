@@ -95,6 +95,18 @@ describe("DesktopShell", () => {
     expect(screen.queryByText("Console")).not.toBeInTheDocument();
   });
 
+  it("garde les compteurs visibles quand une section est repliée", async () => {
+    const user = userEvent.setup();
+    dashboardState.data = { message: dashboard };
+    renderShell(manager);
+    const stock = screen.getByRole("button", { name: /^Stock/ });
+    expect(stock).toHaveTextContent(/^Stock$/);
+    await user.click(stock);
+    expect(stock).toHaveAttribute("aria-expanded", "false");
+    // Préparation (4) + Stock véhicules (1), cumulés sur la section repliée.
+    expect(stock).toHaveTextContent("Stock5");
+  });
+
   it("réserve l'espace caisse au Caissier", () => {
     render(
       <MemoryRouter initialEntries={["/cashier"]}>

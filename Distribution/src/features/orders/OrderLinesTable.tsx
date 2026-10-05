@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, ImageOff, Lock, LockOpen, Minus, Percent, Plus, Trash2, X } from "lucide-react";
 import { CommitInput } from "@/components/CommitInput";
 import { Button } from "@/components/ui/button";
@@ -19,11 +19,8 @@ import { changedListPrice, exceedsQuota, quotaLimit, submittedLineRules, type Or
 import type { OrderLineData } from "@/shared/api/orders";
 import { formatMoney, formatQuantity } from "@/shared/format";
 
-// Pleine largeur : toutes les informations d’une ligne tiennent sur une seule rangée.
-// Le détail du stock (Stock · Rés. · Cmd) a ses propres colonnes sur très grand écran, sous la pastille sinon.
-const GRID =
-  "xl:grid-cols-[16px_minmax(180px,1fr)_140px_124px_92px_104px_76px_56px_104px_28px] " +
-  "2xl:grid-cols-[16px_minmax(200px,1fr)_120px_56px_56px_56px_124px_92px_112px_80px_56px_112px_32px]";
+// Pleine largeur : 10 colonnes ; le détail du stock (Stock · Rés. · Cmd) reste sous la pastille de disponibilité.
+const GRID = "xl:grid-cols-[16px_minmax(180px,1fr)_150px_124px_92px_100px_76px_64px_112px_32px]";
 
 type AvailabilityTone = "ok" | "short" | "out";
 
@@ -185,6 +182,7 @@ export function OrderLinesTable({
   readOnly,
   editableRate,
   canOverrideQuota = false,
+  toolbar,
   onChange,
   onChangeMany,
   onRemove,
@@ -197,6 +195,8 @@ export function OrderLinesTable({
   editableRate?: boolean;
   /** Le responsable peut dépasser le quota d’un article ; le commercial est plafonné. */
   canOverrideQuota?: boolean;
+  /** Recherche et scan d’articles, en tête du tableau. */
+  toolbar?: ReactNode;
   onChange: (key: string, patch: Partial<OrderLine>) => void;
   onChangeMany: (keys: string[], patch: Partial<OrderLine>) => void;
   onRemove: (keys: string[]) => void;
@@ -215,17 +215,6 @@ export function OrderLinesTable({
 
   const selectedLines = useMemo(() => lines.filter((line) => selected.has(line.key)), [lines, selected]);
 
-  if (!lines.length) {
-    return (
-      <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed bg-card px-4 py-10 text-center">
-        <p className="text-[13px] font-semibold">Aucun article</p>
-        <p className="max-w-sm text-[12.5px] text-muted-foreground">
-          Scannez un code-barres, cherchez un article par son nom ou reprenez un article habituel du client.
-        </p>
-      </div>
-    );
-  }
-
   const computed = new Map<string, OrderLineData>();
   let cursor = 0;
   for (const line of lines) {
@@ -235,7 +224,10 @@ export function OrderLinesTable({
     cursor += 1;
   }
 
-  const allSelected = selected.size === lines.length;
+  const missingVat = lines.filter((line) => computed.get(line.key)?.tax_missing);
+  let units = 0;
+  let grossTotal = 0;
+  const allSelected = lines.length > 0 && selected.size === lines.length;
   const toggle = (key: string, checked: boolean) =>
     setSelected((current) => {
       const next = new Set(current);
@@ -246,6 +238,36 @@ export function OrderLinesTable({
 
   return (
     <section className="overflow-hidden rounded-xl border bg-card" aria-label="Articles commandés">
+      {toolbar}
+      {missingVat.length && !readOnly ? (
+        <div
+          role="status"
+          data-testid="vat-missing"
+          className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[12.5px] text-amber-900"
+        >
+          <AlertTriangle className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            <b className="font-semibold">{missingVat.map((line) => line.itemName).join(", ")}</b>{" "}
+            {missingVat.length > 1 ? "n’ont pas de taux de TVA sur leur fiche : comptés exonérés." : "n’a pas de taux de TVA sur sa fiche : compté exonéré."}
+          </span>
+          <a
+            href={`#/articles/${encodeURIComponent(missingVat[0].itemCode)}?tab=store`}
+            target="_blank"
+            rel="noreferrer"
+            className="shrink-0 font-semibold underline underline-offset-2"
+          >
+            Compléter la fiche
+          </a>
+        </div>
+      ) : null}
+      {!lines.length ? (
+        <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+          <p className="text-[13px] font-semibold">Aucun article</p>
+          <p className="max-w-sm text-[12.5px] text-muted-foreground">
+            Scannez un code-barres, cherchez un article par son nom ou reprenez un article habituel du client.
+          </p>
+        </div>
+      ) : null}
       {!readOnly && selectedLines.length ? (
         <BulkActionsBar
           lines={selectedLines}
@@ -254,7 +276,7 @@ export function OrderLinesTable({
           onClear={() => setSelected(new Set())}
         />
       ) : null}
-      <div className={cn("sticky top-0 z-10 hidden items-center gap-3 border-b bg-muted/60 px-4 py-2 t-micro text-muted-foreground backdrop-blur xl:grid", GRID)}>
+      <div className={cn("sticky top-0 z-10 hidden items-center gap-3.5 border-b bg-muted/60 px-4 py-2 t-micro text-muted-foreground backdrop-blur", lines.length && "xl:grid", GRID)}>
         {readOnly ? (
           <span />
         ) : (
@@ -267,14 +289,11 @@ export function OrderLinesTable({
         )}
         <span>Article</span>
         <span>Disponibilité</span>
-        <span className="hidden text-right 2xl:block">Stock</span>
-        <span className="hidden text-right 2xl:block">Rés.</span>
-        <span className="hidden text-right 2xl:block">Cmd</span>
         <span>Quantité</span>
         <span>Réservé</span>
         <span className="text-right">Prix unit.</span>
         <span className="text-right">Remise</span>
-        <span className="text-right">TVA</span>
+        <span>TVA</span>
         <span className="text-right">Montant HT</span>
         <span />
       </div>
@@ -296,12 +315,14 @@ export function OrderLinesTable({
         const expectedReserve = reserved ?? (short ? Math.max(0, line.available) : line.qty);
         const reservation = RESERVATION_LABEL[reservationState(expectedReserve, line.qty)];
         const availability = availabilityOf(line);
+        units += line.qty;
+        grossTotal += amount;
         return (
           <div
             key={line.key}
             data-testid={`order-line-${line.itemCode}`}
             className={cn(
-              "grid grid-cols-2 items-center gap-x-3 gap-y-2 border-b px-4 py-2 last:border-b-0",
+              "grid grid-cols-2 items-start gap-x-3.5 gap-y-2 border-b px-4 py-3",
               GRID,
               line.key === lastKey && "bg-emerald-50/50",
               isSelected && "bg-brand-50/50",
@@ -311,7 +332,7 @@ export function OrderLinesTable({
               <span className="hidden xl:block" />
             ) : (
               <Checkbox
-                className="hidden xl:flex"
+                className="mt-2 hidden xl:flex"
                 aria-label={`Sélectionner ${line.itemCode}`}
                 checked={isSelected}
                 onCheckedChange={(checked) => toggle(line.key, Boolean(checked))}
@@ -343,10 +364,10 @@ export function OrderLinesTable({
             </div>
 
             {/* Disponibilité */}
-            <div className="flex flex-col items-start gap-1">
+            <div className="flex flex-col items-start gap-[3px]">
               {availability ? (
                 <span
-                  className={cn("inline-flex items-center rounded-full border px-2 text-[12px] leading-[18px] font-semibold whitespace-nowrap", AVAILABILITY_TONE[availability.tone])}
+                  className={cn("mt-1.5 inline-flex items-center rounded-full border px-2 text-[12px] leading-[18px] font-semibold whitespace-nowrap", AVAILABILITY_TONE[availability.tone])}
                   data-testid={short ? `order-line-short-${line.itemCode}` : undefined}
                   title={short ? `Stock insuffisant : ${formatQuantity(line.qty)} demandé, ${formatQuantity(Math.max(0, line.available))} réservable` : undefined}
                 >
@@ -356,25 +377,12 @@ export function OrderLinesTable({
                 <span className="text-[12px] text-muted-foreground">Hors stock</span>
               )}
               {line.isStockItem && stock ? (
-                <span className="text-[12px] leading-4 whitespace-nowrap text-muted-foreground 2xl:hidden" data-testid="stock-figures">
+                <span className="text-[11.5px] leading-4 whitespace-nowrap text-muted-foreground" data-testid="stock-figures">
                   Stock <span className="num">{formatQuantity(stock.actual_qty)}</span> · Rés. <span className="num">{formatQuantity(stock.reserved_qty)}</span> · Cmd{" "}
                   <span className="num">{formatQuantity(stock.ordered_qty)}</span>
                 </span>
               ) : null}
             </div>
-
-            {/* Stock · Rés. · Cmd en colonnes (très grand écran) */}
-            {(["actual_qty", "reserved_qty", "ordered_qty"] as const).map((field) => (
-              <span
-                key={field}
-                className={cn(
-                  "num hidden h-8 items-center justify-end text-[13px] 2xl:flex",
-                  field === "actual_qty" ? "text-foreground" : "text-muted-foreground",
-                )}
-              >
-                {line.isStockItem && stock ? formatQuantity(stock[field]) : "—"}
-              </span>
-            ))}
 
             {/* Quantité (+ quota) */}
             <div className="flex flex-col gap-0.5">
@@ -424,49 +432,54 @@ export function OrderLinesTable({
               ) : null}
             </div>
 
-            {/* Réservé */}
-            <div className="flex items-center gap-1.5">
+            {/* Réservé : valeur lisible, cadenas orange + « sur N » si partiel (clic = tout réserver) */}
+            <div className="flex flex-col gap-[3px]">
               {!line.isStockItem ? (
-                <span className="text-[13px] text-muted-foreground">—</span>
-              ) : readOnly ? (
-                <span className="num inline-flex items-center gap-1 text-[13px]">
-                  <Lock className={cn("size-3.5", reservation.className)} aria-hidden />
-                  {formatQuantity(reserved ?? 0)}
-                </span>
+                <span className="flex h-8 items-center text-[13px] text-muted-foreground">—</span>
               ) : (
-                <>
-                  <CommitInput
-                    aria-label={`Réservé ${line.itemCode}`}
-                    inputMode="decimal"
-                    placeholder={formatQuantity(line.qty)}
-                    className={cn("num h-8 w-14 rounded-[10px] px-2 text-[13px]", line.reservedQty == null && "text-muted-foreground")}
-                    value={reserved != null ? String(reserved) : ""}
-                    onCommit={(value) => {
-                      if (!value.trim()) {
-                        onChange(line.key, { reservedQty: null });
-                        return;
-                      }
-                      const parsed = parseDecimal(value);
-                      if (parsed != null && parsed >= 0 && parsed <= line.qty) onChange(line.key, { reservedQty: parsed });
-                    }}
-                  />
-                  {line.reservedQty != null && line.reservedQty < line.qty ? (
+                <div className="flex h-8 items-center gap-1.5">
+                  {readOnly ? (
+                    <span className="num text-[13px]">{formatQuantity(expectedReserve)}</span>
+                  ) : (
+                    <CommitInput
+                      aria-label={`Réservé ${line.itemCode}`}
+                      inputMode="decimal"
+                      placeholder={formatQuantity(line.qty)}
+                      className="num h-8 w-[52px] rounded-[10px] px-2 text-[13px]"
+                      value={String(reserved ?? expectedReserve)}
+                      onCommit={(value) => {
+                        if (!value.trim()) {
+                          onChange(line.key, { reservedQty: null });
+                          return;
+                        }
+                        const parsed = parseDecimal(value);
+                        if (parsed != null && parsed >= 0 && parsed <= line.qty) onChange(line.key, { reservedQty: parsed });
+                      }}
+                    />
+                  )}
+                  {!readOnly && expectedReserve < line.qty ? (
                     <button
                       type="button"
-                      title="Réserver toute la quantité"
+                      aria-label={`Réserver toute la quantité ${line.itemCode}`}
+                      title={`${reservation.text} — cliquer pour réserver toute la quantité`}
                       onClick={() => onChange(line.key, { reservedQty: null })}
-                      className="text-[11.5px] font-medium text-brand-700 hover:underline"
+                      className={cn("grid size-6 place-items-center rounded hover:bg-muted", reservation.className)}
                     >
-                      Tout
+                      <Lock className="size-[15px]" />
                     </button>
                   ) : (
                     <span title={reservation.text} className={cn("shrink-0", reservation.className)}>
-                      <Lock className="size-3.5" aria-hidden />
+                      <Lock className="size-[15px]" aria-hidden />
                       <span className="sr-only">{reservation.text}</span>
                     </span>
                   )}
-                </>
+                </div>
               )}
+              {line.isStockItem && expectedReserve < line.qty ? (
+                <span className="text-[11.5px] leading-4 font-medium whitespace-nowrap text-amber-700">
+                  sur <span className="num">{formatQuantity(line.qty)}</span>
+                </span>
+              ) : null}
             </div>
 
             {/* Prix unitaire */}
@@ -528,28 +541,22 @@ export function OrderLinesTable({
               )}
             </div>
 
-            {/* TVA : taux de la fiche article, calculé par ERPNext */}
-            <div className="flex h-8 items-center justify-end gap-1" data-testid={`order-line-vat-${line.itemCode}`}>
-              {row?.tax_missing ? (
-                <AlertTriangle
-                  className="size-3.5 text-amber-600"
-                  aria-label="Taux de TVA non renseigné"
-                  role="img"
-                >
-                  <title>Taux de TVA non renseigné sur la fiche article : compté exonéré</title>
-                </AlertTriangle>
-              ) : null}
-              {row ? (
-                <span
-                  className={cn(
-                    "num rounded-full border px-1.5 text-[12px] leading-[18px] font-semibold",
-                    row.tax_rate ? "border-border bg-muted text-foreground" : "border-dashed text-muted-foreground",
-                  )}
-                >
-                  {row.tax_rate ? `${formatQuantity(row.tax_rate)} %` : "Exo."}
-                </span>
-              ) : (
+            {/* TVA : taux de la fiche article ; l'alerte « taux absent » est en bandeau au-dessus des lignes */}
+            <div className="flex h-8 items-center" data-testid={`order-line-vat-${line.itemCode}`}>
+              {!row ? (
                 <span className="text-[13px] text-muted-foreground">—</span>
+              ) : row.tax_missing ? (
+                <span
+                  title="Taux absent de la fiche article : compté exonéré"
+                  className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[12px] leading-5 font-semibold text-amber-800"
+                >
+                  <AlertTriangle className="size-[11px]" />
+                  Exo.
+                </span>
+              ) : row.tax_rate ? (
+                <span className="num text-[13px]">{formatQuantity(row.tax_rate)} %</span>
+              ) : (
+                <span className="text-[13px] text-muted-foreground">Exo.</span>
               )}
             </div>
 
@@ -575,6 +582,16 @@ export function OrderLinesTable({
           </div>
         );
       })}
+      {lines.length ? (
+        <div className="flex items-center justify-between gap-3 bg-muted/40 py-2.5 pr-[62px] pl-4 text-[12.5px] text-muted-foreground">
+          <span>
+            {lines.length} article{lines.length > 1 ? "s" : ""} · <span className="num">{formatQuantity(units)}</span> unité{units > 1 ? "s" : ""}
+          </span>
+          <span className="flex items-baseline gap-3">
+            Total brut HT <span className="num text-[13px] font-semibold text-foreground">{formatMoney(grossTotal, { precise: true })}</span>
+          </span>
+        </div>
+      ) : null}
       {pendingRemoval ? (
         <ConfirmRemoveDialog
           lines={pendingRemoval}

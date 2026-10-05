@@ -1,4 +1,4 @@
-import { CalendarClock, Plus, Trash2, Wand2 } from "lucide-react";
+import { Plus, Trash2, Wand2 } from "lucide-react";
 import { CommitInput } from "@/components/CommitInput";
 import { parseDecimal } from "@/shared/format/parseDecimal";
 import { FormSelect } from "@/components/FilterSelect";
@@ -45,20 +45,28 @@ export function PaymentScheduleEditor({
     const rows = preview?.payment_schedule ?? [];
     return (
       <section className="flex flex-col gap-2.5" aria-label="Échéances">
-        <div className="flex items-center gap-2">
-          <CalendarClock className="size-4 text-muted-foreground" />
-          <h3 className="text-[13px] font-semibold">Échéances</h3>
-        </div>
         {readOnly ? null : (
-          <FormSelect
-            aria-label="Conditions de paiement"
-            value={draft.paymentTermsTemplate}
-            onChange={(value) => onChange({ paymentTermsTemplate: value })}
-            options={[
-              { value: "", label: "Paiement unique à la commande" },
-              ...(options?.payment_terms_templates || []).map((name) => ({ value: name, label: name })),
-            ]}
-          />
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <FormSelect
+                aria-label="Conditions de paiement"
+                value={draft.paymentTermsTemplate}
+                onChange={(value) => onChange({ paymentTermsTemplate: value })}
+                options={[
+                  { value: "", label: "Paiement unique à la commande" },
+                  ...(options?.payment_terms_templates || []).map((name) => ({ value: name, label: name })),
+                ]}
+              />
+            </div>
+            <button
+              type="button"
+              disabled={!rows.length}
+              onClick={() => onChange({ scheduleMode: "manual", schedule: scheduleFromPreview(rows) })}
+              className="shrink-0 text-[12.5px] font-medium underline underline-offset-2 disabled:no-underline disabled:opacity-50"
+            >
+              Personnaliser l’échéancier
+            </button>
+          </div>
         )}
         <ul className="flex flex-col gap-1 text-[12.5px]">
           {rows.map((row, index) => (
@@ -72,17 +80,6 @@ export function PaymentScheduleEditor({
             </li>
           ))}
         </ul>
-        {readOnly ? null : (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="self-start"
-            disabled={!rows.length}
-            onClick={() => onChange({ scheduleMode: "manual", schedule: scheduleFromPreview(rows) })}
-          >
-            Personnaliser l’échéancier
-          </Button>
-        )}
       </section>
     );
   }
@@ -91,7 +88,6 @@ export function PaymentScheduleEditor({
   return (
     <section className="flex flex-col gap-2.5" aria-label="Échéances">
       <div className="flex items-center gap-2">
-        <CalendarClock className="size-4 text-muted-foreground" />
         <h3 className="text-[13px] font-semibold">Échéancier personnalisé</h3>
         <Button
           variant="ghost"

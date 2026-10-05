@@ -9,6 +9,7 @@ import {
   orderWarnings,
   parseQuantityScan,
   quotaLimit,
+  releaseReservations,
   scheduleGap,
   submittedLineRules,
   toOrderPayload,
@@ -213,5 +214,18 @@ describe("prix changé sur un brouillon", () => {
     expect(toOrderPayload(draft)?.lines[0].price_list_rate).toBe(950);
     const updated = { ...draft, lines: acceptListPrices(draft.lines, new Set([line.key])) };
     expect(toOrderPayload(updated)?.lines[0].price_list_rate).toBeNull();
+  });
+});
+
+describe("releaseReservations", () => {
+  it("repasse les réservations saisies en automatique", () => {
+    const base = { key: "a", itemCode: "A", itemName: "A", uom: "U", qty: 5, discount: null, rate: null, available: 5, isStockItem: true, delivered: 0 };
+    const released = releaseReservations([{ ...base, reservedQty: 3 }, { ...base, key: "b", reservedQty: null }]);
+    expect(released.map((line) => line.reservedQty)).toEqual([null, null]);
+  });
+
+  it("garde la même liste si rien n'est réservé à la main", () => {
+    const lines = [{ key: "a", itemCode: "A", itemName: "A", uom: "U", qty: 5, discount: null, rate: null, available: 5, isStockItem: true, delivered: 0, reservedQty: null }];
+    expect(releaseReservations(lines)).toBe(lines);
   });
 });

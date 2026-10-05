@@ -69,6 +69,11 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
   const badges = { ...dashboardBadges, ...receiptBadges, ...orderBadges, ...inventoryBadges }
   // Le logo ramène au tableau de bord quand il est accessible, sinon à la première page du menu.
   const visiblePaths = groups.flatMap((group) => group.items.map((item) => item.to))
+  const groupBadge = (items: typeof groups[number]["items"]) => {
+    const counts = items.map((item) => (item.badgeKey ? badges[item.badgeKey] : undefined)).filter((badge) => badge != null)
+    const count = counts.reduce((sum, badge) => sum + badge.count, 0)
+    return count ? { count, alert: counts.some((badge) => badge.alert) } : null
+  }
   const homePath = visiblePaths.includes("/today") ? "/today" : visiblePaths[0] || "/today"
 
   return (
@@ -103,9 +108,21 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
           >
             <SidebarGroupLabel
               render={<CollapsibleTrigger />}
-              className="group/label w-full cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="group/label h-9 w-full cursor-pointer gap-2 text-[13px] font-semibold text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             >
-              {group.label}
+              <group.icon className="text-sidebar-foreground/60" />
+              <span>{group.label}</span>
+              {/* Section repliée : ses compteurs restent visibles, cumulés. */}
+              {closed.includes(group.group) && !collapsed && groupBadge(group.items) ? (
+                <span
+                  className={cn(
+                    "num flex h-[18px] min-w-5 items-center justify-center rounded-full px-1.5 text-[10.5px] font-medium",
+                    groupBadge(group.items)?.alert ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {groupBadge(group.items)?.count}
+                </span>
+              ) : null}
               <ChevronRight className="ml-auto transition-transform duration-200 group-data-[panel-open]/label:rotate-90" />
             </SidebarGroupLabel>
             <CollapsibleContent render={<SidebarGroupContent />}>

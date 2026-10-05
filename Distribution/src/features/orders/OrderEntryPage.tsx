@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Ban, CircleCheck, FilePenLine, Pencil, Printer, Save, Tags, Trash2, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Ban, CircleCheck, FilePenLine, MoreHorizontal, Pencil, Printer, Save, Tags, Trash2, Undo2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { ScanQuantityPrompt } from "@/components/ScanQuantityPrompt";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -36,6 +37,7 @@ import {
   acceptListPrices,
   changedListPrice,
   releaseListPrices,
+  releaseReservations,
   parseQuantityScan,
   removeOrderLines,
   updateOrderLines,
@@ -143,7 +145,9 @@ export function OrderEntryPage() {
       const repriced =
         ("customer" in patch && patch.customer?.name !== current.customer?.name) ||
         ("priceList" in patch && patch.priceList !== current.priceList);
-      return repriced ? { ...next, lines: releaseListPrices(next.lines) } : next;
+      if (repriced) next.lines = releaseListPrices(next.lines);
+      if ("warehouse" in patch && patch.warehouse !== current.warehouse) next.lines = releaseReservations(next.lines);
+      return next;
     });
     setDirty(true);
   }, []);
@@ -478,18 +482,14 @@ export function OrderEntryPage() {
   // Actions de saisie, affichées dans l'en-tête à côté de l'impression.
   const actions = orderDocstatus > 0 ? submittedActions : readOnly ? null : (
     <>
-      {isSaved && draft.name && status?.origin !== "Portail client" ? (
-        <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-          <Trash2 /> Supprimer le brouillon
-        </Button>
-      ) : null}
       <Button
         variant={canValidate ? "outline" : "default"}
         onClick={() => void saveDraft()}
         disabled={busy || warnings.blocking.length > 0 || (isSaved && !dirty)}
+        title={isSaved && !dirty ? "Brouillon enregistré" : "Enregistrer le brouillon"}
       >
         {busy && !confirming ? <Spinner /> : <Save />}
-        {isSaved && !dirty ? "Brouillon enregistré" : "Enregistrer le brouillon"}
+        {isSaved && !dirty ? "Enregistré" : "Enregistrer"}
       </Button>
       {canValidate ? (
         <Button onClick={() => setConfirming(true)} disabled={busy || warnings.blocking.length > 0}>
@@ -499,6 +499,26 @@ export function OrderEntryPage() {
     </>
   );
   const hasIssues = actionError.length > 0 || warnings.warnings.length > 0;
+
+  // Actions rares ou destructives : regroupées dans le menu « ⋯ » de l'en-tête.
+  const menuItems: Array<{ label: string; icon: ReactNode; onSelect: () => void; disabled?: boolean; destructive?: boolean; title?: string }> = [];
+  if (orderDocstatus === 0 && !readOnly && draft.name && status?.origin !== "Portail client") {
+    menuItems.push({ label: "Supprimer le brouillon", icon: <Trash2 />, onSelect: () => setConfirmDelete(true), destructive: true });
+  }
+  if (order && orderDocstatus > 0 && !editingSubmitted) {
+    const blocked = order.blockers.length > 0;
+    menuItems.push({
+      label: "Modifier entièrement",
+      icon: <FilePenLine />,
+      onSelect: () => setLifecycle("amend"),
+      disabled: submitted && blocked,
+      title: "Annule la commande et ouvre un brouillon entièrement modifiable",
+    });
+    if (order.can_cancel) menuItems.push({ label: "Annuler", icon: <Ban />, onSelect: () => setLifecycle("cancel"), disabled: blocked });
+    if (order.can_delete) {
+      menuItems.push({ label: "Supprimer", icon: <Trash2 />, onSelect: () => setLifecycle("delete"), disabled: submitted && blocked, destructive: true });
+    }
+  }
 
   return (
     <>
@@ -520,58 +540,59 @@ export function OrderEntryPage() {
             )}
             {draft.name ? <span className="num text-xs text-muted-foreground">{draft.name}</span> : null}
             {status?.origin === "Portail client" ? <span className="text-xs text-muted-foreground">Portail client</span> : null}
-            {dirty && !readOnly ? <span className="text-xs text-muted-foreground">Modifications non enregistrées</span> : null}
+            {dirty && !readOnly ? (
+              <span className="inline-flex items-center gap-1.5 text-xs text-amber-700">
+                <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+                Non enregistrée
+              </span>
+            ) : null}
           </span>
         }
         actions={
-          draft.name || actions ? (
-            <div className="flex flex-wrap items-center gap-2">
-              {draft.name ? (
-                <Button
-                  variant="outline"
-                  onClick={() => draft.name && openOrdersPdf([draft.name])}
-                  disabled={dirty && !readOnly}
-                  title={dirty && !readOnly ? "Enregistrez la commande avant de l’imprimer" : undefined}
-                >
-                  <Printer /> Imprimer / PDF
-                </Button>
-              ) : null}
-              {order && orderDocstatus > 0 && !editingSubmitted ? (
-                <>
-                  {order.can_edit_items ? (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setActionError([]);
-                        setEditing(true);
-                      }}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Imprimer / PDF"
+              onClick={() => draft.name && openOrdersPdf([draft.name])}
+              disabled={!draft.name || (dirty && !readOnly)}
+              title={!draft.name || (dirty && !readOnly) ? "Imprimer / PDF — disponible après enregistrement" : "Imprimer / PDF"}
+            >
+              <Printer />
+            </Button>
+            {menuItems.length ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" size="icon" aria-label="Autres actions" />}>
+                  <MoreHorizontal />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-56">
+                  {menuItems.map((item) => (
+                    <DropdownMenuItem
+                      key={item.label}
+                      variant={item.destructive ? "destructive" : "default"}
+                      disabled={item.disabled}
+                      title={item.title}
+                      onClick={item.onSelect}
                     >
-                      <Pencil /> Modifier
-                    </Button>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    onClick={() => setLifecycle("amend")}
-                    disabled={submitted && order.blockers.length > 0}
-                    title="Annule la commande et ouvre un brouillon entièrement modifiable"
-                  >
-                    <FilePenLine /> Modifier entièrement
-                  </Button>
-                  {order.can_cancel ? (
-                    <Button variant="outline" onClick={() => setLifecycle("cancel")} disabled={order.blockers.length > 0}>
-                      <Ban /> Annuler
-                    </Button>
-                  ) : null}
-                  {order.can_delete ? (
-                    <Button variant="destructive" onClick={() => setLifecycle("delete")} disabled={submitted && order.blockers.length > 0}>
-                      <Trash2 /> Supprimer
-                    </Button>
-                  ) : null}
-                </>
-              ) : null}
-              {actions}
-            </div>
-          ) : null
+                      {item.icon} {item.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+            {order && orderDocstatus > 0 && !editingSubmitted && order.can_edit_items ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setActionError([]);
+                  setEditing(true);
+                }}
+              >
+                <Pencil /> Modifier
+              </Button>
+            ) : null}
+            {actions}
+          </div>
         }
       />
 
@@ -647,18 +668,21 @@ export function OrderEntryPage() {
           onChange={change}
         />
       </div>
-      {readOnly ? null : (
-        <ItemSearchPanel
-          context={context}
-          inputRef={itemInputRef}
-          feedback={feedback}
-          recentItems={recentData?.message ?? []}
-          onScan={handleScan}
-          onPick={addItem}
-          onOpenCamera={() => setCameraOpen(true)}
-        />
-      )}
       <OrderLinesTable
+        toolbar={
+          readOnly ? null : (
+            <ItemSearchPanel
+              context={context}
+              inputRef={itemInputRef}
+              feedback={feedback}
+              recentItems={recentData?.message ?? []}
+              addedCodes={new Set(draft.lines.map((line) => line.itemCode))}
+              onScan={handleScan}
+              onPick={addItem}
+              onOpenCamera={() => setCameraOpen(true)}
+            />
+          )
+        }
         lines={draft.lines}
         preview={preview?.lines}
         lastKey={draft.lines.find((line) => line.itemCode === lastItem)?.key ?? null}

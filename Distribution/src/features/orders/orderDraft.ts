@@ -254,6 +254,11 @@ export function acceptListPrices(lines: OrderLine[], keys: Set<string>): OrderLi
   return lines.map((line) => (keys.has(line.key) ? { ...line, lockedListPrice: null } : line));
 }
 
+/** Changer d'entrepôt repasse les réservations en automatique : elles valaient pour l'ancien stock. */
+export function releaseReservations(lines: OrderLine[]): OrderLine[] {
+  return lines.some((line) => line.reservedQty != null) ? lines.map((line) => ({ ...line, reservedQty: null })) : lines;
+}
+
 /** Changer de client ou de liste de prix repart du tarif de la nouvelle liste. */
 export function releaseListPrices(lines: OrderLine[]): OrderLine[] {
   return lines.some((line) => line.lockedListPrice != null) ? lines.map((line) => ({ ...line, lockedListPrice: null })) : lines;

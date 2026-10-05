@@ -10,6 +10,7 @@ describe("navItems", () => {
       "operations",
       "stock",
       "ressources",
+      "pilotage",
     ])
     expect(groupedNavItems("responsable")[0].items.map((item) => item.to)).toEqual([
       "/commandes/nouvelle",
@@ -37,6 +38,7 @@ describe("navItems", () => {
     expect(groupedNavItems("magasinier").map((group) => group.group)).toEqual(["stock"])
     expect(visibleNavItems("magasinier").map((item) => item.to)).toEqual(["/inventaires", "/receptions"])
     expect(visibleNavItems("responsable").map((item) => item.to)).toContain("/receptions")
+    expect(groupedNavItems("responsable").find((group) => group.group === "pilotage")?.items.map((item) => item.to)).toEqual(["/analyses", "/creances"])
   })
 
   it("ouvre le catalogue au rôle dédié et aux rôles qui le cumulent", () => {

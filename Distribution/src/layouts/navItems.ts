@@ -1,35 +1,52 @@
 import {
+  Activity,
   BadgePercent,
   Banknote,
   Boxes,
   Car,
+  ChartColumn,
   ClipboardCheck,
   ClipboardList,
   FolderTree,
+  HandCoins,
   LayoutDashboard,
+  Lightbulb,
   Package,
   PackageCheck,
   ReceiptText,
   Route,
   ScanBarcode,
   ShoppingCart,
+  Store,
   Tags,
   Truck,
   UserRound,
   Users,
+  UsersRound,
   Wallet,
+  Warehouse,
 } from "lucide-react"
 import type { DistributionRole, DistributionUser } from "@/shared/types/distribution"
 
 /** Groupes affichés dans la barre latérale, dans cet ordre. */
-export const navGroups = ["ventes", "operations", "stock", "ressources"] as const
+export const navGroups = ["ventes", "operations", "stock", "ressources", "pilotage"] as const
 export type NavGroup = (typeof navGroups)[number]
+
+/** Icône de section : reste visible quand la section est repliée. */
+export const navGroupIcons: Record<NavGroup, typeof LayoutDashboard> = {
+  ventes: Store,
+  operations: Activity,
+  stock: Warehouse,
+  ressources: UsersRound,
+  pilotage: ChartColumn,
+}
 
 export const navGroupLabels: Record<NavGroup, string> = {
   ventes: "Ventes",
   operations: "Opérationnel",
   stock: "Stock",
   ressources: "Ressources",
+  pilotage: "Pilotage",
 }
 
 /** Clé de compteur : voir navBadges.ts */
@@ -74,6 +91,9 @@ export const navItems: NavItem[] = [
   // Ressources : équipes et flotte.
   { to: "/livreurs", label: "Livreurs", icon: UserRound, group: "ressources", roles: ["planificateur", "responsable"] },
   { to: "/vehicules", label: "Véhicules", icon: Car, group: "ressources", roles: ["planificateur", "responsable"] },
+  // Pilotage : rentabilité, aide à la décision et créances clients, réservé au responsable.
+  { to: "/analyses", label: "Aide à la décision", icon: Lightbulb, group: "pilotage", roles: ["responsable"] },
+  { to: "/creances", label: "Créances clients", icon: HandCoins, group: "pilotage", roles: ["responsable"] },
 ]
 
 export const roleLabels: Record<DistributionRole, string> = {
@@ -110,6 +130,7 @@ export function groupedNavItems(role: DistributionRole, capabilities: readonly N
     .map((group) => ({
       group,
       label: navGroupLabels[group],
+      icon: navGroupIcons[group],
       items: visible.filter((item) => item.group === group),
     }))
     .filter((entry) => entry.items.length > 0)

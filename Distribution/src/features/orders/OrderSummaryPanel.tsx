@@ -74,7 +74,7 @@ export function OrderHeaderFields({
 
   return (
     <div
-      className="grid grid-cols-2 gap-3 rounded-xl border bg-card px-4 py-3 md:grid-cols-[120px_160px_minmax(0,1fr)_minmax(0,1fr)]"
+      className="grid grid-cols-2 gap-3 rounded-xl border bg-card px-4 py-3 md:grid-cols-[100px_150px_minmax(0,1fr)_minmax(0,1fr)]"
       aria-label="Informations de la commande"
     >
       <Field>
@@ -128,7 +128,6 @@ function VatBreakdown({ preview }: { preview?: OrderDetail | null }) {
     ...taxes.map((tax) => ({ key: tax.description, label: tax.description, rate: tax.rate, base: tax.base, amount: tax.amount })),
     ...(exemptBase > 0.005 ? [{ key: "exonere", label: "Exonéré", rate: 0, base: exemptBase, amount: 0 }] : []),
   ];
-  const missing = (preview?.lines ?? []).filter((line) => line.tax_missing);
 
   return (
     <div className="flex flex-col gap-2">
@@ -157,11 +156,6 @@ function VatBreakdown({ preview }: { preview?: OrderDetail | null }) {
           </tr>
         </tfoot>
       </table>
-      {missing.length ? (
-        <p className="text-[12px] text-amber-700">
-          Sans taux de TVA sur la fiche article (comptés exonérés) : {missing.map((line) => line.item_name).join(", ")}.
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -191,7 +185,7 @@ export function OrderFooter({
 
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
-      <section className="rounded-xl border bg-card px-4 pt-2 pb-4" aria-label="Échéances et taxes">
+      <section className="rounded-xl border bg-card px-4 pt-1 pb-4" aria-label="Échéances et taxes">
         <Tabs value={tab} onValueChange={(value) => setTab(String(value))}>
           <TabsList variant="line">
             <TabsTrigger value="echeances">
@@ -209,16 +203,16 @@ export function OrderFooter({
         </Tabs>
       </section>
 
-      <aside className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm" aria-label="Récapitulatif de la commande">
+      <aside className="flex flex-col gap-3 rounded-xl border bg-card p-4" aria-label="Récapitulatif de la commande">
         {readOnly ? null : (
-          <Field>
-            <FieldLabel>Remise globale</FieldLabel>
+          <div className="flex items-center gap-2.5">
+            <span className="flex-1 text-[13px] font-medium">Remise globale</span>
             <div className="flex gap-1.5">
               <CommitInput
                 aria-label="Remise globale"
                 inputMode="decimal"
                 placeholder="0"
-                className="num"
+                className="num h-8 w-[72px] rounded-[10px] text-right"
                 value={draft.discountValue ? String(draft.discountValue) : ""}
                 onCommit={(value) => {
                   const parsed = value.trim() ? parseDecimal(value) : 0;
@@ -227,7 +221,7 @@ export function OrderFooter({
                   onChange({ discountValue: parsed });
                 }}
               />
-              <div className="flex shrink-0 overflow-hidden rounded-md border" role="group" aria-label="Unité de remise">
+              <div className="flex h-8 shrink-0 overflow-hidden rounded-[10px] border" role="group" aria-label="Unité de remise">
                 {(["percent", "amount"] as const).map((mode) => (
                   <button
                     key={mode}
@@ -244,7 +238,7 @@ export function OrderFooter({
                 ))}
               </div>
             </div>
-          </Field>
+          </div>
         )}
 
         {issues ? <div className="flex flex-col gap-2">{issues}</div> : null}
@@ -265,7 +259,9 @@ export function OrderFooter({
               <TotalRow label="Net HT" value={totals.net_total} />
               <TotalRow label="TVA" value={totals.taxes} muted />
               {totals.rounding_adjustment ? <TotalRow label="Arrondi" value={totals.rounding_adjustment} muted /> : null}
-              <TotalRow label="Total TTC" value={totals.rounded_total} strong />
+              <div className="mt-1.5 border-t pt-2.5">
+                <TotalRow label="Total TTC" value={totals.rounded_total} strong />
+              </div>
             </>
           ) : (
             <p className="text-[12.5px] text-muted-foreground">Choisissez un client et ajoutez des articles pour calculer la commande.</p>

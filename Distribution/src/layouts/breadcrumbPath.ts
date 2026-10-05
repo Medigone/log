@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { LayoutDashboard, ShoppingCart, Truck, Warehouse } from "lucide-react"
+import { ChartColumn, LayoutDashboard, ShoppingCart, Truck, Warehouse } from "lucide-react"
 import { isNavItemActive, navGroupLabels, navItems, type NavGroup } from "@/layouts/navItems"
 
 export type Crumb = {
@@ -13,6 +13,7 @@ const GROUP_ICONS: Record<NavGroup, LucideIcon> = {
   operations: LayoutDashboard,
   stock: Warehouse,
   ressources: Truck,
+  pilotage: ChartColumn,
 }
 
 const SECTION_LABELS: Record<string, string> = {
@@ -31,6 +32,8 @@ const SECTION_LABELS: Record<string, string> = {
   caisses: "Caisses livreurs",
   articles: "Articles",
   clients: "Clients",
+  analyses: "Aide à la décision",
+  creances: "Créances clients",
 }
 
 const CATALOG_PAGES: Record<string, string> = {

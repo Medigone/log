@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from "react";
-import { Camera, History, ImageOff, ScanBarcode } from "lucide-react";
+import { Camera, Check, History, ImageOff, ScanBarcode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 import { useItemSearch, type ItemCard, type RecentItemCard } from "@/shared/api/orders";
 import { formatMoney, formatQuantity } from "@/shared/format";
 
-const FEEDBACK_TEXT: Record<ScanTone, string> = {
-  idle: "text-muted-foreground",
-  ok: "text-emerald-700",
-  warn: "text-amber-700",
-  error: "text-destructive",
+const FEEDBACK_PILL: Record<ScanTone, string> = {
+  idle: "bg-muted text-muted-foreground",
+  ok: "bg-emerald-50 text-emerald-800",
+  warn: "bg-amber-50 text-amber-800",
+  error: "bg-destructive/10 text-destructive",
 };
 
 export type ScanOutcome = "found" | "unknown" | "error";
@@ -60,6 +60,7 @@ export function ItemSearchPanel({
   inputRef,
   feedback,
   recentItems,
+  addedCodes,
   disabled,
   onScan,
   onPick,
@@ -69,6 +70,8 @@ export function ItemSearchPanel({
   inputRef: RefObject<HTMLInputElement | null>;
   feedback: { text: string; tone: ScanTone };
   recentItems: RecentItemCard[];
+  /** Articles déjà dans la commande : les habituels correspondants sont cochés. */
+  addedCodes?: Set<string>;
   disabled?: boolean;
   onScan: (raw: string) => Promise<ScanOutcome>;
   onPick: (item: ItemCard, qty: number) => void;
@@ -125,10 +128,10 @@ export function ItemSearchPanel({
   };
 
   return (
-    <section className="rounded-xl border bg-card p-3.5 shadow-sm" aria-label="Ajout d’articles">
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start">
+    <section className="flex flex-col gap-2.5 border-b p-3" aria-label="Ajout d’articles">
+      <div className="flex gap-2">
         <div className="relative min-w-0 flex-1">
-          <ScanBarcode className="pointer-events-none absolute top-[26px] left-3 size-5 -translate-y-1/2 text-muted-foreground" />
+          <ScanBarcode className="pointer-events-none absolute top-5 left-3 size-[18px] -translate-y-1/2 text-muted-foreground" />
           <Input
             ref={inputRef}
             value={value}
@@ -136,7 +139,7 @@ export function ItemSearchPanel({
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="Scannez un code-barres ou cherchez un article (ex. 12*code pour 12 unités)"
+            placeholder="Scanner ou rechercher un article"
             aria-label="Scanner ou rechercher un article"
             onChange={(event) => {
               setValue(event.target.value);
@@ -160,10 +163,14 @@ export function ItemSearchPanel({
               }
             }}
             className={cn(
-              "h-[52px] rounded-lg pl-10 text-[16px]",
+              "h-10 rounded-[10px] pr-44 pl-10 text-[14px]",
               feedback.tone === "error" && "border-destructive/40 bg-destructive/5",
             )}
           />
+          <span className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 items-center gap-2 sm:flex">
+            <span className="num text-[11.5px] text-muted-foreground/70">12*code = 12 unités</span>
+            <kbd className="num rounded border px-1.5 text-[11px] text-muted-foreground">/</kbd>
+          </span>
           {searching ? (
             <div
               role="listbox"
@@ -209,35 +216,52 @@ export function ItemSearchPanel({
             </div>
           ) : null}
         </div>
-        <Button variant="outline" className="h-[52px]" onClick={onOpenCamera} disabled={disabled}>
+        <Button variant="outline" className="h-10 rounded-[10px]" onClick={onOpenCamera} disabled={disabled}>
           <Camera /> Caméra
         </Button>
       </div>
-      <p className={cn("mt-2 flex items-center gap-2 text-[12.5px] leading-snug", FEEDBACK_TEXT[feedback.tone])} aria-live="polite">
-        {busy ? <Spinner /> : null}
-        {feedback.text || "Entrée valide le code scanné ; ↑ ↓ pour choisir dans la liste."}
-      </p>
 
-      {recentItems.length ? (
-        <div className="mt-3 border-t pt-3">
-          <p className="mb-2 flex items-center gap-1.5 t-micro text-muted-foreground">
-            <History className="size-3.5" /> Articles habituels du client
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {recentItems.map((item) => (
-              <button
-                key={item.item_code}
-                type="button"
-                disabled={disabled}
-                onClick={() => onPick(item, item.last_qty || 1)}
-                title={`Dernière quantité : ${formatQuantity(item.last_qty)}`}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-[12.5px] hover:border-brand-300 hover:bg-brand-50/50"
-              >
-                <span className="truncate">{item.item_name}</span>
-                <span className="num text-muted-foreground">×{formatQuantity(item.last_qty || 1)}</span>
-              </button>
-            ))}
-          </div>
+      {recentItems.length || feedback.text || busy ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {recentItems.length ? (
+            <>
+              <span className="inline-flex items-center gap-1.5 t-micro text-muted-foreground" title="Articles habituels du client">
+                <History className="size-3.5" /> Habituels
+              </span>
+              {recentItems.map((item) => {
+                const added = addedCodes?.has(item.item_code);
+                return (
+                  <button
+                    key={item.item_code}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => onPick(item, item.last_qty || 1)}
+                    title={`Dernière quantité : ${formatQuantity(item.last_qty)}${added ? " — déjà dans la commande" : ""}`}
+                    className={cn(
+                      "inline-flex h-[26px] max-w-full items-center gap-1.5 rounded-full border bg-background px-2.5 text-[12.5px] hover:border-brand-300 hover:bg-brand-50/50",
+                      added && "text-muted-foreground",
+                    )}
+                  >
+                    {added ? <Check className="size-3 shrink-0" /> : null}
+                    <span className="truncate">{item.item_name}</span>
+                    <span className="num text-muted-foreground">×{formatQuantity(item.last_qty || 1)}</span>
+                  </button>
+                );
+              })}
+            </>
+          ) : null}
+          {feedback.text || busy ? (
+            <span
+              className={cn(
+                "ml-auto inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12.5px] font-medium",
+                FEEDBACK_PILL[feedback.tone],
+              )}
+              aria-live="polite"
+            >
+              {busy ? <Spinner /> : feedback.tone === "ok" ? <Check className="size-3 shrink-0" /> : null}
+              <span className="truncate">{feedback.text || "Recherche…"}</span>
+            </span>
+          ) : null}
         </div>
       ) : null}
     </section>

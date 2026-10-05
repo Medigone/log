@@ -45,7 +45,11 @@ describe("OrderLinesTable", () => {
     expect(screen.getByTestId("order-line-vat-A")).toHaveTextContent("19 %");
     expect(screen.getByTestId("order-line-vat-B")).toHaveTextContent("Exo.");
     expect(within(screen.getByTestId("order-line-vat-B")).queryByRole("img")).toBeNull();
-    expect(within(screen.getByTestId("order-line-vat-C")).getByRole("img", { name: "Taux de TVA non renseigné" })).toBeInTheDocument();
+    expect(screen.getByTestId("order-line-vat-C")).toHaveTextContent("Exo.");
+    // L'alerte « taux absent » est affichée une seule fois, en bandeau, avec un lien vers la fiche.
+    const banner = screen.getByTestId("vat-missing");
+    expect(banner).toHaveTextContent("Article C");
+    expect(within(banner).getByRole("link", { name: "Compléter la fiche" })).toHaveAttribute("href", "#/articles/C?tab=store");
   });
 
   it("affiche le manque, le réservé et le quota", () => {
@@ -53,7 +57,8 @@ describe("OrderLinesTable", () => {
     const row = screen.getByTestId("order-line-A");
     expect(within(row).getByTestId("order-line-short-A")).toHaveTextContent("3 dispo · manque 2");
     expect(within(row).getByLabelText("Réservé A")).toHaveValue("3");
-    expect(within(row).getByRole("button", { name: "Tout" })).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Réserver toute la quantité A" })).toBeInTheDocument();
+    expect(row).toHaveTextContent("sur 5");
     expect(within(row).getByTestId("order-line-quota-A")).toHaveTextContent("quota 6");
   });
 
@@ -65,7 +70,7 @@ describe("OrderLinesTable", () => {
     const figures = within(row).getByTestId("stock-figures");
     expect(figures).toHaveTextContent("Stock 10 · Rés. 10 · Cmd 19");
     expect(within(row).getByTestId("order-line-short-A")).toHaveTextContent("Rupture");
-    expect(within(row).getByText("Non réservé")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Réserver toute la quantité A" })).toHaveAttribute("title", expect.stringContaining("Non réservé"));
   });
 
   it("demande confirmation avant de retirer une ligne", async () => {

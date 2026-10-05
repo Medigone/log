@@ -268,7 +268,7 @@ describe("OrderEntryPage", () => {
     await waitFor(() => expect(mocks.previewOrder).toHaveBeenCalled(), { timeout: 2000 });
 
     expect(screen.queryByRole("button", { name: /Valider la commande/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Enregistrer le brouillon/ }));
+    await user.click(screen.getByRole("button", { name: /^Enregistrer$/ }));
 
     await waitFor(() =>
       expect(mocks.saveOrder).toHaveBeenCalledWith(
@@ -309,7 +309,7 @@ describe("OrderEntryPage", () => {
     await user.type(amount, "10{Enter}");
 
     expect(await screen.findByText(/Reste à répartir/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Enregistrer le brouillon/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Enregistrer$/ })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: /Répartir sur la dernière/ }));
     expect(await screen.findByText("L’échéancier couvre le total.")).toBeInTheDocument();
   });
@@ -426,7 +426,8 @@ describe("OrderEntryPage : commande validée", () => {
   it("annule la commande après confirmation", async () => {
     const user = userEvent.setup();
     renderSubmitted();
-    await user.click(await screen.findByRole("button", { name: /^Annuler$/ }));
+    await user.click(await screen.findByRole("button", { name: "Autres actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Annuler$/ }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/1 liste de préparation et 1 BL brouillon/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Annuler la commande" }));
@@ -436,7 +437,8 @@ describe("OrderEntryPage : commande validée", () => {
   it("supprime la commande puis revient à la liste", async () => {
     const user = userEvent.setup();
     renderSubmitted();
-    await user.click(await screen.findByRole("button", { name: /^Supprimer$/ }));
+    await user.click(await screen.findByRole("button", { name: "Autres actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: /^Supprimer$/ }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Supprimer" }));
     await waitFor(() => expect(mocks.deleteOrder).toHaveBeenCalledWith("SAL-ORD-5"));
     expect(await screen.findByText("Liste des commandes")).toBeInTheDocument();
@@ -445,18 +447,21 @@ describe("OrderEntryPage : commande validée", () => {
   it("ouvre le brouillon créé par « Modifier entièrement »", async () => {
     const user = userEvent.setup();
     renderSubmitted();
-    await user.click(await screen.findByRole("button", { name: /Modifier entièrement/ }));
+    await user.click(await screen.findByRole("button", { name: "Autres actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: /Modifier entièrement/ }));
     await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Annuler et modifier" }));
     await waitFor(() => expect(mocks.amendOrder).toHaveBeenCalledWith("SAL-ORD-5"));
   });
 
   it("bloque annulation et suppression quand la marchandise est partie", async () => {
+    const user = userEvent.setup();
     mocks.order = submittedOrder({ blockers: ["Le BL DN-1 a déjà quitté la préparation."] });
     renderSubmitted();
     expect(await screen.findByText("Le BL DN-1 a déjà quitté la préparation.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Annuler$/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /^Supprimer$/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /^Modifier$/ })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Autres actions" }));
+    expect(await screen.findByRole("menuitem", { name: /^Annuler$/ })).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("menuitem", { name: /^Supprimer$/ })).toHaveAttribute("aria-disabled", "true");
   });
 });
 

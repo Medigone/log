@@ -37,6 +37,8 @@ import { PriceGridPage } from "@/features/catalog/PriceGridPage";
 import { PricingRulesPage } from "@/features/catalog/PricingRulesPage";
 import { CatalogSettingsPage } from "@/features/catalog/CatalogSettingsPage";
 import { PublicTrackingPage } from "@/features/tracking/PublicTrackingPage";
+import { ItemAnalyticsPage } from "@/features/analytics/ItemAnalyticsPage";
+import { ReceivablesPage } from "@/features/receivables/ReceivablesPage";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { DesktopShell } from "@/layouts/DesktopShell";
 import { canAccessCatalog } from "@/layouts/navItems";
@@ -142,6 +144,8 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/cashier/:routeId" element={<RoleGuard role={user.role} allowed={["caissier", "responsable"]}><CashierRoutePage canResolveDiscrepancy={user.role === "responsable"} /></RoleGuard>} />
         <Route path="/caisses" element={<RoleGuard role={user.role} allowed={["responsable"]}><DriverCashPage /></RoleGuard>} />
         <Route path="/caisses/:driver" element={<RoleGuard role={user.role} allowed={["responsable"]}><DriverCashBoxPage /></RoleGuard>} />
+        <Route path="/analyses" element={<RoleGuard role={user.role} allowed={["responsable"]}><ItemAnalyticsPage /></RoleGuard>} />
+        <Route path="/creances" element={<RoleGuard role={user.role} allowed={["responsable"]}><ReceivablesPage /></RoleGuard>} />
         <Route path="/" element={<Navigate to={defaultRoute(user.role)} replace />} />
         <Route path="*" element={<Navigate to={defaultRoute(user.role)} replace />} />
       </Routes>

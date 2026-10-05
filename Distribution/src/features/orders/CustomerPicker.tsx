@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, MapPin, MapPinOff, Phone, Search, UserPlus, UserRound } from "lucide-react";
+import { ExternalLink, Search, UserPlus, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
@@ -55,29 +55,21 @@ export function CustomerPicker({
 
   if (customer) {
     return (
-      <section className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3.5 shadow-sm" aria-label="Client">
-        <div className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-50 text-brand-700">
-          <UserRound className="size-5" />
+      <section className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3.5" aria-label="Client">
+        <div className="grid size-9 shrink-0 place-items-center rounded-full bg-muted text-foreground">
+          <UserRound className="size-[18px]" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
-            <p className="truncate text-[15px] font-semibold">{customer.customer_name}</p>
+            <p className="truncate text-[14px] font-semibold">{customer.customer_name}</p>
             <CustomerBalance balance={customer.balance} />
           </div>
-          <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 t-meta text-muted-foreground">
-            {customer.customer_group ? <span>{customer.customer_group}</span> : null}
-            {customer.commune_name || customer.wilaya ? (
-              <span>{[customer.commune_name, customer.wilaya].filter(Boolean).join(", ")}</span>
-            ) : null}
-            {customer.phone ? (
-              <span className="inline-flex items-center gap-1">
-                <Phone className="size-3" /> {customer.phone}
-              </span>
-            ) : null}
-            <span className={cn("inline-flex items-center gap-1", !customer.has_gps && "text-amber-700")}>
-              {customer.has_gps ? <MapPin className="size-3" /> : <MapPinOff className="size-3" />}
-              {customer.has_gps ? "GPS connu" : "Sans GPS"}
-            </span>
+          <p className="truncate t-meta text-muted-foreground">
+            {[customer.customer_group, [customer.commune_name, customer.wilaya].filter(Boolean).join(", "), customer.phone]
+              .filter(Boolean)
+              .join(" · ")}
+            {" · "}
+            <span className={cn(!customer.has_gps && "font-medium text-amber-700")}>{customer.has_gps ? "GPS connu" : "Sans GPS"}</span>
           </p>
         </div>
         <Button
@@ -99,7 +91,7 @@ export function CustomerPicker({
               window.setTimeout(() => inputRef.current?.focus(), 0);
             }}
           >
-            Changer de client
+            Changer
           </Button>
         )}
       </section>
