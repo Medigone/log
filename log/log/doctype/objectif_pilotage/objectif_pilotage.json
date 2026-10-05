@@ -1,0 +1,89 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:cle_mois",
+ "creation": "2026-10-05 16:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "mois",
+  "cle_mois",
+  "ca_ht",
+  "marge",
+  "encaissements",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "mois",
+   "fieldtype": "Date",
+   "label": "Mois",
+   "reqd": 1,
+   "in_list_view": 1,
+   "description": "Premier jour du mois visé."
+  },
+  {
+   "fieldname": "cle_mois",
+   "fieldtype": "Data",
+   "label": "Clé du mois",
+   "read_only": 1,
+   "hidden": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "ca_ht",
+   "fieldtype": "Currency",
+   "label": "Chiffre d'affaires HT",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "marge",
+   "fieldtype": "Currency",
+   "label": "Marge brute",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "encaissements",
+   "fieldtype": "Currency",
+   "label": "Encaissements",
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-10-05 16:00:00",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Objectif Pilotage",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "mois",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "cle_mois",
+ "track_changes": 1
+}

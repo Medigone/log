@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { crumbsFromPath } from "@/layouts/breadcrumbPath"
-import { LayoutDashboard, Truck, UserRound } from "lucide-react"
+import { Truck, UserRound } from "lucide-react"
+import { navGroupIcons } from "@/layouts/navItems"
 
 function labels(pathname: string, search = "") {
   return crumbsFromPath(pathname, search).map((crumb) => crumb.label)
@@ -92,14 +93,20 @@ describe("crumbsFromPath", () => {
   })
 
   it("attache les icônes de catégorie et de page", () => {
+    // Mêmes icônes de section que la barre latérale.
     const deliveries = crumbsFromPath("/deliveries")
-    expect(deliveries[0].icon).toBe(LayoutDashboard)
+    expect(deliveries[0].icon).toBe(navGroupIcons.operations)
     expect(deliveries[1].icon).toBe(Truck)
     const livreurs = crumbsFromPath("/livreurs/abc")
-    expect(livreurs[0].icon).toBe(Truck)
+    expect(livreurs[0].icon).toBe(navGroupIcons.ressources)
     expect(livreurs[1].icon).toBe(UserRound)
     expect(livreurs[2].icon).toBeUndefined()
-    expect(crumbsFromPath("/caisses")[0].icon).toBe(LayoutDashboard)
+    expect(crumbsFromPath("/caisses")[0].icon).toBe(navGroupIcons.operations)
+  })
+
+  it("nomme les pages de pilotage", () => {
+    expect(labels("/pilotage/tresorerie")).toEqual(["Pilotage", "Trésorerie"])
+    expect(labels("/pilotage/objectifs")).toEqual(["Pilotage", "Objectifs"])
   })
 
   it("laisse un chemin hors nav sans catégorie", () => {

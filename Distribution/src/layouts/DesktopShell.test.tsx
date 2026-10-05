@@ -152,7 +152,7 @@ describe("DesktopShell", () => {
     dashboardState.data = { message: dashboard };
     const user = userEvent.setup();
     renderShell(manager);
-    expect(within(screen.getByRole("link", { name: /préparation/i })).getByText("4")).toBeInTheDocument();
+    expect(within(screen.getByRole("link", { name: /^préparation\s*\d*$/i })).getByText("4")).toBeInTheDocument();
     expect(within(screen.getByRole("link", { name: /planification/i })).getByText("5")).toBeInTheDocument();
     expect(screen.getByText("1 anomalie")).toBeInTheDocument();
     expect(screen.getByText("Préparation en retard")).toBeInTheDocument();
@@ -164,7 +164,7 @@ describe("DesktopShell", () => {
     renderShell(manager, "/preparation?pick_lists=PL-42");
     const trail = screen.getByRole("navigation", { name: "breadcrumb" });
     expect(within(trail).getByText("PL-42")).toBeInTheDocument();
-    expect(within(trail).getByRole("link", { name: /préparation/i })).toHaveAttribute("href", "/preparation");
+    expect(within(trail).getByRole("link", { name: /^préparation\s*\d*$/i })).toHaveAttribute("href", "/preparation");
   });
 
   it("affiche un lien Bureau vers le desk pour les rôles internes", () => {

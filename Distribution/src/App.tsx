@@ -39,6 +39,11 @@ import { CatalogSettingsPage } from "@/features/catalog/CatalogSettingsPage";
 import { PublicTrackingPage } from "@/features/tracking/PublicTrackingPage";
 import { ItemAnalyticsPage } from "@/features/analytics/ItemAnalyticsPage";
 import { ReceivablesPage } from "@/features/receivables/ReceivablesPage";
+import { CustomerInsightsPage } from "@/features/pilotage/CustomerInsightsPage";
+import { DeliveryPerformancePage } from "@/features/pilotage/DeliveryPerformancePage";
+import { ObjectivesPage } from "@/features/pilotage/ObjectivesPage";
+import { StockOperationsPage } from "@/features/pilotage/StockOperationsPage";
+import { TreasuryPage } from "@/features/pilotage/TreasuryPage";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { DesktopShell } from "@/layouts/DesktopShell";
 import { canAccessCatalog } from "@/layouts/navItems";
@@ -146,6 +151,11 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/caisses/:driver" element={<RoleGuard role={user.role} allowed={["responsable"]}><DriverCashBoxPage /></RoleGuard>} />
         <Route path="/analyses" element={<RoleGuard role={user.role} allowed={["responsable"]}><ItemAnalyticsPage /></RoleGuard>} />
         <Route path="/creances" element={<RoleGuard role={user.role} allowed={["responsable"]}><ReceivablesPage /></RoleGuard>} />
+        <Route path="/pilotage/tresorerie" element={<RoleGuard role={user.role} allowed={["responsable"]}><TreasuryPage /></RoleGuard>} />
+        <Route path="/pilotage/livraison" element={<RoleGuard role={user.role} allowed={["responsable"]}><DeliveryPerformancePage /></RoleGuard>} />
+        <Route path="/pilotage/stock" element={<RoleGuard role={user.role} allowed={["responsable"]}><StockOperationsPage /></RoleGuard>} />
+        <Route path="/pilotage/clients" element={<RoleGuard role={user.role} allowed={["responsable"]}><CustomerInsightsPage /></RoleGuard>} />
+        <Route path="/pilotage/objectifs" element={<RoleGuard role={user.role} allowed={["responsable"]}><ObjectivesPage /></RoleGuard>} />
         <Route path="/" element={<Navigate to={defaultRoute(user.role)} replace />} />
         <Route path="*" element={<Navigate to={defaultRoute(user.role)} replace />} />
       </Routes>

@@ -1,19 +1,10 @@
 import type { LucideIcon } from "lucide-react"
-import { ChartColumn, LayoutDashboard, ShoppingCart, Truck, Warehouse } from "lucide-react"
-import { isNavItemActive, navGroupLabels, navItems, type NavGroup } from "@/layouts/navItems"
+import { isNavItemActive, navGroupIcons, navGroupLabels, navItems } from "@/layouts/navItems"
 
 export type Crumb = {
   label: string
   to?: string
   icon?: LucideIcon
-}
-
-const GROUP_ICONS: Record<NavGroup, LucideIcon> = {
-  ventes: ShoppingCart,
-  operations: LayoutDashboard,
-  stock: Warehouse,
-  ressources: Truck,
-  pilotage: ChartColumn,
 }
 
 const SECTION_LABELS: Record<string, string> = {
@@ -36,6 +27,14 @@ const SECTION_LABELS: Record<string, string> = {
   creances: "Créances clients",
 }
 
+const PILOTAGE_PAGES: Record<string, string> = {
+  tresorerie: "Trésorerie",
+  livraison: "Performance livraison",
+  stock: "Préparation & stock",
+  clients: "Clients & commercial",
+  objectifs: "Objectifs",
+}
+
 const CATALOG_PAGES: Record<string, string> = {
   prix: "Prix",
   promotions: "Promotions",
@@ -48,7 +47,7 @@ function withNavContext(pathname: string, crumbs: Crumb[]): Crumb[] {
   const withPageIcon = crumbs.map((crumb) =>
     crumb.label === item.label ? { ...crumb, icon: item.icon } : crumb,
   )
-  return [{ label: navGroupLabels[item.group], icon: GROUP_ICONS[item.group] }, ...withPageIcon]
+  return [{ label: navGroupLabels[item.group], icon: navGroupIcons[item.group] }, ...withPageIcon]
 }
 
 function pickListNamesFromSearch(search: string) {
@@ -101,6 +100,9 @@ export function crumbsFromPath(pathname: string, search = ""): Crumb[] {
     const page = CATALOG_PAGES[parts[1]]
     if (page && !parts[2]) return withNavContext(pathname, [{ label: page }])
     return withNavContext(pathname, [{ label, to: "/articles" }, { label: decodeURIComponent(parts.slice(1).join("/")) }])
+  }
+  if (section === "pilotage" && PILOTAGE_PAGES[parts[1]]) {
+    return withNavContext(pathname, [{ label: PILOTAGE_PAGES[parts[1]] }])
   }
   if (section === "cashier" && parts[1]) {
     return withNavContext(pathname, [{ label, to: "/cashier" }, { label: decodeURIComponent(parts[1]) }])
