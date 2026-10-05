@@ -11,6 +11,8 @@ AFTER_INVOICE = "Day(s) after invoice date"
 
 PAYMENT_TERMS = (
 	{"payment_term_name": "Comptant", "credit_days": 0},
+	# Échéance recalée sur la date de livraison de la commande (log.services.delivery_payment_terms).
+	{"payment_term_name": "À la livraison", "credit_days": 0},
 	{"payment_term_name": "30 jours", "credit_days": 30},
 	{"payment_term_name": "60 jours", "credit_days": 60},
 	{"payment_term_name": "90 jours", "credit_days": 90},
@@ -19,6 +21,7 @@ PAYMENT_TERMS = (
 # (nom du modèle, [(terme, part en %)])
 PAYMENT_TERMS_TEMPLATES = (
 	("Comptant", (("Comptant", 100),)),
+	("À la livraison", (("À la livraison", 100),)),
 	("30 jours", (("30 jours", 100),)),
 	("60 jours", (("60 jours", 100),)),
 	("50 % comptant / 50 % 30 jours", (("Comptant", 50), ("30 jours", 50))),

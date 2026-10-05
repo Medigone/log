@@ -15,6 +15,7 @@ from log.api.distribution import ORDER_ROLES, ORDER_VALIDATION_ROLES, _payload, 
 from log.api.distribution_rules import has_any_role
 from log.customer_ops import _balances
 from log.pick_list_ops import _barcode_increment, _scan_barcode
+from log.services.delivery_payment_terms import align_due_dates
 from log.services.sales_quota import check_quotas, item_quotas, stock_qty_by_item
 from log.setup.taxes import sales_vat_template
 from log.utils.rounding import rounding_disabled
@@ -555,6 +556,7 @@ def _apply_schedule(doc, template, schedule):
 				},
 			)
 	doc.set_payment_schedule()
+	align_due_dates(doc)
 
 
 def _order_total(doc) -> float:

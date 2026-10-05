@@ -198,6 +198,7 @@ doc_events = {
         "on_update": "log.services.portal_notifications.on_livraison_update",
     },
     "Sales Order": {
+        "validate": "log.services.delivery_payment_terms.on_sales_order_validate",
         "on_submit": [
             "log.services.portal_notifications.on_sales_order_submit",
             "log.pick_list_ops.on_sales_order_submit",
@@ -205,6 +206,7 @@ doc_events = {
         "on_update_after_submit": [
             "log.order_change_ops.invalidate_order_distribution",
             "log.services.portal_notifications.on_sales_order_update_after_submit",
+            "log.services.delivery_payment_terms.on_sales_order_update_after_submit",
         ],
         "on_cancel": [
             "log.order_change_ops.invalidate_order_distribution",
