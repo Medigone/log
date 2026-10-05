@@ -13,7 +13,16 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Toolbar } from "@/components/ui/toolbar";
 import { BulkPriceDialog } from "@/features/catalog/BulkPriceDialog";
-import { CATALOG_PAGE_SIZE, leafGroupOptions, marginOf, namesToOptions, pageRange, useDebouncedValue } from "@/features/catalog/catalogShared";
+import {
+  CATALOG_PAGE_SIZE,
+  leafGroupOptions,
+  marginOf,
+  namesToOptions,
+  pageRange,
+  useDebouncedValue,
+  type PendingPriceChange,
+} from "@/features/catalog/catalogShared";
+import { PriceChangeDialog } from "@/features/catalog/PriceChangeDialog";
 import { PriceListDialog } from "@/features/catalog/PriceListDialog";
 import {
   useCatalogMutations,
@@ -41,6 +50,7 @@ export function PriceGridPage() {
   const [page, setPage] = useState(1);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editingList, setEditingList] = useState<CatalogPriceList | null | undefined>(undefined);
+  const [pendingPrice, setPendingPrice] = useState<PendingPriceChange | null>(null);
   const debouncedSearch = useDebouncedValue(search.trim());
   const start = (page - 1) * CATALOG_PAGE_SIZE;
   const { data, error, isLoading, mutate } = usePriceGrid(priceList, {
@@ -62,12 +72,19 @@ export function PriceGridPage() {
     setPage(1);
   };
 
-  const commit = async (row: PriceGridRow, raw: string) => {
+  // Un prix saisi n'est enregistré qu'après confirmation.
+  const commit = (row: PriceGridRow, raw: string) => {
     const rate = parseDecimal(raw);
-    if (rate === null || rate < 0) return;
+    if (rate === null || rate < 0 || rate === row.rate) return;
+    setPendingPrice({ row, rate });
+  };
+
+  const applyPrice = async ({ row, rate }: PendingPriceChange) => {
     try {
       await api.setGridPrice(priceList, row.item_code, rate);
       await mutate();
+      toast.success(`Prix de ${row.item_name} enregistré : ${formatMoney(rate, { precise: true })}.`);
+      setPendingPrice(null);
     } catch (err) {
       toast.error(apiErrorMessage(err));
     }
@@ -111,7 +128,7 @@ export function PriceGridPage() {
           aria-label={`Prix de ${row.item_name}`}
           placeholder="Aucun"
           value={row.rate == null ? "" : String(row.rate)}
-          onCommit={(value) => void commit(row, value)}
+          onCommit={(value) => commit(row, value)}
         />
       ),
     },
@@ -237,6 +254,15 @@ export function PriceGridPage() {
 
       <ListPagination page={page} totalPages={Math.max(1, Math.ceil(total / CATALOG_PAGE_SIZE))} total={total} from={from} to={to} onPageChange={setPage} />
 
+      {pendingPrice ? (
+        <PriceChangeDialog
+          change={pendingPrice}
+          priceList={priceList}
+          isBuying={isBuying}
+          onCancel={() => setPendingPrice(null)}
+          onConfirm={() => applyPrice(pendingPrice)}
+        />
+      ) : null}
       <BulkPriceDialog
         open={bulkOpen}
         onOpenChange={setBulkOpen}

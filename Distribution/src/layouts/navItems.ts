@@ -4,6 +4,7 @@ import {
   Boxes,
   Car,
   ClipboardCheck,
+  ClipboardList,
   FolderTree,
   LayoutDashboard,
   Package,
@@ -21,18 +22,18 @@ import {
 import type { DistributionRole, DistributionUser } from "@/shared/types/distribution"
 
 /** Groupes affichés dans la barre latérale, dans cet ordre. */
-export const navGroups = ["ventes", "operations", "achats", "ressources"] as const
+export const navGroups = ["ventes", "operations", "stock", "ressources"] as const
 export type NavGroup = (typeof navGroups)[number]
 
 export const navGroupLabels: Record<NavGroup, string> = {
   ventes: "Ventes",
   operations: "Opérationnel",
-  achats: "Achats",
+  stock: "Stock",
   ressources: "Ressources",
 }
 
 /** Clé de compteur : voir navBadges.ts */
-export type NavBadgeKey = "toPick" | "toPlan" | "toLoad" | "cashToControl" | "receiptsToValidate" | "ordersToValidate"
+export type NavBadgeKey = "toPick" | "toPlan" | "toLoad" | "cashToControl" | "receiptsToValidate" | "ordersToValidate" | "inventories"
 
 /** Accès accordé en plus du rôle principal (un utilisateur n'a qu'un rôle Distribution). */
 export type NavCapability = "catalog"
@@ -58,17 +59,18 @@ export const navItems: NavItem[] = [
   { to: "/articles/prix", label: "Prix", icon: Tags, group: "ventes", roles: CATALOG_ROLES, capability: "catalog" },
   { to: "/articles/promotions", label: "Promotions", icon: BadgePercent, group: "ventes", roles: CATALOG_ROLES, capability: "catalog" },
   { to: "/articles/referentiels", label: "Référentiels", icon: FolderTree, group: "ventes", roles: CATALOG_ROLES, capability: "catalog" },
-  // Opérationnel : de la préparation à la livraison, jusqu’au contrôle de caisse.
+  // Opérationnel : de la planification à la livraison, jusqu’au contrôle de caisse.
   { to: "/today", label: "Tableau de bord", icon: LayoutDashboard, group: "operations", roles: ["preparateur", "planificateur", "responsable"] },
-  { to: "/preparation", label: "Préparation", icon: ClipboardCheck, group: "operations", badgeKey: "toPick", roles: ["preparateur", "responsable"] },
   { to: "/planning", label: "Planification", icon: Route, group: "operations", badgeKey: "toPlan", roles: ["planificateur", "responsable"] },
-  { to: "/stock", label: "Stock véhicules", icon: Package, group: "operations", badgeKey: "toLoad", roles: ["preparateur", "planificateur", "responsable"] },
-  { to: "/codes-barres", label: "Codes-barres", icon: ScanBarcode, group: "operations", roles: ["preparateur", "planificateur", "responsable"] },
   { to: "/deliveries", label: "Livraisons", icon: Truck, group: "operations", roles: ["planificateur", "responsable"] },
   { to: "/cashier", label: "Caisse Tournées", icon: Banknote, group: "operations", badgeKey: "cashToControl", roles: ["caissier", "responsable"] },
   { to: "/caisses", label: "Caisses livreurs", icon: Wallet, group: "operations", roles: ["responsable"] },
-  // Achats : entrées de marchandise.
-  { to: "/receptions", label: "Réceptions", icon: PackageCheck, group: "achats", badgeKey: "receiptsToValidate", roles: ["magasinier", "responsable"] },
+  // Stock : préparation, chargement, inventaires et entrées de marchandise.
+  { to: "/preparation", label: "Préparation", icon: ClipboardCheck, group: "stock", badgeKey: "toPick", roles: ["preparateur", "responsable"] },
+  { to: "/stock", label: "Stock véhicules", icon: Package, group: "stock", badgeKey: "toLoad", roles: ["preparateur", "planificateur", "responsable"] },
+  { to: "/inventaires", label: "Inventaires", icon: ClipboardList, group: "stock", badgeKey: "inventories", roles: ["preparateur", "magasinier", "responsable"] },
+  { to: "/codes-barres", label: "Codes-barres", icon: ScanBarcode, group: "stock", roles: ["preparateur", "planificateur", "responsable"] },
+  { to: "/receptions", label: "Réceptions", icon: PackageCheck, group: "stock", badgeKey: "receiptsToValidate", roles: ["magasinier", "responsable"] },
   // Ressources : équipes et flotte.
   { to: "/livreurs", label: "Livreurs", icon: UserRound, group: "ressources", roles: ["planificateur", "responsable"] },
   { to: "/vehicules", label: "Véhicules", icon: Car, group: "ressources", roles: ["planificateur", "responsable"] },

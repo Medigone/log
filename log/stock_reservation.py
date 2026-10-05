@@ -91,6 +91,64 @@ def open_reservations(item_codes, warehouse=None, exclude_order=None) -> dict[st
 	return dict(totals)
 
 
+def _open_ordered(item_codes, warehouse=None) -> dict[tuple[str, str], float]:
+	"""Quantité commandée non encore sortie du dépôt (unité de stock), par (article, entrepôt).
+
+	Mêmes commandes que les réservations : brouillons et validées, hors commandes clôturées/annulées.
+	"""
+	codes = sorted({code for code in item_codes if code})
+	if not codes:
+		return {}
+	conditions = ["soi.item_code in %(codes)s", "so.docstatus < 2", "so.status not in %(closed)s"]
+	values = {"codes": codes, "closed": CLOSED_ORDER_STATUSES}
+	if warehouse:
+		conditions.append("ifnull(nullif(soi.warehouse, ''), so.set_warehouse) = %(warehouse)s")
+		values["warehouse"] = warehouse
+	rows = frappe.db.sql(
+		f"""
+		select soi.name, soi.item_code, ifnull(nullif(soi.warehouse, ''), so.set_warehouse) as warehouse,
+			if(ifnull(soi.stock_qty, 0) > 0, soi.stock_qty, soi.qty * ifnull(nullif(soi.conversion_factor, 0), 1)) as qty
+		from `tabSales Order Item` soi
+		inner join `tabSales Order` so on so.name = soi.parent
+		where {" and ".join(conditions)}
+		""",
+		values,
+		as_dict=True,
+	)
+	consumed = consumed_qty_by_so_item(row.name for row in rows)
+	totals: dict[tuple[str, str], float] = defaultdict(float)
+	for row in rows:
+		totals[(row.item_code, row.warehouse or "")] += max(0.0, flt(row.qty) - consumed.get(row.name, 0.0))
+	return {key: qty for key, qty in totals.items() if qty}
+
+
+def open_ordered_by_warehouse(item_code) -> dict[str, float]:
+	"""Quantité en commande d'un article, par entrepôt."""
+	return {warehouse: qty for (_code, warehouse), qty in _open_ordered([item_code]).items()}
+
+
+def stock_overview(item_codes, warehouse) -> dict[str, dict]:
+	"""Stock, réservé, en commande et disponible net (stock − commandé) par article pour un entrepôt."""
+	codes = sorted({code for code in item_codes if code})
+	if not codes or not warehouse:
+		return {}
+	actual = actual_stock(codes, warehouse)
+	reserved = open_reservations(codes, warehouse)
+	ordered = {code: qty for (code, _wh), qty in _open_ordered(codes, warehouse).items()}
+	result = {}
+	for code in codes:
+		on_order = ordered.get(code, 0.0)
+		booked = reserved.get(code, 0.0)
+		result[code] = {
+			"actual_qty": actual.get(code, 0.0),
+			"reserved_qty": booked,
+			"ordered_qty": on_order,
+			# Les réservations sont une partie du commandé : on ne les retranche pas deux fois.
+			"net_qty": actual.get(code, 0.0) - max(on_order, booked),
+		}
+	return result
+
+
 def actual_stock(item_codes, warehouse) -> dict[str, float]:
 	codes = sorted({code for code in item_codes if code})
 	if not codes or not warehouse:

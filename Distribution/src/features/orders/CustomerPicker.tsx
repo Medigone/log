@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/shared/format";
 import { useCustomerSearch, type CustomerSummary } from "@/shared/api/orders";
 
 function useDebounced<T>(value: T, delay = 250) {
@@ -13,6 +14,21 @@ function useDebounced<T>(value: T, delay = 250) {
     return () => window.clearTimeout(timer);
   }, [value, delay]);
   return debounced;
+}
+
+function CustomerBalance({ balance }: { balance?: number }) {
+  const value = balance ?? 0;
+  return (
+    <span
+      className={cn(
+        "num shrink-0 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium",
+        value > 0 ? "bg-amber-50 text-amber-800" : value < 0 ? "bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground",
+      )}
+      title="Solde comptable du client"
+    >
+      Solde {formatMoney(value)}
+    </span>
+  );
 }
 
 export function CustomerPicker({
@@ -30,8 +46,9 @@ export function CustomerPicker({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const debounced = useDebounced(query.trim());
-  const { data, isLoading } = useCustomerSearch(debounced, !customer && open);
-  const results = data?.message ?? [];
+  const showResults = open && debounced.length > 0;
+  const { data, isLoading } = useCustomerSearch(debounced, !customer && showResults);
+  const results = showResults ? (data?.message ?? []) : [];
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => setActive(0), [debounced]);
@@ -43,7 +60,10 @@ export function CustomerPicker({
           <UserRound className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold">{customer.customer_name}</p>
+          <div className="flex min-w-0 items-center gap-2">
+            <p className="truncate text-[15px] font-semibold">{customer.customer_name}</p>
+            <CustomerBalance balance={customer.balance} />
+          </div>
           <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 t-meta text-muted-foreground">
             {customer.customer_group ? <span>{customer.customer_group}</span> : null}
             {customer.commune_name || customer.wilaya ? (
@@ -95,8 +115,8 @@ export function CustomerPicker({
     <section className="rounded-xl border bg-card p-3.5 shadow-sm" aria-label="Client">
       <div className="flex flex-col gap-2 sm:flex-row">
         <div className="relative min-w-0 flex-1">
-          <InputGroup className="h-11 bg-background">
-            <InputGroupAddon>{isLoading ? <Spinner /> : <Search />}</InputGroupAddon>
+          <InputGroup className="h-9 bg-background">
+            <InputGroupAddon>{isLoading && showResults ? <Spinner /> : <Search />}</InputGroupAddon>
             <InputGroupInput
               ref={inputRef}
               value={query}
@@ -125,7 +145,7 @@ export function CustomerPicker({
               }}
             />
           </InputGroup>
-          {open ? (
+          {showResults ? (
             <div
               role="listbox"
               aria-label="Clients"
@@ -145,7 +165,10 @@ export function CustomerPicker({
                   )}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{row.customer_name}</span>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-medium">{row.customer_name}</span>
+                      <CustomerBalance balance={row.balance} />
+                    </span>
                     <span className="block truncate t-meta text-muted-foreground">
                       {[row.customer_group, row.commune_name, row.wilaya, row.phone].filter(Boolean).join(" · ")}
                     </span>
@@ -158,7 +181,7 @@ export function CustomerPicker({
             </div>
           ) : null}
         </div>
-        <Button variant="outline" className="h-11" onClick={() => onCreate(query.trim())}>
+        <Button variant="outline" className="h-9" onClick={() => onCreate(query.trim())}>
           <UserPlus /> Nouveau client
         </Button>
       </div>

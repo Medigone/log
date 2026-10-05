@@ -1,0 +1,132 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-04 10:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "inventaire",
+  "ligne",
+  "client_uuid",
+  "round",
+  "qty",
+  "uom",
+  "conversion_factor",
+  "mode",
+  "barcode",
+  "counted_at",
+  "user",
+  "annulee"
+ ],
+ "fields": [
+  {
+   "fieldname": "inventaire",
+   "fieldtype": "Link",
+   "label": "Inventaire",
+   "options": "Inventaire",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "ligne",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Ligne",
+   "options": "Ligne Inventaire",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "client_uuid",
+   "fieldtype": "Data",
+   "label": "Identifiant client",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "round",
+   "fieldtype": "Int",
+   "label": "Tour de comptage"
+  },
+  {
+   "fieldname": "qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantité (unité de stock)"
+  },
+  {
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "label": "Unité scannée",
+   "options": "UOM"
+  },
+  {
+   "default": "1",
+   "fieldname": "conversion_factor",
+   "fieldtype": "Float",
+   "label": "Facteur de conversion"
+  },
+  {
+   "default": "scan",
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "scan\nmanuel"
+  },
+  {
+   "fieldname": "barcode",
+   "fieldtype": "Data",
+   "label": "Code-barres"
+  },
+  {
+   "fieldname": "counted_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Compté le"
+  },
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Compteur",
+   "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "annulee",
+   "fieldtype": "Check",
+   "label": "Annulée"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-04 10:00:00",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Saisie Inventaire",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 0,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -83,6 +83,7 @@ export function ItemDetailPage() {
           <div className="flex flex-wrap gap-2">
             {item.disabled ? <StatusBadge tone="neutral">Désactivé</StatusBadge> : <StatusBadge tone="success">Actif</StatusBadge>}
             {item.show_in_store ? <StatusBadge tone="info">Sur le Store</StatusBadge> : null}
+            {item.sales_quota ? <StatusBadge tone="warning">Quota : {item.quota_max_qty} max / commande</StatusBadge> : null}
             {item.selling_rate == null ? <StatusBadge tone="warning">Sans prix de vente</StatusBadge> : null}
           </div>
         }

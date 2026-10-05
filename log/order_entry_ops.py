@@ -13,7 +13,11 @@ from frappe.utils import add_days, cint, cstr, flt, getdate, nowdate
 
 from log.api.distribution import ORDER_ROLES, ORDER_VALIDATION_ROLES, _payload, _require, _roles
 from log.api.distribution_rules import has_any_role
+from log.customer_ops import _balances
 from log.pick_list_ops import _barcode_increment, _scan_barcode
+from log.services.sales_quota import check_quotas, item_quotas, stock_qty_by_item
+from log.setup.taxes import sales_vat_template
+from log.utils.rounding import rounding_disabled
 
 DEFAULT_ORDER_TYPE = "BL"
 ORDER_TYPES = ("BL", "Facture")
@@ -23,6 +27,22 @@ LEGAL_FORMS = ("EI", "EURL", "SARL", "Personne Physique", "Non Précisé")
 CREATED_CUSTOMER_STATUS = "Actif"
 SCHEDULE_TOLERANCE = 0.1
 SEARCH_LIMIT = 30
+PRICE_TOLERANCE = 0.005
+CUSTOMER_SNAPSHOT_FIELDS = (
+	"customer_name",
+	"customer_address",
+	"address_display",
+	"shipping_address_name",
+	"shipping_address",
+	"contact_person",
+	"contact_display",
+	"contact_mobile",
+	"contact_phone",
+	"contact_email",
+	"customer_group",
+	"territory",
+	"tax_id",
+)
 
 
 # --- Contexte ----------------------------------------------------------------
@@ -88,12 +108,6 @@ def get_order_options():
 	_require(ORDER_ROLES)
 	company = _company()
 	warehouses = _sales_warehouses(company)
-	tax_templates = frappe.get_all(
-		"Sales Taxes and Charges Template",
-		filters={"company": company, "disabled": 0},
-		fields=["name", "title", "is_default"],
-		order_by="is_default desc, name asc",
-	)
 	return {
 		"company": company,
 		"currency": frappe.db.get_value("Company", company, "default_currency"),
@@ -103,8 +117,6 @@ def get_order_options():
 			"Price List", filters={"selling": 1, "enabled": 1}, pluck="name", order_by="name asc"
 		),
 		"default_price_list": _default_selling_price_list(),
-		"tax_templates": [{"name": row.name, "label": row.title or row.name} for row in tax_templates],
-		"default_tax_template": next((row.name for row in tax_templates if cint(row.is_default)), None),
 		"payment_terms_templates": frappe.get_all("Payment Terms Template", pluck="name", order_by="name asc"),
 		"modes_of_payment": frappe.get_all("Mode of Payment", filters={"enabled": 1}, pluck="name", order_by="name asc"),
 		"customer_groups": frappe.get_all(
@@ -125,7 +137,7 @@ def _customer_phone_columns() -> list[str]:
 	return [field for field in ("mobile_no", "custom_téléphone") if _has_field("Customer", field)]
 
 
-def _serialize_customer(row) -> dict:
+def _serialize_customer(row, balances: dict | None = None) -> dict:
 	phones = [cstr(row.get(field)).strip() for field in _customer_phone_columns()]
 	gps = cstr(row.get("custom_gps")).strip()
 	return {
@@ -140,7 +152,13 @@ def _serialize_customer(row) -> dict:
 		"payment_terms": row.get("payment_terms"),
 		"has_gps": bool(gps),
 		"status": row.get("custom_status"),
+		"balance": flt((balances or {}).get(row.name)),
 	}
+
+
+def _serialize_customers(rows) -> list[dict]:
+	balances = _balances([row.name for row in rows])
+	return [_serialize_customer(row, balances) for row in rows]
 
 
 def _customer_rows(where: str, values: dict, limit: int) -> list:
@@ -182,14 +200,14 @@ def search_customers(txt=None, limit=SEARCH_LIMIT):
 		if _has_field("Customer", "custom_wilaya"):
 			clauses.append("c.custom_wilaya like %(like)s")
 		where = f"and ({' or '.join(clauses)})"
-	return [_serialize_customer(row) for row in _customer_rows(where, values, min(cint(limit) or SEARCH_LIMIT, 50))]
+	return _serialize_customers(_customer_rows(where, values, min(cint(limit) or SEARCH_LIMIT, 50)))
 
 
 def _customer_summary(customer) -> dict | None:
 	if not customer:
 		return None
 	rows = _customer_rows("and c.name = %(name)s", {"name": customer}, 1)
-	return _serialize_customer(rows[0]) if rows else None
+	return _serialize_customers(rows)[0] if rows else None
 
 
 @frappe.whitelist()
@@ -314,7 +332,11 @@ def _item_cards(items, price_list, customer, warehouse) -> list[dict]:
 	codes = [row.name for row in items]
 	prices = _price_map(codes, price_list, customer)
 	stock = _available_stock(codes, warehouse)
+	from log.stock_reservation import stock_overview
+
+	overview = stock_overview(codes, warehouse)
 	barcodes = _barcodes(codes)
+	quotas = item_quotas(codes)
 	return [
 		{
 			"item_code": row.name,
@@ -326,7 +348,9 @@ def _item_cards(items, price_list, customer, warehouse) -> list[dict]:
 			"barcode": barcodes.get(row.name),
 			"price": prices.get(row.name),
 			"available": stock.get(row.name, 0.0),
+			"stock": overview.get(row.name),
 			"is_stock_item": bool(cint(row.get("is_stock_item"))),
+			"quota_max_qty": quotas.get(row.name),
 		}
 		for row in items
 	]
@@ -450,6 +474,7 @@ def _clean_lines(lines) -> list[dict]:
 		rate = line.get("rate")
 		if rate is not None and flt(rate) < 0:
 			frappe.throw(_("Le prix de {0} ne peut pas être négatif.").format(item_code))
+		price_list_rate = line.get("price_list_rate")
 		reserved = line.get("reserved_qty")
 		if reserved is not None and flt(reserved) < 0:
 			frappe.throw(_("La réservation de {0} ne peut pas être négative.").format(item_code))
@@ -460,6 +485,8 @@ def _clean_lines(lines) -> list[dict]:
 				"discount_percentage": None if discount is None else flt(discount),
 				"rate": None if rate is None else flt(rate),
 				"reserved_qty": None if reserved is None else flt(reserved),
+				# Prix de liste du brouillon enregistré : conservé tant que le commercial ne le met pas à jour.
+				"price_list_rate": None if price_list_rate is None else flt(price_list_rate),
 				"row_name": cstr(line.get("row_name")).strip() or None,
 			}
 		)
@@ -499,6 +526,17 @@ def _apply_line_pricing(doc, lines, editable_rate):
 		row.discount_percentage = line["discount_percentage"]
 		row.rate = flt(flt(row.price_list_rate) * (1 - line["discount_percentage"] / 100), row.precision("rate"))
 		row.discount_amount = flt(row.price_list_rate) - row.rate
+
+
+def _keep_saved_prices(doc, lines):
+	"""Remet le prix de liste enregistré à la place du tarif actuel, remise de ligne conservée."""
+	for row, line in zip(doc.get("items") or [], lines):
+		saved = line.get("price_list_rate")
+		if saved is None or abs(flt(row.price_list_rate) - saved) < PRICE_TOLERANCE:
+			continue
+		row.price_list_rate = saved
+		row.rate = flt(saved * (1 - flt(row.discount_percentage) / 100), row.precision("rate"))
+		row.discount_amount = saved - row.rate
 
 
 def _apply_schedule(doc, template, schedule):
@@ -587,6 +625,7 @@ def _build_order(data: dict, doc=None, reservation_order=None):
 	missing = [line["item_code"] for line in lines if not frappe.db.exists("Item", line["item_code"])]
 	if missing:
 		frappe.throw(_("Article introuvable : {0}").format(", ".join(missing)))
+	check_quotas(lines, allow_override=_can_validate(), previous=stock_qty_by_item(doc.get("items") if doc else None))
 
 	company = _company()
 	warehouse = data.get("warehouse")
@@ -602,19 +641,22 @@ def _build_order(data: dict, doc=None, reservation_order=None):
 	price_list = data.get("price_list") or _customer_price_list(customer)
 	if price_list and not frappe.db.exists("Price List", {"name": price_list, "selling": 1, "enabled": 1}):
 		frappe.throw(_("Liste de prix invalide : {0}").format(price_list))
-	tax_template = data.get("tax_template") or ""
-	if tax_template and not frappe.db.exists("Sales Taxes and Charges Template", tax_template):
-		frappe.throw(_("Modèle de taxes inconnu : {0}").format(tax_template))
+	# TVA ventilée par article (fiche article) : pas de choix de modèle sur la commande.
+	tax_template = sales_vat_template(company) or ""
 	payment_template = data.get("payment_terms_template") or ""
 	if payment_template and not frappe.db.exists("Payment Terms Template", payment_template):
 		frappe.throw(_("Conditions de paiement inconnues : {0}").format(payment_template))
 	schedule = _clean_schedule(data.get("payment_schedule"))
 	editable_rate = bool(cint(frappe.db.get_single_value("Selling Settings", "editable_price_list_rate")))
+	# Les prix d'un brouillon enregistré ne valent que pour le même client et la même liste de prix.
+	keep_prices = bool(doc and not doc.is_new() and doc.customer == customer and doc.selling_price_list == price_list)
 
 	doc = doc or frappe.new_doc("Sales Order")
 	doc.flags.ignore_permissions = True
-	if doc.get("customer") != customer:
-		for field in ("customer_address", "shipping_address_name", "contact_person", "customer_name"):
+	# Brouillon : les données du client (nom, adresse, contact, catégorie) sont relues à chaque
+	# enregistrement, pour suivre les modifications de la fiche client.
+	for field in CUSTOMER_SNAPSHOT_FIELDS:
+		if doc.meta.has_field(field):
 			doc.set(field, None)
 	doc.update(
 		{
@@ -628,6 +670,8 @@ def _build_order(data: dict, doc=None, reservation_order=None):
 			# "" et non None : ERPNext ne remplace alors pas le choix par les valeurs du client.
 			"taxes_and_charges": tax_template,
 			"payment_terms_template": payment_template,
+			# Le champ de la commande ne suit pas le réglage global : on l'aligne explicitement.
+			"disable_rounded_total": rounding_disabled(),
 		}
 	)
 	if doc.meta.has_field("custom_type"):
@@ -646,6 +690,8 @@ def _build_order(data: dict, doc=None, reservation_order=None):
 	doc.set("taxes", [])
 	if tax_template:
 		doc.append_taxes_from_master()
+	if keep_prices:
+		_keep_saved_prices(doc, lines)
 	_apply_line_pricing(doc, lines, editable_rate)
 
 	doc.apply_discount_on = "Net Total"
@@ -717,12 +763,61 @@ def _tracking(doc) -> dict:
 	return {"pick_lists": pick_lists, "delivery_notes": delivery_notes, "blockers": impact["blockers"]}
 
 
+def _item_tax_map(row) -> dict[str, float]:
+	value = row.get("item_tax_rate")
+	if isinstance(value, str):
+		try:
+			value = frappe.parse_json(value) if value.strip() else {}
+		except ValueError:
+			value = {}
+	return {account: flt(rate) for account, rate in (value or {}).items()}
+
+
+def _line_tax_rates(doc) -> list[dict[str, float]]:
+	"""Taux par ligne de taxe et par article, comme `taxes_and_totals._get_tax_rate` d'ERPNext."""
+	taxes = [tax for tax in doc.get("taxes") or [] if tax.charge_type == "On Net Total"]
+	result = []
+	for row in doc.get("items") or []:
+		item_map = _item_tax_map(row)
+		result.append({tax.name or tax.idx: item_map.get(tax.account_head, flt(tax.rate)) for tax in taxes})
+	return result
+
+
+def _serialize_taxes(doc, line_rates) -> list[dict]:
+	"""Lignes de TVA non nulles, avec la base HT des articles concernés."""
+	items = list(doc.get("items") or [])
+	result = []
+	for tax in doc.get("taxes") or []:
+		if not flt(tax.tax_amount):
+			continue
+		key = tax.name or tax.idx
+		base = sum(flt(row.net_amount) for row, rates in zip(items, line_rates) if flt(rates.get(key)))
+		rates = {flt(rates.get(key)) for rates in line_rates if flt(rates.get(key))}
+		result.append(
+			{
+				"description": tax.description or tax.account_head,
+				"rate": rates.pop() if len(rates) == 1 else flt(tax.rate),
+				"base": base if tax.charge_type == "On Net Total" else flt(tax.total) - flt(tax.tax_amount),
+				"amount": flt(tax.tax_amount),
+			}
+		)
+	return result
+
+
 def serialize_order(doc, *, with_tracking=False, exclude_order=None) -> dict:
-	from log.stock_reservation import RESERVED_FIELD
+	from log.stock_reservation import RESERVED_FIELD, stock_overview
 
 	items = list(doc.get("items") or [])
 	exclude_order = exclude_order or (None if doc.is_new() else doc.name)
 	stock = _available_stock([row.item_code for row in items], _order_warehouse(doc), exclude_order)
+	overview = stock_overview([row.item_code for row in items], _order_warehouse(doc))
+	quotas = item_quotas(row.item_code for row in items)
+	# Brouillon : tarif actuel de la liste, pour signaler un prix changé depuis l'enregistrement.
+	current_prices = (
+		_price_map([row.item_code for row in items], doc.get("selling_price_list"), doc.customer)
+		if cint(doc.docstatus) == 0
+		else {}
+	)
 	images = dict(
 		frappe.get_all(
 			"Item",
@@ -732,6 +827,7 @@ def serialize_order(doc, *, with_tracking=False, exclude_order=None) -> dict:
 		)
 	)
 	schedule = list(doc.get("payment_schedule") or [])
+	line_rates = _line_tax_rates(doc)
 	return {
 		"name": None if doc.is_new() else doc.name,
 		"docstatus": cint(doc.docstatus),
@@ -761,8 +857,15 @@ def serialize_order(doc, *, with_tracking=False, exclude_order=None) -> dict:
 				"discount_percentage": flt(row.discount_percentage),
 				"rate": flt(row.rate),
 				"amount": flt(row.amount),
+				"tax_rate": sum(rates.values()),
+				"tax_amount": flt(row.net_amount) * sum(rates.values()) / 100,
+				# Sans modèle de taxe sur la fiche article, la ligne est exonérée.
+				"tax_missing": not row.get("item_tax_template"),
 				"image": images.get(row.item_code),
 				"available": stock.get(row.item_code, 0.0),
+				"stock": overview.get(row.item_code),
+				"quota_max_qty": quotas.get(row.item_code),
+				"current_price_list_rate": current_prices.get(row.item_code),
 				"pricing_rules": row.get("pricing_rules") or None,
 				"row_name": None if doc.is_new() else row.name,
 				"reserved_qty": flt(row.get(RESERVED_FIELD)),
@@ -773,12 +876,9 @@ def serialize_order(doc, *, with_tracking=False, exclude_order=None) -> dict:
 					flt(row.stock_qty or row.qty) - flt(row.get("delivered_qty")) * flt(row.get("conversion_factor") or 1),
 				),
 			}
-			for row in items
+			for row, rates in zip(items, line_rates)
 		],
-		"taxes": [
-			{"description": row.description or row.account_head, "rate": flt(row.rate), "amount": flt(row.tax_amount)}
-			for row in doc.get("taxes") or []
-		],
+		"taxes": _serialize_taxes(doc, line_rates),
 		"payment_schedule": [
 			{
 				"payment_term": row.get("payment_term"),
@@ -1116,6 +1216,7 @@ def update_submitted_order(payload):
 	doc = _get_order(data.get("name"))
 	_assert_submitted(doc)
 	lines = _submitted_lines(doc, data)
+	check_quotas(lines, allow_override=_can_validate(), previous=stock_qty_by_item(doc.items))
 	rows = {row.name: row for row in doc.items}
 	editable_rate = bool(cint(frappe.db.get_single_value("Selling Settings", "editable_price_list_rate")))
 	delivery_date = getdate(data.get("delivery_date") or doc.delivery_date)

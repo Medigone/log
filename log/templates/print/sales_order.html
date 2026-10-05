@@ -74,6 +74,7 @@
 				<th class="mp-num" style="width: 80px">Qté</th>
 				<th class="mp-num" style="width: 90px">P.U. HT</th>
 				{%- if p.has_discount %}<th class="mp-num" style="width: 62px">Remise</th><th class="mp-num" style="width: 90px">P.U. net</th>{% endif %}
+				<th class="mp-num" style="width: 52px">TVA</th>
 				<th class="mp-num" style="width: 100px">Montant HT</th>
 			</tr>
 		</thead>
@@ -88,6 +89,7 @@
 				<td class="mp-num">{{ line.qty }} <span class="mp-muted">{{ line.uom }}</span></td>
 				<td class="mp-num">{{ line.price }}</td>
 				{%- if p.has_discount %}<td class="mp-num">{{ line.discount }}</td><td class="mp-num">{{ line.rate }}</td>{% endif %}
+				<td class="mp-num">{{ line.vat }}</td>
 				<td class="mp-num"><strong>{{ line.amount }}</strong></td>
 			</tr>
 			{%- endfor %}
@@ -97,7 +99,7 @@
 				<td></td>
 				<td>{{ p.totals["items"] }} article{% if p.totals["items"] > 1 %}s{% endif %}</td>
 				<td class="mp-num">{{ p.totals.qty }} unités</td>
-				<td colspan="{{ 4 if p.has_discount else 2 }}"></td>
+				<td colspan="{{ 5 if p.has_discount else 3 }}"></td>
 			</tr>
 		</tfoot>
 	</table>

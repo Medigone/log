@@ -21,6 +21,9 @@ import { ReceiptsPage } from "@/features/receipts/ReceiptsPage";
 import { OrdersPage } from "@/features/orders/OrdersPage";
 import { OrderEntryPage } from "@/features/orders/OrderEntryPage";
 import { ReceiptDetailPage } from "@/features/receipts/ReceiptDetailPage";
+import { InventoriesPage } from "@/features/inventory/InventoriesPage";
+import { InventoryDetailPage } from "@/features/inventory/InventoryDetailPage";
+import { InventoryCountPage } from "@/features/inventory/InventoryCountPage";
 import { ItemBarcodesPage } from "@/features/barcodes/ItemBarcodesPage";
 import { DriversPage } from "@/features/fleet/DriversPage";
 import { DriverDetailsPage } from "@/features/fleet/DriverDetailsPage";
@@ -41,6 +44,7 @@ import { goToLanding } from "@/shared/session";
 import type { DistributionRole, DistributionUser } from "@/shared/types/distribution";
 
 const RouteDetailsPage = lazy(() => import("@/features/planning/RouteDetailsPage").then((module) => ({ default: module.RouteDetailsPage })));
+const INVENTORY_ROLES: DistributionRole[] = ["preparateur", "magasinier", "responsable"];
 
 function getSiteName() {
   const frappeWindow = window as typeof window & {
@@ -126,6 +130,9 @@ function AuthenticatedApp({ currentUser }: { currentUser: string }) {
         <Route path="/clients/:customerId" element={<RoleGuard role={user.role} allowed={["commercial", "responsable"]}><CustomerDetailPage /></RoleGuard>} />
         <Route path="/receptions" element={<RoleGuard role={user.role} allowed={["magasinier", "responsable"]}><ReceiptsPage /></RoleGuard>} />
         <Route path="/receptions/:receiptId" element={<RoleGuard role={user.role} allowed={["magasinier", "responsable"]}><ReceiptDetailPage /></RoleGuard>} />
+        <Route path="/inventaires" element={<RoleGuard role={user.role} allowed={INVENTORY_ROLES}><InventoriesPage /></RoleGuard>} />
+        <Route path="/inventaires/:inventoryId" element={<RoleGuard role={user.role} allowed={INVENTORY_ROLES}><InventoryDetailPage /></RoleGuard>} />
+        <Route path="/inventaires/:inventoryId/comptage" element={<RoleGuard role={user.role} allowed={INVENTORY_ROLES}><InventoryCountPage /></RoleGuard>} />
         <Route path="/articles" element={<CatalogGuard user={user}><ItemsPage /></CatalogGuard>} />
         <Route path="/articles/prix" element={<CatalogGuard user={user}><PriceGridPage /></CatalogGuard>} />
         <Route path="/articles/promotions" element={<CatalogGuard user={user}><PricingRulesPage /></CatalogGuard>} />

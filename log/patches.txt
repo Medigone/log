@@ -45,3 +45,5 @@ log.patches.v1_0.set_modern_pharma_site_title
 log.patches.v1_0.remove_sales_order_arabic_customer_name
 log.patches.v1_0.remove_sales_order_item_uae_tax_fields
 log.patches.v1_0.set_fefo_batch_picking
+log.patches.v1_0.add_item_sales_quota
+log.patches.v1_0.disable_rounded_total

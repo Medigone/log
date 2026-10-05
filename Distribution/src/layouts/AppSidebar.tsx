@@ -1,6 +1,8 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
+import { ChevronRight } from "lucide-react"
 import { NavLink, useLocation } from "react-router-dom"
 import { BrandLogo } from "@/shared/ui/BrandLogo"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
   Sidebar,
   SidebarContent,
@@ -19,10 +21,38 @@ import {
 import { NavAlertCard } from "@/layouts/NavAlertCard"
 import { NavSearch } from "@/layouts/NavSearch"
 import { NavUser } from "@/layouts/NavUser"
-import { groupedNavItems, isNavItemActive, userCapabilities } from "@/layouts/navItems"
-import { useNavBadges, useOrderNavBadge, useReceiptNavBadge } from "@/layouts/navBadges"
+import { groupedNavItems, isNavItemActive, userCapabilities, type NavGroup } from "@/layouts/navItems"
+import { useInventoryNavBadge, useNavBadges, useOrderNavBadge, useReceiptNavBadge } from "@/layouts/navBadges"
 import { cn } from "@/lib/utils"
 import type { DistributionUser } from "@/shared/types/distribution"
+
+const CLOSED_GROUPS_KEY = "distribution.sidebar.closedGroups"
+
+function readClosedGroups(): NavGroup[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(CLOSED_GROUPS_KEY) || "[]")
+    return Array.isArray(parsed) ? (parsed as NavGroup[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** Sections repliées, mémorisées par navigateur. */
+function useClosedGroups() {
+  const [closed, setClosed] = useState<NavGroup[]>(readClosedGroups)
+  const setGroupOpen = (group: NavGroup, open: boolean) => {
+    setClosed((current) => {
+      const next = open ? current.filter((entry) => entry !== group) : [...current.filter((entry) => entry !== group), group]
+      try {
+        localStorage.setItem(CLOSED_GROUPS_KEY, JSON.stringify(next))
+      } catch {
+        // Stockage indisponible : l'état reste valable pour la session.
+      }
+      return next
+    })
+  }
+  return { closed, setGroupOpen }
+}
 
 export function AppSidebar({ user }: { user: DistributionUser }) {
   const { state, isMobile, open } = useSidebar()
@@ -34,7 +64,9 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
   const dashboardBadges = useNavBadges()
   const receiptBadges = useReceiptNavBadge(user.role)
   const orderBadges = useOrderNavBadge(user.role)
-  const badges = { ...dashboardBadges, ...receiptBadges, ...orderBadges }
+  const inventoryBadges = useInventoryNavBadge(user.role)
+  const { closed, setGroupOpen } = useClosedGroups()
+  const badges = { ...dashboardBadges, ...receiptBadges, ...orderBadges, ...inventoryBadges }
   // Le logo ramène au tableau de bord quand il est accessible, sinon à la première page du menu.
   const visiblePaths = groups.flatMap((group) => group.items.map((item) => item.to))
   const homePath = visiblePaths.includes("/today") ? "/today" : visiblePaths[0] || "/today"
@@ -62,9 +94,21 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
 
       <SidebarContent>
         {groups.map((group) => (
-          <SidebarGroup key={group.group}>
-            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-            <SidebarGroupContent>
+          <Collapsible
+            key={group.group}
+            // En mode icônes, les libellés de section sont masqués : tout reste déplié.
+            open={collapsed || !closed.includes(group.group)}
+            onOpenChange={(open) => setGroupOpen(group.group, open)}
+            render={<SidebarGroup />}
+          >
+            <SidebarGroupLabel
+              render={<CollapsibleTrigger />}
+              className="group/label w-full cursor-pointer hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              {group.label}
+              <ChevronRight className="ml-auto transition-transform duration-200 group-data-[panel-open]/label:rotate-90" />
+            </SidebarGroupLabel>
+            <CollapsibleContent render={<SidebarGroupContent />}>
               <SidebarMenu>
                 {group.items.map((item) => {
                   const active = isNavItemActive(pathname, item.to)
@@ -112,8 +156,8 @@ export function AppSidebar({ user }: { user: DistributionUser }) {
                   )
                 })}
               </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+            </CollapsibleContent>
+          </Collapsible>
         ))}
       </SidebarContent>
 

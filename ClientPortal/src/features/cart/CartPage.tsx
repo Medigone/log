@@ -131,6 +131,7 @@ export function CartPage({ context }: { context: PortalContext }) {
                       : ` · ${formatMoney(previewLine?.unitPriceTtc ?? line.unitPriceTtc ?? 0, line.currency)} / ${line.uom}`}
                   </p>
                   {line.offerLabel && <p className="text-xs text-muted-foreground">{line.offerLabel}</p>}
+                  {line.maxQty ? <p className="text-xs text-muted-foreground">Max {line.maxQty} par commande</p> : null}
                   {previewLine && previewLine.discountPercentage ? (
                     <p className="text-xs text-muted-foreground">Remise ligne {previewLine.discountPercentage} %</p>
                   ) : null}
@@ -147,7 +148,12 @@ export function CartPage({ context }: { context: PortalContext }) {
                     onChange={(event) => cart.updateQuantity(line.itemCode, Number(event.target.value))}
                     className="w-20 text-center"
                   />
-                  <Button size="icon-sm" variant="outline" aria-label="Augmenter" onClick={() => cart.updateQuantity(line.itemCode, line.quantity + 1)}>
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    aria-label="Augmenter"
+                    disabled={Boolean(line.maxQty && line.quantity >= line.maxQty)}
+                    onClick={() => cart.updateQuantity(line.itemCode, line.quantity + 1)}>
                     <Plus />
                   </Button>
                   <Button size="icon-sm" variant="ghost" aria-label="Supprimer" onClick={() => cart.remove(line.itemCode)}>

@@ -65,7 +65,10 @@ export function ProductPage() {
           ) : null}
           <p className="text-sm text-muted-foreground">Réf. {item.itemCode} · {item.uom}</p>
           <ProductPrice item={item} />
-          <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} />
+          <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} max={item.maxQty} />
+          {item.maxQty ? (
+            <p className="text-sm text-muted-foreground">Vente limitée : {item.maxQty} {item.uom} maximum par commande.</p>
+          ) : null}
           <Button disabled={adding} onClick={add}>
             {adding && !added ? <Spinner data-icon="inline-start" /> : added ? <Check data-icon="inline-start" /> : <ShoppingCart data-icon="inline-start" />}
             {added ? "Ajouté" : "Ajouter au panier"}

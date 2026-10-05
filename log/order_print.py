@@ -147,8 +147,11 @@ def order_print_context(doc) -> dict:
 		doc = frappe.get_doc("Sales Order", doc)
 	owner = frappe.db.get_value("User", doc.owner, "full_name") if doc.get("owner") else None
 	origin = cstr(doc.get("custom_origine_commande")) or "Interne"
+	from log.order_entry_ops import _line_tax_rates
+
 	items = list(doc.get("items") or [])
 	has_discount = any(flt(row.discount_percentage) for row in items)
+	line_vat = [sum(rates.values()) for rates in _line_tax_rates(doc)]
 	return {
 		"logo": _logo_data_uri(),
 		"company": _company_block(doc.company),
@@ -175,8 +178,9 @@ def order_print_context(doc) -> dict:
 				"discount": percent(row.discount_percentage),
 				"rate": money(row.rate),
 				"amount": money(row.amount),
+				"vat": percent(vat) if vat else "Exo.",
 			}
-			for index, row in enumerate(items, start=1)
+			for index, (row, vat) in enumerate(zip(items, line_vat), start=1)
 		],
 		"totals": {
 			"items": len(items),

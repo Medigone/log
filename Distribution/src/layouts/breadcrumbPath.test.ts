@@ -14,8 +14,8 @@ describe("crumbsFromPath", () => {
   it("préfixe la liste par la catégorie du menu", () => {
     expect(labels("/today")).toEqual(["Opérationnel", "Tableau de bord"])
     expect(labels("/deliveries")).toEqual(["Opérationnel", "Livraisons"])
-    expect(labels("/codes-barres")).toEqual(["Opérationnel", "Codes-barres"])
-    expect(labels("/stock")).toEqual(["Opérationnel", "Stock véhicules"])
+    expect(labels("/codes-barres")).toEqual(["Stock", "Codes-barres"])
+    expect(labels("/stock")).toEqual(["Stock", "Stock véhicules"])
     expect(labels("/cashier")).toEqual(["Opérationnel", "Caisse Tournées"])
     expect(labels("/articles")).toEqual(["Ventes", "Articles"])
     expect(labels("/articles/prix")).toEqual(["Ventes", "Prix"])
@@ -67,12 +67,12 @@ describe("crumbsFromPath", () => {
       { label: "CUST-2026-00012", to: undefined },
     ])
     expect(hops("/receptions/MAT-PRE-2026-00001")).toEqual([
-      { label: "Achats", to: undefined },
+      { label: "Stock", to: undefined },
       { label: "Réceptions", to: "/receptions" },
       { label: "MAT-PRE-2026-00001", to: undefined },
     ])
     expect(hops("/preparation/commandes/SAL-ORD-1")).toEqual([
-      { label: "Opérationnel", to: undefined },
+      { label: "Stock", to: undefined },
       { label: "Préparation", to: "/preparation" },
       { label: "SAL-ORD-1", to: undefined },
     ])
@@ -80,12 +80,12 @@ describe("crumbsFromPath", () => {
 
   it("affiche l’id de la pick list ouverte", () => {
     expect(hops("/preparation", "?pick_lists=PL-1")).toEqual([
-      { label: "Opérationnel", to: undefined },
+      { label: "Stock", to: undefined },
       { label: "Préparation", to: "/preparation" },
       { label: "PL-1", to: undefined },
     ])
     expect(labels("/preparation", "?pick_lists=PL-1,PL-2")).toEqual([
-      "Opérationnel",
+      "Stock",
       "Préparation",
       "PL-1, PL-2",
     ])

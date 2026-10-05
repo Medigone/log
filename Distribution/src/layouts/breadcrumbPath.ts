@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react"
-import { LayoutDashboard, PackageCheck, ShoppingCart, Truck } from "lucide-react"
+import { LayoutDashboard, ShoppingCart, Truck, Warehouse } from "lucide-react"
 import { isNavItemActive, navGroupLabels, navItems, type NavGroup } from "@/layouts/navItems"
 
 export type Crumb = {
@@ -11,7 +11,7 @@ export type Crumb = {
 const GROUP_ICONS: Record<NavGroup, LucideIcon> = {
   ventes: ShoppingCart,
   operations: LayoutDashboard,
-  achats: PackageCheck,
+  stock: Warehouse,
   ressources: Truck,
 }
 
@@ -25,6 +25,7 @@ const SECTION_LABELS: Record<string, string> = {
   vehicules: "Véhicules",
   stock: "Stock véhicules",
   receptions: "Réceptions",
+  inventaires: "Inventaires",
   commandes: "Commandes",
   cashier: "Caisse Tournées",
   caisses: "Caisses livreurs",
@@ -87,6 +88,11 @@ export function crumbsFromPath(pathname: string, search = ""): Crumb[] {
   }
   if (section === "receptions" && parts[1]) {
     return withNavContext(pathname, [{ label, to: "/receptions" }, { label: decodeURIComponent(parts[1]) }])
+  }
+  if (section === "inventaires" && parts[1]) {
+    const crumbs: Crumb[] = [{ label, to: "/inventaires" }, { label: decodeURIComponent(parts[1]), to: parts[2] ? `/inventaires/${parts[1]}` : undefined }]
+    if (parts[2] === "comptage") crumbs.push({ label: "Comptage" })
+    return withNavContext(pathname, crumbs)
   }
   if (section === "articles" && parts[1]) {
     const page = CATALOG_PAGES[parts[1]]

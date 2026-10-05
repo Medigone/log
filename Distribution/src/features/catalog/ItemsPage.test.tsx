@@ -63,6 +63,7 @@ const mocks = vi.hoisted(() => ({
   },
   useCatalogItems: vi.fn(),
   createItem: vi.fn(),
+  saveBrand: vi.fn(),
 }));
 
 vi.mock("@/shared/api/catalog", async (importOriginal) => {
@@ -73,8 +74,8 @@ vi.mock("@/shared/api/catalog", async (importOriginal) => {
       mocks.useCatalogItems(query);
       return { data: mocks.list, error: undefined, isLoading: false, isValidating: false, mutate: vi.fn() };
     },
-    useCatalogOptions: () => ({ data: mocks.options }),
-    useCatalogMutations: () => ({ createItem: mocks.createItem }),
+    useCatalogOptions: () => ({ data: mocks.options, mutate: vi.fn() }),
+    useCatalogMutations: () => ({ createItem: mocks.createItem, saveBrand: mocks.saveBrand }),
   };
 });
 
@@ -93,6 +94,7 @@ describe("ItemsPage", () => {
   beforeEach(() => {
     mocks.useCatalogItems.mockClear();
     mocks.createItem.mockReset();
+    mocks.saveBrand.mockReset();
   });
 
   it("affiche les articles, leurs prix et signale ceux sans prix", () => {
@@ -143,6 +145,26 @@ describe("ItemsPage", () => {
         }),
       ),
     );
+    expect(mocks.createItem.mock.calls[0][0]).not.toHaveProperty("item_code");
     expect(await screen.findByText("Fiche article")).toBeInTheDocument();
+  });
+
+  it("crée une marque absente de la liste depuis le formulaire", async () => {
+    const user = userEvent.setup();
+    mocks.saveBrand.mockResolvedValue({ brands: [], name: "Mustela" });
+    mocks.createItem.mockResolvedValue({ item_code: "STO-ITEM-2026-00001" });
+    renderPage();
+    await user.click(screen.getAllByRole("button", { name: /Nouvel article/ })[0]);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("Code article")).toBeDisabled();
+    await user.type(within(dialog).getByLabelText("Désignation"), "Gel lavant");
+    await chooseOption(user, within(dialog).getByRole("combobox", { name: "Groupe d’articles" }), /Laits infantiles/);
+    await user.click(within(dialog).getByRole("button", { name: "Nouvelle marque" }));
+    await user.type(within(dialog).getByLabelText("Marque"), "Mustela{Enter}");
+
+    await waitFor(() => expect(mocks.saveBrand).toHaveBeenCalledWith({ brand: "Mustela" }));
+    expect(await within(dialog).findByRole("combobox", { name: "Marque" })).toHaveTextContent("Mustela");
+    await user.click(within(dialog).getByRole("button", { name: "Créer l’article" }));
+    await waitFor(() => expect(mocks.createItem).toHaveBeenCalledWith(expect.objectContaining({ brand: "Mustela" })));
   });
 });

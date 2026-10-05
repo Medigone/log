@@ -12,18 +12,19 @@ function parseQuantity(raw: string, fallback: number) {
   return parsed
 }
 
-function snapQuantity(value: number) {
+function snapQuantity(value: number, max?: number | null) {
   if (value < MIN_QTY) return MIN_QTY
-  return Math.max(MIN_QTY, Math.round(value / STEP) * STEP)
+  const snapped = Math.max(MIN_QTY, Math.round(value / STEP) * STEP)
+  return max && max > 0 ? Math.min(snapped, max) : snapped
 }
 
 function digitsOnly(raw: string) {
   return raw.replace(/[^\d]/g, "")
 }
 
-function liveQuantity(draft: string | null, value: number) {
+function liveQuantity(draft: string | null, value: number, max?: number | null) {
   if (draft === null || draft.trim() === "") return value
-  return snapQuantity(parseQuantity(draft, value))
+  return snapQuantity(parseQuantity(draft, value), max)
 }
 
 function keepExistingValueOnFocus(input: HTMLInputElement) {
@@ -41,17 +42,21 @@ export function QuantitySelector({
   name,
   uom,
   compact = false,
+  max,
 }: {
   value: number
   onChange: (quantity: number) => void
   name: string
   uom?: string
   compact?: boolean
+  /** Quota de l'article : quantité max par commande. */
+  max?: number | null
 }) {
   const unit = (uom || "").trim()
   const [draft, setDraft] = useState<string | null>(null)
-  const current = liveQuantity(draft, value)
+  const current = liveQuantity(draft, value, max)
   const atMin = current <= MIN_QTY
+  const atMax = Boolean(max && max > 0 && current >= max)
 
   const commitDraft = () => {
     if (draft === null) return
@@ -59,13 +64,13 @@ export function QuantitySelector({
       setDraft(null)
       return
     }
-    const next = snapQuantity(parseQuantity(draft, value))
+    const next = snapQuantity(parseQuantity(draft, value), max)
     setDraft(null)
     if (next !== value) onChange(next)
   }
 
   const stepBy = (delta: number) => {
-    const next = snapQuantity(current + delta)
+    const next = snapQuantity(current + delta, max)
     setDraft(null)
     onChange(next)
   }
@@ -105,6 +110,7 @@ export function QuantitySelector({
         <InputGroupButton
           size={compact ? "icon-xs" : "icon-sm"}
           aria-label={`Augmenter ${name}`}
+          disabled={atMax}
           onClick={() => stepBy(STEP)}
         >
           <Plus />

@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 from unittest.mock import patch
 
 import frappe
@@ -54,7 +55,57 @@ class TestAlgeriaVat(unittest.TestCase):
 
 	def test_rates_are_current_algerian_vat(self):
 		self.assertEqual([vat["rate"] for vat in taxes.VAT_RATES], [19, 9])
-		self.assertTrue(taxes.VAT_RATES[0]["default"])
+
+	@patch("log.setup.taxes.frappe.get_doc")
+	@patch("log.setup.taxes.frappe.db.exists", return_value=False)
+	def test_combined_template_is_default_with_zero_rate_rows(self, _exists, get_doc):
+		company = frappe._dict(name="Modern Pharma", abbr="MP")
+		taxes._ensure_combined_template(
+			"Sales Taxes and Charges Template",
+			"Sales Taxes and Charges",
+			company,
+			{"TVA 19%": "TVA 19% - MP", "TVA 9%": "TVA 9% - MP"},
+		)
+		payload = get_doc.call_args.args[0]
+		self.assertEqual(payload["title"], "TVA")
+		self.assertEqual(payload["is_default"], 1)
+		self.assertEqual([(row["account_head"], row["rate"]) for row in payload["taxes"]], [("TVA 19% - MP", 0), ("TVA 9% - MP", 0)])
+
+	@patch("log.setup.taxes._ensure_item_tax_template")
+	@patch("log.setup.taxes._disable_obsolete")
+	@patch("log.setup.taxes._ensure_template")
+	@patch("log.setup.taxes._ensure_combined_template")
+	@patch("log.setup.taxes._ensure_account", side_effect=lambda company, title, rate: f"{title} - MP")
+	def test_item_templates_put_their_rate_on_their_own_account(self, _account, _combined, _template, _obsolete, item):
+		taxes._ensure_company_vat(frappe._dict(name="Modern Pharma", abbr="MP"))
+		rates = {call.args[1]: call.args[2] for call in item.call_args_list}
+		self.assertEqual(
+			rates,
+			{
+				"TVA 19%": {"TVA 19% - MP": 19, "TVA 9% - MP": 0},
+				"TVA 9%": {"TVA 19% - MP": 0, "TVA 9% - MP": 9},
+				"Exonéré": {"TVA 19% - MP": 0, "TVA 9% - MP": 0},
+			},
+		)
+		# Les modèles à taux unique ne sont plus par défaut.
+		self.assertTrue(all(call.args[-1] is False for call in _template.call_args_list))
+
+	@patch("log.setup.taxes.frappe.get_doc")
+	@patch("log.setup.taxes.frappe.db.exists", return_value=True)
+	def test_existing_item_template_is_realigned(self, _exists, get_doc):
+		template = frappe._dict(
+			taxes=[frappe._dict(tax_type="TVA 19% - MP", tax_rate=9), frappe._dict(tax_type="TVA 9% - MP", tax_rate=9)],
+			set=unittest.mock.Mock(),
+			save=unittest.mock.Mock(),
+		)
+		get_doc.return_value = template
+		taxes._ensure_item_tax_template(
+			frappe._dict(name="Modern Pharma", abbr="MP"), "TVA 9%", {"TVA 19% - MP": 0, "TVA 9% - MP": 9}
+		)
+		template.set.assert_called_once_with(
+			"taxes", [{"tax_type": "TVA 19% - MP", "tax_rate": 0}, {"tax_type": "TVA 9% - MP", "tax_rate": 9}]
+		)
+		template.save.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -19,11 +19,13 @@ const item = {
   ppa: 1450,
   show_in_store: true,
   show_price_in_store: true,
+  sales_quota: false,
+  quota_max_qty: 0,
   barcodes: [{ barcode: "3017620422003", barcode_type: "EAN", uom: null }],
   uoms: [],
   taxes: [],
   has_stock_moves: true,
-  stock: [{ warehouse: "Magasins - MP", actual_qty: 24, reserved_qty: 4, available_qty: 20, projected_qty: 20 }],
+  stock: [{ warehouse: "Magasins - MP", actual_qty: 24, reserved_qty: 4, ordered_qty: 4, available_qty: 20, projected_qty: 20 }],
   selling_price_list: "Vente standard",
   buying_price_list: "Achat standard",
   selling_rate: 1200,
@@ -112,6 +114,20 @@ describe("ItemDetailPage", () => {
     await user.click(screen.getByRole("button", { name: "Enregistrer" }));
     await waitFor(() =>
       expect(mocks.updateItem).toHaveBeenCalledWith(expect.objectContaining({ item_code: "PARA-001", item_name: "Lait 1er âge 800 g" })),
+    );
+  });
+
+  it("active la vente en quota avec une quantité max", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const save = screen.getByRole("button", { name: "Enregistrer le quota" });
+    expect(screen.getByLabelText("Quantité max par commande")).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "Activer la vente en quota" }));
+    expect(save).toBeDisabled();
+    await user.type(screen.getByLabelText("Quantité max par commande"), "6");
+    await user.click(save);
+    await waitFor(() =>
+      expect(mocks.updateItem).toHaveBeenCalledWith({ item_code: "PARA-001", sales_quota: true, quota_max_qty: 6 }),
     );
   });
 

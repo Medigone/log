@@ -22,6 +22,7 @@ from log.receipt_ops import (
 	_upsert_item_price,
 	barcode_type_for,
 )
+from log.services.sales_quota import QUOTA_FIELD, QUOTA_MAX_FIELD, row_quota, validate_quota_settings
 
 LIST_LIMIT = 50
 ITEM_STATUSES = ("tous", "actifs", "desactives", "sans_prix", "hors_store")
@@ -239,7 +240,7 @@ def list_items(search=None, item_group=None, brand=None, status="actifs", start=
 	page = names[start : start + limit]
 
 	fields = ["name", "item_name", "item_group", "brand", "stock_uom", "image", "disabled"]
-	fields += [field for field in (STORE_FIELD, PPA_FIELD) if _has(field)]
+	fields += [field for field in (STORE_FIELD, PPA_FIELD, QUOTA_FIELD, QUOTA_MAX_FIELD) if _has(field)]
 	rows = {row.name: row for row in frappe.get_all("Item", filters={"name": ["in", page]}, fields=fields)} if page else {}
 	selling = _price_by_item(page, selling_list)
 	buying = _price_by_item(page, buying_list)
@@ -260,6 +261,7 @@ def list_items(search=None, item_group=None, brand=None, status="actifs", start=
 				"disabled": bool(cint(row.disabled)),
 				"show_in_store": bool(cint(row.get(STORE_FIELD))),
 				"ppa": flt(row.get(PPA_FIELD)),
+				"quota_max_qty": row_quota(row),
 				"selling_rate": selling.get(code),
 				"buying_rate": buying.get(code),
 				"stock_qty": stock.get(code, 0.0),
@@ -290,26 +292,33 @@ def _has_stock_moves(item_code) -> bool:
 
 
 def _item_stock(item_code) -> list[dict]:
-	from log.stock_reservation import open_reservations
+	from log.stock_reservation import open_ordered_by_warehouse, open_reservations
 
-	rows = frappe.get_all(
-		"Bin",
-		filters={"item_code": item_code},
-		fields=["warehouse", "actual_qty", "projected_qty"],
-		order_by="warehouse asc",
-	)
+	bins = {
+		row.warehouse: row
+		for row in frappe.get_all(
+			"Bin",
+			filters={"item_code": item_code},
+			fields=["warehouse", "actual_qty", "projected_qty"],
+		)
+	}
+	ordered_by_warehouse = open_ordered_by_warehouse(item_code)
 	result = []
-	for row in rows:
-		reserved = open_reservations([item_code], row.warehouse).get(item_code, 0.0)
+	for warehouse in sorted(set(bins) | set(ordered_by_warehouse)):
+		row = bins.get(warehouse) or frappe._dict(actual_qty=0, projected_qty=0)
+		reserved = open_reservations([item_code], warehouse).get(item_code, 0.0) if warehouse else 0.0
 		actual = flt(row.actual_qty)
-		if not actual and not reserved:
+		ordered = ordered_by_warehouse.get(warehouse, 0.0)
+		if not actual and not reserved and not ordered:
 			continue
 		result.append(
 			{
-				"warehouse": row.warehouse,
+				"warehouse": warehouse or _("Sans entrepôt"),
 				"actual_qty": actual,
 				"reserved_qty": reserved,
-				"available_qty": actual - reserved,
+				"ordered_qty": ordered,
+				# Les réservations sont une partie du commandé : on ne les retranche pas deux fois.
+				"available_qty": actual - max(ordered, reserved),
 				"projected_qty": flt(row.projected_qty),
 			}
 		)
@@ -333,6 +342,8 @@ def serialize_item(doc) -> dict:
 		"ppa": flt(doc.get(PPA_FIELD)),
 		"show_in_store": bool(cint(doc.get(STORE_FIELD))),
 		"show_price_in_store": bool(cint(doc.get(STORE_PRICE_FIELD))) if _has(STORE_PRICE_FIELD) else True,
+		"sales_quota": bool(cint(doc.get(QUOTA_FIELD))),
+		"quota_max_qty": flt(doc.get(QUOTA_MAX_FIELD)),
 		"barcodes": [
 			{"barcode": row.barcode, "barcode_type": row.barcode_type or "", "uom": row.uom or None}
 			for row in doc.get("barcodes") or []
@@ -424,20 +435,44 @@ def _apply_custom_fields(doc, data):
 		doc.set(STORE_FIELD, cint(data.get("show_in_store")))
 	if "show_price_in_store" in data and _has(STORE_PRICE_FIELD):
 		doc.set(STORE_PRICE_FIELD, cint(data.get("show_price_in_store")))
+	if ("sales_quota" in data or "quota_max_qty" in data) and _has(QUOTA_FIELD) and _has(QUOTA_MAX_FIELD):
+		enabled = cint(data.get("sales_quota", doc.get(QUOTA_FIELD)))
+		max_qty = flt(data.get("quota_max_qty", doc.get(QUOTA_MAX_FIELD)))
+		validate_quota_settings(enabled, max_qty)
+		doc.set(QUOTA_FIELD, enabled)
+		doc.set(QUOTA_MAX_FIELD, max_qty)
 
 
-def insert_item(data: dict):
-	"""Crée un article ; partagé avec la création rapide des réceptions."""
+def _next_item_code() -> str:
+	"""Code tiré de la série de nommage de l'article (ex. STO-ITEM-.YYYY.-)."""
+	from frappe.model.naming import make_autoname
+
+	field = frappe.get_meta("Item").get_field("naming_series")
+	options = [option.strip() for option in cstr(field.options if field else "").split("\n") if option.strip()]
+	series = cstr(field.default if field else "").strip() or (options[0] if options else "")
+	if not series:
+		frappe.throw(_("Aucune série de nommage n'est définie pour les articles."))
+	return make_autoname(series if "#" in series else f"{series}.#####", "Item")
+
+
+def insert_item(data: dict, code_from_barcode: bool = True):
+	"""Crée un article ; partagé avec la création rapide des réceptions.
+
+	Sans code article, les réceptions reprennent le code-barres ; le catalogue
+	(code_from_barcode=False) tire le code de la série de nommage de l'article.
+	"""
 	barcode = _text(data.get("barcode"))
 	item_name = _text(data.get("item_name"))
-	item_code = _text(data.get("item_code")) or barcode
+	item_code = _text(data.get("item_code")) or (barcode if code_from_barcode else "")
 	stock_uom = data.get("stock_uom") or _default_stock_uom()
 	has_batch_no = cint(data.get("has_batch_no"))
 
 	if not item_name:
 		frappe.throw(_("Saisissez la désignation de l'article."))
 	if not item_code:
-		frappe.throw(_("Saisissez le code article."))
+		if code_from_barcode:
+			frappe.throw(_("Saisissez le code article."))
+		item_code = _next_item_code()
 	if frappe.db.exists("Item", item_code):
 		frappe.throw(_("L'article {0} existe déjà.").format(item_code))
 	barcode_rows = data.get("barcodes")
@@ -483,7 +518,7 @@ def insert_item(data: dict):
 @frappe.whitelist(methods=["POST"])
 def create_item(payload):
 	_require(CATALOG_ROLES)
-	doc = insert_item(_payload(payload))
+	doc = insert_item(_payload(payload), code_from_barcode=False)
 	return serialize_item(doc)
 
 

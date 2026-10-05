@@ -36,8 +36,6 @@ const mocks = vi.hoisted(() => {
         default_warehouse: "Magasins - MP",
         price_lists: ["Vente standard"],
         default_price_list: "Vente standard",
-        tax_templates: [{ name: "TVA 19% - MP", label: "TVA 19%" }],
-        default_tax_template: "TVA 19% - MP",
         payment_terms_templates: ["30 jours", "50 % comptant / 50 % 30 jours"],
         modes_of_payment: ["Espèces", "Chèque"],
         customer_groups: ["Pharmacie", "Parapharm"],
@@ -74,6 +72,9 @@ function detailFor(payload: OrderPayload, extra: Record<string, unknown> = {}) {
       discount_percentage: line.discount_percentage || 0,
       rate,
       amount: rate * line.qty,
+      tax_rate: line.item_code === "ART-1" ? 19 : 0,
+      tax_amount: line.item_code === "ART-1" ? rate * line.qty * 0.19 : 0,
+      tax_missing: line.item_code !== "ART-1",
       available: 50,
     };
   });
@@ -90,7 +91,6 @@ function detailFor(payload: OrderPayload, extra: Record<string, unknown> = {}) {
     order_type: payload.order_type,
     warehouse: payload.warehouse,
     price_list: "Vente standard",
-    tax_template: payload.tax_template,
     payment_terms_template: payload.payment_terms_template,
     schedule_mode: "template",
     additional_discount_percentage: payload.additional_discount_percentage || 0,
@@ -190,7 +190,7 @@ describe("OrderEntryPage", () => {
     mocks.options.message.can_validate = false;
     mocks.previewOrder.mockImplementation(async (payload: OrderPayload) => detailFor(payload));
     mocks.saveOrder.mockImplementation(async (payload: OrderPayload) => detailFor(payload, { name: "SAL-ORD-9" }));
-    mocks.submitOrder.mockImplementation(async () => detailFor({ lines: [], tax_template: "", payment_terms_template: "", order_type: "BL", delivery_date: "2026-10-04", customer: "X" }, { name: "SAL-ORD-9", docstatus: 1, status: "To Deliver and Bill" }));
+    mocks.submitOrder.mockImplementation(async () => detailFor({ lines: [], payment_terms_template: "", order_type: "BL", delivery_date: "2026-10-04", customer: "X" }, { name: "SAL-ORD-9", docstatus: 1, status: "To Deliver and Bill" }));
     mocks.scanOrderItem.mockResolvedValue({ ...mocks.lait, found: true, increment: 1 });
   });
 
@@ -207,11 +207,13 @@ describe("OrderEntryPage", () => {
     expect(mocks.previewOrder).toHaveBeenLastCalledWith(
       expect.objectContaining({
         customer: "PHARMACIE ATLAS",
-        tax_template: "TVA 19% - MP",
         lines: [expect.objectContaining({ item_code: "ART-1", qty: 2 })],
       }),
     );
+    expect(mocks.previewOrder.mock.lastCall?.[0]).not.toHaveProperty("tax_template");
     expect(await screen.findByText("Total TTC")).toBeInTheDocument();
+    // Taux de TVA de la fiche article, sur la ligne.
+    expect(within(screen.getByTestId("order-line-vat-ART-1")).getByText("19 %")).toBeInTheDocument();
   });
 
   it("trouve un article par son nom quand le code est inconnu", async () => {
@@ -297,6 +299,7 @@ describe("OrderEntryPage", () => {
     renderPage();
     await pickCustomer(user);
     await scan(user, "3017620422003");
+    await user.click(screen.getByRole("tab", { name: /Échéances/ }));
     await chooseOption(user, screen.getByRole("combobox", { name: "Conditions de paiement" }), "50 % comptant / 50 % 30 jours");
     await waitFor(() => expect(mocks.previewOrder).toHaveBeenLastCalledWith(expect.objectContaining({ payment_terms_template: "50 % comptant / 50 % 30 jours" })), { timeout: 2000 });
 
@@ -340,7 +343,7 @@ function submittedOrder(extra: Record<string, unknown> = {}) {
   ];
   return {
     ...detailFor(
-      { lines: [], tax_template: "", payment_terms_template: "", order_type: "BL", delivery_date: "2026-10-04", customer: "PHARMACIE ATLAS" },
+      { lines: [], payment_terms_template: "", order_type: "BL", delivery_date: "2026-10-04", customer: "PHARMACIE ATLAS" },
       { name: "SAL-ORD-5", docstatus: 1, status: "To Deliver and Bill", editable: false },
     ),
     lines,

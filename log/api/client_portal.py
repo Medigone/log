@@ -17,6 +17,8 @@ from frappe.utils import cint, cstr, flt, getdate, now_datetime, today
 
 from log.api.distribution_rules import parse_gps_value
 from log.compat import desk_form_path
+from log.services.sales_quota import check_quotas, quota_fields
+from log.utils.rounding import rounding_disabled
 
 
 MAX_GPS_ACCURACY_METERS = 50
@@ -213,6 +215,7 @@ def _normalise_lines(lines: Any) -> list[dict[str, Any]]:
 	missing = [code for code in grouped if code not in valid]
 	if missing:
 		frappe.throw(_("Ces articles ne sont plus disponibles à la vente : {0}").format(", ".join(missing)))
+	check_quotas([{"item_code": code, "qty": quantity} for code, quantity in grouped.items()])
 	return _grouped_order_lines(grouped, valid, attribution_by_code=_line_attribution(lines, grouped))
 
 
@@ -390,6 +393,7 @@ def _new_sales_order(
 	order.order_type = "Sales"
 	order.transaction_date = today()
 	order.delivery_date = delivery_date
+	order.disable_rounded_total = rounding_disabled()
 	if coupon_code and order.meta.has_field("coupon_code"):
 		order.coupon_code = coupon_code
 	if order.meta.has_field("custom_type"):
@@ -1231,6 +1235,7 @@ def get_catalog(search=None, item_group=None, page=1, page_length=12, order_by=N
 	fields = ["name", "item_name", "description", "item_group", "stock_uom", "image"]
 	if _item_has_column(STORE_SHOW_PRICE_FIELD):
 		fields.append(STORE_SHOW_PRICE_FIELD)
+	fields += quota_fields()
 	sort_key = _sort_clause(order_by, CATALOG_SORT_CLAUSES, "relevance")
 	use_campaign_order = bool(campaign_codes) and sort_key == CATALOG_SORT_CLAUSES["relevance"]
 	rows = frappe.get_all(

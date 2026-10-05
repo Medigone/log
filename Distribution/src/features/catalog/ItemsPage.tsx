@@ -48,7 +48,7 @@ export function ItemsPage() {
     limit: CATALOG_PAGE_SIZE,
   };
   const { data, error, isLoading, isValidating, mutate } = useCatalogItems(query);
-  const { data: optionsData } = useCatalogOptions();
+  const { data: optionsData, mutate: mutateOptions } = useCatalogOptions();
   const api = useCatalogMutations();
   const options = optionsData?.message;
   const list = data?.message;
@@ -140,10 +140,15 @@ export function ItemsPage() {
       cell: (row) =>
         row.disabled ? (
           <StatusBadge tone="neutral">Désactivé</StatusBadge>
-        ) : row.show_in_store ? (
-          <StatusBadge tone="success">Sur le Store</StatusBadge>
         ) : (
-          <StatusBadge tone="info">Hors Store</StatusBadge>
+          <span className="flex flex-wrap gap-1">
+            {row.show_in_store ? (
+              <StatusBadge tone="success">Sur le Store</StatusBadge>
+            ) : (
+              <StatusBadge tone="info">Hors Store</StatusBadge>
+            )}
+            {row.quota_max_qty ? <StatusBadge tone="warning">Quota {formatQuantity(row.quota_max_qty)}</StatusBadge> : null}
+          </span>
         ),
     },
   ];
@@ -259,6 +264,11 @@ export function ItemsPage() {
           setCreating(false);
           void mutate();
           navigate(`/articles/${encodeURIComponent(created.item_code)}`);
+        }}
+        onCreateBrand={async (name) => {
+          const saved = await api.saveBrand({ brand: name });
+          void mutateOptions();
+          return saved.name;
         }}
       />
     </>

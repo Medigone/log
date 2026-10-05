@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import type { ScanTone } from "@/features/preparation/pickScan";
 import { parseQuantityScan } from "@/features/orders/orderDraft";
+import { StockSummary } from "@/features/orders/StockFigures";
 import { cn } from "@/lib/utils";
 import { useItemSearch, type ItemCard, type RecentItemCard } from "@/shared/api/orders";
 import { formatMoney, formatQuantity } from "@/shared/format";
@@ -20,7 +21,7 @@ export type ScanOutcome = "found" | "unknown" | "error";
 
 function StockBadge({ item }: { item: ItemCard }) {
   if (!item.is_stock_item) return null;
-  const available = Math.max(0, item.available);
+  const available = item.stock ? item.stock.net_qty : Math.max(0, item.available);
   return (
     <span
       className={cn(
@@ -28,7 +29,18 @@ function StockBadge({ item }: { item: ItemCard }) {
         available > 0 ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700",
       )}
     >
-      {available > 0 ? `${formatQuantity(available)} disponible${available > 1 ? "s" : ""}` : "Indisponible"}
+      {available === 0 && !item.stock
+        ? "Indisponible"
+        : `${formatQuantity(available)} disponible${Math.abs(available) > 1 ? "s" : ""}`}
+    </span>
+  );
+}
+
+function QuotaBadge({ item }: { item: ItemCard }) {
+  if (!item.quota_max_qty) return null;
+  return (
+    <span className="num whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+      Quota {formatQuantity(item.quota_max_qty)}
     </span>
   );
 }
@@ -177,7 +189,9 @@ export function ItemSearchPanel({
                     <span className="block truncate t-meta text-muted-foreground">
                       {[item.item_code, item.barcode, item.item_group].filter(Boolean).join(" · ")}
                     </span>
+                    {item.is_stock_item ? <StockSummary stock={item.stock} className="block truncate t-meta" /> : null}
                   </span>
+                  <QuotaBadge item={item} />
                   <StockBadge item={item} />
                   <span className="num w-24 shrink-0 text-right text-[13px] font-semibold">
                     {item.price != null ? formatMoney(item.price) : "—"}

@@ -59,7 +59,7 @@ function ReorderCard({ item }: { item: CatalogItem }) {
           <p className="truncate text-xs text-muted-foreground">Réf. {item.itemCode}</p>
         </div>
         <div className="flex items-center gap-2">
-          <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} compact />
+          <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} max={item.maxQty} compact />
           <Button size="icon-sm" aria-label={`Ajouter ${item.itemName} au panier`} disabled={adding} onClick={add}>
             <ShoppingCart />
           </Button>

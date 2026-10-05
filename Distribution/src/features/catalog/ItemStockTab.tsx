@@ -2,20 +2,22 @@ import { Warehouse } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/ui/data-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { CatalogItem, ItemStockRow } from "@/shared/api/catalog";
+import { STOCK_TONE } from "@/features/orders/StockFigures";
 import { formatQuantity } from "@/shared/format";
 
 export function ItemStockTab({ item }: { item: CatalogItem }) {
   const columns: Array<DataTableColumn<ItemStockRow>> = [
     { id: "warehouse", header: "Entrepôt", cell: (row) => <span className="font-medium">{row.warehouse}</span> },
-    { id: "actual", header: "En stock", width: "120px", align: "right", numeric: true, cell: (row) => formatQuantity(row.actual_qty) },
-    { id: "reserved", header: "Réservé", width: "120px", align: "right", numeric: true, hideBelow: "sm", cell: (row) => formatQuantity(row.reserved_qty) },
+    { id: "actual", header: "En stock", width: "120px", align: "right", numeric: true, cell: (row) => <span className={STOCK_TONE.actual}>{formatQuantity(row.actual_qty)}</span> },
+    { id: "reserved", header: "Réservé", width: "120px", align: "right", numeric: true, hideBelow: "sm", cell: (row) => <span className={STOCK_TONE.reserved}>{formatQuantity(row.reserved_qty)}</span> },
+    { id: "ordered", header: "En commande", width: "120px", align: "right", numeric: true, cell: (row) => <span className={STOCK_TONE.ordered}>{formatQuantity(row.ordered_qty)}</span> },
     {
       id: "available",
       header: "Disponible",
       width: "120px",
       align: "right",
       numeric: true,
-      cell: (row) => <span className={row.available_qty > 0 ? "font-medium" : "text-red-700"}>{formatQuantity(row.available_qty)}</span>,
+      cell: (row) => <span className={row.available_qty > 0 ? "font-medium text-emerald-700" : "font-medium text-red-700"}>{formatQuantity(row.available_qty)}</span>,
     },
   ];
   const total = item.stock.reduce((sum, row) => sum + row.actual_qty, 0);

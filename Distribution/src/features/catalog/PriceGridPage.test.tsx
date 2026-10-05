@@ -76,7 +76,25 @@ describe("PriceGridPage", () => {
     const input = within(table).getByLabelText("Prix de Lait 1er âge");
     await user.clear(input);
     await user.type(input, "1150{Enter}");
+    // Rien n'est enregistré avant la confirmation.
+    const dialog = await screen.findByRole("dialog");
+    expect(mocks.setGridPrice).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent("-4.2 %");
+    await user.click(within(dialog).getByRole("button", { name: "Confirmer le prix" }));
     await waitFor(() => expect(mocks.setGridPrice).toHaveBeenCalledWith("Grossistes", "PARA-001", 1150));
+  });
+
+  it("annule un changement de prix et signale un prix sous l’achat", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const input = within(screen.getByRole("table")).getByLabelText("Prix de Lait 1er âge");
+    await user.clear(input);
+    await user.type(input, "900{Enter}");
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByTestId("price-change-alerts")).toHaveTextContent("inférieur au prix d’achat");
+    await user.click(within(dialog).getByRole("button", { name: "Annuler" }));
+    expect(mocks.setGridPrice).not.toHaveBeenCalled();
+    expect(input).toHaveValue("1200");
   });
 
   it("prévisualise puis applique une hausse en masse", async () => {

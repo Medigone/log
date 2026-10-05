@@ -59,6 +59,8 @@ export interface CatalogItemRow {
   disabled: boolean;
   show_in_store: boolean;
   ppa: number;
+  /** Quantité max par commande si l’article est vendu en quota. */
+  quota_max_qty: number | null;
   selling_rate: number | null;
   buying_rate: number | null;
   stock_qty: number;
@@ -96,6 +98,7 @@ export interface ItemStockRow {
   warehouse: string;
   actual_qty: number;
   reserved_qty: number;
+  ordered_qty: number;
   available_qty: number;
   projected_qty: number;
 }
@@ -114,6 +117,8 @@ export interface CatalogItem {
   ppa: number;
   show_in_store: boolean;
   show_price_in_store: boolean;
+  sales_quota: boolean;
+  quota_max_qty: number;
   barcodes: ItemBarcode[];
   uoms: ItemUom[];
   taxes: Array<{ item_tax_template: string }>;
@@ -153,6 +158,8 @@ export type CatalogItemUpdate = { item_code: string } & Partial<{
   ppa: number;
   show_in_store: boolean;
   show_price_in_store: boolean;
+  sales_quota: boolean;
+  quota_max_qty: number;
   barcodes: Array<{ barcode: string; uom: string | null }>;
   uoms: ItemUom[];
   taxes: Array<{ item_tax_template: string }>;

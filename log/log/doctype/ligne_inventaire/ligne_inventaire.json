@@ -1,0 +1,181 @@
+{
+ "actions": [],
+ "autoname": "hash",
+ "creation": "2026-10-04 10:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "inventaire",
+  "item_code",
+  "item_name",
+  "warehouse",
+  "batch_no",
+  "stock_uom",
+  "status",
+  "hors_liste",
+  "round",
+  "snapshot_qty",
+  "expected_at_count",
+  "counted_qty",
+  "first_count_qty",
+  "valuation_rate",
+  "last_counted_at",
+  "last_counted_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "inventaire",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Inventaire",
+   "options": "Inventaire",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "item_code",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Article",
+   "options": "Item",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "item_name",
+   "fieldtype": "Data",
+   "label": "Désignation"
+  },
+  {
+   "fieldname": "warehouse",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Entrepôt",
+   "options": "Warehouse",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch_no",
+   "fieldtype": "Link",
+   "label": "Lot",
+   "options": "Batch"
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Link",
+   "label": "Unité de stock",
+   "options": "UOM"
+  },
+  {
+   "default": "À compter",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Statut",
+   "options": "À compter\nCompté\nÀ recompter"
+  },
+  {
+   "default": "0",
+   "fieldname": "hors_liste",
+   "fieldtype": "Check",
+   "label": "Hors liste"
+  },
+  {
+   "default": "1",
+   "fieldname": "round",
+   "fieldtype": "Int",
+   "label": "Tour de comptage"
+  },
+  {
+   "default": "0",
+   "fieldname": "snapshot_qty",
+   "fieldtype": "Float",
+   "label": "Stock à l'ouverture"
+  },
+  {
+   "default": "0",
+   "fieldname": "expected_at_count",
+   "fieldtype": "Float",
+   "label": "Stock théorique au comptage"
+  },
+  {
+   "default": "0",
+   "fieldname": "counted_qty",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Quantité comptée"
+  },
+  {
+   "default": "0",
+   "fieldname": "first_count_qty",
+   "fieldtype": "Float",
+   "label": "Premier comptage"
+  },
+  {
+   "default": "0",
+   "fieldname": "valuation_rate",
+   "fieldtype": "Currency",
+   "label": "Taux de valorisation"
+  },
+  {
+   "fieldname": "last_counted_at",
+   "fieldtype": "Datetime",
+   "label": "Dernier comptage"
+  },
+  {
+   "fieldname": "last_counted_by",
+   "fieldtype": "Link",
+   "label": "Compté par",
+   "options": "User"
+  }
+ ],
+ "links": [],
+ "modified": "2026-10-04 10:00:00",
+ "modified_by": "Administrator",
+ "module": "Log",
+ "name": "Ligne Inventaire",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 0,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Responsable",
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Magasinier",
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Préparateur",
+   "write": 0
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

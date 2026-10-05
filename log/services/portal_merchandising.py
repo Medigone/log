@@ -10,6 +10,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, cstr, flt, fmt_money, get_datetime, now_datetime
 
+from log.services.sales_quota import quota_fields, row_quota
+
 STORE_VISIBLE_FIELD = "custom_afficher_dans_store"
 STORE_SHOW_PRICE_FIELD = "custom_afficher_prix_store"
 
@@ -639,6 +641,7 @@ def serialize_item_row(row, *, currency: str, campaign=None, placement: str | No
 		"uom": row.stock_uom,
 		"image": row.image,
 		"showPrice": show_price,
+		"maxQty": row_quota(row),
 		"unitPriceTtc": None,
 		"catalogPriceTtc": None,
 		"effectivePriceTtc": None,
@@ -663,6 +666,7 @@ def fetch_item_rows(item_codes: list[str]) -> dict[str, Any]:
 	fields = ["name", "item_name", "description", "item_group", "stock_uom", "image"]
 	if _portal()._item_has_column(STORE_SHOW_PRICE_FIELD):
 		fields.append(STORE_SHOW_PRICE_FIELD)
+	fields += quota_fields()
 	rows = frappe.get_all(
 		"Item",
 		filters={"name": ["in", item_codes], **_portal()._catalog_item_filters()},
@@ -675,6 +679,7 @@ def fetch_group_items(item_group: str, limit: int) -> list[Any]:
 	fields = ["name", "item_name", "description", "item_group", "stock_uom", "image"]
 	if _portal()._item_has_column(STORE_SHOW_PRICE_FIELD):
 		fields.append(STORE_SHOW_PRICE_FIELD)
+	fields += quota_fields()
 	return frappe.get_all(
 		"Item",
 		filters={**_portal()._catalog_item_filters(), "item_group": item_group},

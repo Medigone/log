@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   addOrderItem,
+  acceptListPrices,
   balanceSchedule,
+  changedListPrice,
   draftFromOrder,
   emptyDraft,
   orderWarnings,
   parseQuantityScan,
+  quotaLimit,
   scheduleGap,
   submittedLineRules,
   toOrderPayload,
@@ -49,7 +52,6 @@ describe("toOrderPayload", () => {
       ...emptyDraft(),
       customer,
       deliveryDate: "2026-10-04",
-      taxTemplate: "",
       discountMode: "amount",
       discountValue: 150,
       lines: [
@@ -60,7 +62,6 @@ describe("toOrderPayload", () => {
     expect(toOrderPayload(draft)).toMatchObject({
       customer: "C-1",
       lines: [{ item_code: "ART-1", qty: 2, discount_percentage: 10, rate: null, reserved_qty: null, row_name: null }],
-      tax_template: "",
       additional_discount_percentage: 0,
       discount_amount: 150,
       payment_schedule: null,
@@ -108,6 +109,15 @@ describe("orderWarnings", () => {
       "Le client n’a pas de position GPS : la tournée devra la compléter.",
     ]);
   });
+
+  it("signale les articles sans taux de TVA sur leur fiche", () => {
+    const draft = { ...emptyDraft(), customer, deliveryDate: "2026-10-04", lines: addOrderItem([], lait, 2, keys()).lines };
+    const line = { item_code: "ART-1", item_name: "Lait", price_list_rate: 950, rate: 950, tax_rate: 0, tax_missing: true };
+    const preview = { docstatus: 0, lines: [line] } as unknown as OrderDetail;
+    expect(orderWarnings(draft, preview).warnings).toEqual(["Lait : taux de TVA non renseigné sur la fiche article, compté exonéré."]);
+    const taxed = { docstatus: 0, lines: [{ ...line, tax_rate: 19, tax_missing: false }] } as unknown as OrderDetail;
+    expect(orderWarnings(draft, taxed).warnings).toEqual([]);
+  });
 });
 
 describe("draftFromOrder", () => {
@@ -120,7 +130,6 @@ describe("draftFromOrder", () => {
       delivery_date: "2026-10-04",
       warehouse: "Magasins - MP",
       price_list: "Vente standard",
-      tax_template: "",
       payment_terms_template: "",
       schedule_mode: "manual",
       additional_discount_percentage: 0,
@@ -164,3 +173,45 @@ describe("commande validée", () => {
   });
 });
 
+
+describe("vente en quota", () => {
+  const quota: ItemCard = { ...lait, quota_max_qty: 5 };
+
+  it("plafonne le commercial au quota, pas le responsable", () => {
+    const line = addOrderItem([], quota, 2, keys()).lines[0];
+    expect(line.quotaMax).toBe(5);
+    expect(quotaLimit(line, false)).toBe(5);
+    expect(quotaLimit(line, true)).toBeNull();
+    expect(quotaLimit(addOrderItem([], lait, 2, keys()).lines[0], false)).toBeNull();
+  });
+
+  it("garde une quantité déjà acceptée au-delà du quota", () => {
+    const line = { ...addOrderItem([], quota, 8, keys()).lines[0], savedQty: 8 };
+    expect(quotaLimit(line, false)).toBe(8);
+  });
+
+  it("bloque le commercial et avertit le responsable", () => {
+    const line = addOrderItem([], quota, 7, keys()).lines[0];
+    const draft = { ...emptyDraft(), customer, deliveryDate: "2026-10-04", lines: [line] };
+    const message = "Lait : 7 demandé, quota de 5 par commande.";
+    expect(orderWarnings(draft, null, false).blocking).toContain(message);
+    expect(orderWarnings(draft, null, true).blocking).not.toContain(message);
+    expect(orderWarnings(draft, null, true).warnings).toContain(message);
+  });
+});
+
+describe("prix changé sur un brouillon", () => {
+  it("détecte un tarif différent du prix gardé", () => {
+    expect(changedListPrice({ price_list_rate: 150, current_price_list_rate: 160 })).toBe(160);
+    expect(changedListPrice({ price_list_rate: 150, current_price_list_rate: 150 })).toBeNull();
+    expect(changedListPrice({ price_list_rate: 150, current_price_list_rate: null })).toBeNull();
+  });
+
+  it("garde l’ancien prix jusqu’à la mise à jour, puis repart du tarif", () => {
+    const line = { ...addOrderItem([], lait, 2, keys()).lines[0], lockedListPrice: 950 };
+    const draft = { ...emptyDraft(), customer, deliveryDate: "2026-10-05", lines: [line] };
+    expect(toOrderPayload(draft)?.lines[0].price_list_rate).toBe(950);
+    const updated = { ...draft, lines: acceptListPrices(draft.lines, new Set([line.key])) };
+    expect(toOrderPayload(updated)?.lines[0].price_list_rate).toBeNull();
+  });
+});

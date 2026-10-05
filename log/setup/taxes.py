@@ -1,11 +1,16 @@
 # Copyright (c) 2026, IntraPro and contributors
 # For license information, please see license.txt
 
-"""TVA algérienne en vigueur (19 % normal, 9 % réduit).
+"""TVA algérienne en vigueur (19 % normal, 9 % réduit), appliquée article par article.
 
 Le plan comptable ERPNext pour l'Algérie crée encore des modèles à 17 % et 7 % : on crée les
-comptes et modèles à jour, on fait du 19 % le modèle par défaut et on désactive les anciens
-modèles. Les documents déjà soumis gardent leurs taxes ; rien n'est supprimé.
+comptes et modèles à jour et on désactive les anciens modèles. Les documents déjà soumis gardent
+leurs taxes ; rien n'est supprimé.
+
+Ventilation par taux : le modèle par défaut « TVA » porte une ligne à 0 % par compte de TVA, et
+chaque modèle de taxe article met son taux sur son compte (0 sur les autres). ERPNext prend le taux
+de l'article quand il en a un pour le compte, sinon celui de la ligne : un article sans modèle de
+taxe est donc exonéré.
 """
 
 from __future__ import annotations
@@ -14,9 +19,11 @@ import frappe
 
 ALGERIA = "Algeria"
 VAT_RATES = (
-	{"title": "TVA 19%", "rate": 19, "default": True},
-	{"title": "TVA 9%", "rate": 9, "default": False},
+	{"title": "TVA 19%", "rate": 19},
+	{"title": "TVA 9%", "rate": 9},
 )
+COMBINED_TITLE = "TVA"
+EXEMPT_TITLE = "Exonéré"
 OBSOLETE_RATES = (17, 7)
 TEMPLATE_DOCTYPES = (
 	("Sales Taxes and Charges Template", "Sales Taxes and Charges"),
@@ -65,12 +72,7 @@ def _ensure_account(company, title, rate) -> str | None:
 	return account.name
 
 
-def _ensure_template(doctype, child_doctype, company, title, rate, account, is_default):
-	name = f"{title} - {company.abbr}"
-	if frappe.db.exists(doctype, name):
-		if is_default and not frappe.db.get_value(doctype, name, "is_default"):
-			frappe.db.set_value(doctype, name, "is_default", 1)
-		return name
+def _tax_row(child_doctype, title, rate, account) -> dict:
 	row = {
 		"charge_type": "On Net Total",
 		"account_head": account,
@@ -79,40 +81,82 @@ def _ensure_template(doctype, child_doctype, company, title, rate, account, is_d
 	}
 	if child_doctype == "Purchase Taxes and Charges":
 		row.update({"category": "Total", "add_deduct_tax": "Add"})
+	return row
+
+
+def _ensure_template(doctype, child_doctype, company, title, rate, account, is_default):
+	name = f"{title} - {company.abbr}"
+	if frappe.db.exists(doctype, name):
+		if frappe.db.get_value(doctype, name, "is_default") != (1 if is_default else 0):
+			frappe.db.set_value(doctype, name, "is_default", 1 if is_default else 0)
+		return name
 	template = frappe.get_doc(
 		{
 			"doctype": doctype,
 			"title": title,
 			"company": company.name,
 			"is_default": 1 if is_default else 0,
-			"taxes": [row],
+			"taxes": [_tax_row(child_doctype, title, rate, account)],
 		}
 	)
 	template.insert(ignore_permissions=True)
 	return template.name
 
 
-def _ensure_item_tax_template(company, title, rate, accounts):
-	"""Modèle de taxe article : le même taux sur chaque compte de TVA.
+def _ensure_combined_template(doctype, child_doctype, company, accounts: dict[str, str]):
+	"""Modèle « TVA » par défaut : une ligne à 0 % par compte, le taux vient de l'article."""
+	name = f"{COMBINED_TITLE} - {company.abbr}"
+	if frappe.db.exists(doctype, name):
+		if not frappe.db.get_value(doctype, name, "is_default"):
+			frappe.db.set_value(doctype, name, "is_default", 1)
+		return name
+	template = frappe.get_doc(
+		{
+			"doctype": doctype,
+			"title": COMBINED_TITLE,
+			"company": company.name,
+			"is_default": 1,
+			"taxes": [_tax_row(child_doctype, title, 0, account) for title, account in accounts.items()],
+		}
+	)
+	template.insert(ignore_permissions=True)
+	return template.name
 
-	Une ligne de taxe de commande (TVA 19 % ou 9 %) applique alors le taux de l'article, quel que
-	soit le modèle de taxe choisi sur le document.
+
+def _ensure_item_tax_template(company, title, rates: dict[str, float]):
+	"""Modèle de taxe article ; un modèle existant est remis aux taux attendus.
+
+	Sans risque pour l'historique : les lignes soumises gardent leur `item_tax_rate`.
 	"""
 	if not frappe.db.exists("DocType", "Item Tax Template"):
 		return None
 	name = f"{title} - {company.abbr}"
 	if frappe.db.exists("Item Tax Template", name):
+		template = frappe.get_doc("Item Tax Template", name)
+		current = {row.tax_type: float(row.tax_rate) for row in template.taxes}
+		if current != {account: float(rate) for account, rate in rates.items()}:
+			template.set("taxes", [{"tax_type": account, "tax_rate": rate} for account, rate in rates.items()])
+			template.save(ignore_permissions=True)
 		return name
 	template = frappe.get_doc(
 		{
 			"doctype": "Item Tax Template",
 			"title": title,
 			"company": company.name,
-			"taxes": [{"tax_type": account, "tax_rate": rate} for account in accounts],
+			"taxes": [{"tax_type": account, "tax_rate": rate} for account, rate in rates.items()],
 		}
 	)
 	template.insert(ignore_permissions=True)
 	return template.name
+
+
+def sales_vat_template(company: str) -> str | None:
+	"""Modèle de taxes des commandes : « TVA » ventilé par article."""
+	abbr = frappe.get_cached_value("Company", company, "abbr")
+	name = f"{COMBINED_TITLE} - {abbr}"
+	if frappe.db.exists("Sales Taxes and Charges Template", {"name": name, "disabled": 0}):
+		return name
+	return None
 
 
 def _disable_obsolete(doctype, child_doctype, company, keep: set[str]):
@@ -140,14 +184,16 @@ def _ensure_company_vat(company):
 		accounts[vat["title"]] = account
 
 	for doctype, child_doctype in TEMPLATE_DOCTYPES:
-		created = set()
+		# Les modèles à taux unique restent disponibles ; « TVA » devient le modèle par défaut.
+		created = {_ensure_combined_template(doctype, child_doctype, company, accounts)}
 		for vat in VAT_RATES:
 			created.add(
-				_ensure_template(
-					doctype, child_doctype, company, vat["title"], vat["rate"], accounts[vat["title"]], vat["default"]
-				)
+				_ensure_template(doctype, child_doctype, company, vat["title"], vat["rate"], accounts[vat["title"]], False)
 			)
 		_disable_obsolete(doctype, child_doctype, company, created)
 
 	for vat in VAT_RATES:
-		_ensure_item_tax_template(company, vat["title"], vat["rate"], accounts.values())
+		rates = {account: 0 for account in accounts.values()}
+		rates[accounts[vat["title"]]] = vat["rate"]
+		_ensure_item_tax_template(company, vat["title"], rates)
+	_ensure_item_tax_template(company, EXEMPT_TITLE, {account: 0 for account in accounts.values()})

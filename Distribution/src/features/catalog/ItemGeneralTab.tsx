@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { leafGroupOptions, namesToOptions } from "@/features/catalog/catalogShared";
 import type { SaveItem } from "@/features/catalog/ItemDetailPage";
+import { ItemQuotaCard } from "@/features/catalog/ItemQuotaCard";
 import { ItemThumb } from "@/features/catalog/ItemThumb";
 import type { CatalogItem, CatalogOptions } from "@/shared/api/catalog";
 import { apiErrorMessage } from "@/shared/api/distribution";
@@ -167,42 +168,45 @@ export function ItemGeneralTab({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="border-b">
-          <CardTitle>Image</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center gap-3 pt-4">
-          <ItemThumb image={item.image} className="size-48 rounded-lg" />
-          <input
-            ref={fileInput}
-            type="file"
-            accept="image/*"
-            className="sr-only"
-            aria-label="Choisir une image"
-            onChange={(event) => {
-              void pickImage(event.target.files?.[0]);
-              event.target.value = "";
-            }}
-          />
-          <div className="flex flex-wrap justify-center gap-2">
-            <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileInput.current?.click()}>
-              {uploading ? <Spinner /> : <ImagePlus />}
-              {item.image ? "Remplacer" : "Ajouter une image"}
-            </Button>
-            {item.image ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={uploading}
-                onClick={() => void onRemoveImage().catch((err) => toast.error(apiErrorMessage(err)))}
-              >
-                <Trash2 /> Retirer
+      <div className="flex flex-col gap-4">
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle>Image</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center gap-3 pt-4">
+            <ItemThumb image={item.image} className="size-48 rounded-lg" />
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              aria-label="Choisir une image"
+              onChange={(event) => {
+                void pickImage(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button variant="outline" size="sm" disabled={uploading} onClick={() => fileInput.current?.click()}>
+                {uploading ? <Spinner /> : <ImagePlus />}
+                {item.image ? "Remplacer" : "Ajouter une image"}
               </Button>
-            ) : null}
-          </div>
-          <p className="t-meta text-center text-muted-foreground">Visible sur le Store et en saisie de commande. 5 Mo maximum.</p>
-        </CardContent>
-      </Card>
+              {item.image ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => void onRemoveImage().catch((err) => toast.error(apiErrorMessage(err)))}
+                >
+                  <Trash2 /> Retirer
+                </Button>
+              ) : null}
+            </div>
+            <p className="t-meta text-center text-muted-foreground">Visible sur le Store et en saisie de commande. 5 Mo maximum.</p>
+          </CardContent>
+        </Card>
+        <ItemQuotaCard key={`${item.sales_quota}-${item.quota_max_qty}`} item={item} onSave={onSave} />
+      </div>
     </div>
   );
 }

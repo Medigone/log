@@ -47,6 +47,8 @@ export interface CatalogItem {
   uom: string
   image?: string | null
   showPrice?: boolean
+  /** Quantité max par commande si l'article est vendu en quota. */
+  maxQty?: number | null
   unitPriceTtc: number | null
   catalogPriceTtc?: number | null
   effectivePriceTtc?: number | null

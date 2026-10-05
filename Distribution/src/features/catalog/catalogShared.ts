@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { SelectOption } from "@/components/FilterSelect";
-import { ruleValue, type CatalogItemGroup, type PricingRule } from "@/shared/api/catalog";
+import { ruleValue, type CatalogItemGroup, type PriceGridRow, type PricingRule } from "@/shared/api/catalog";
 import { formatMoney } from "@/shared/format";
 
 export const CATALOG_PAGE_SIZE = 25;
@@ -137,4 +137,28 @@ export function moveItem<T>(list: readonly T[], index: number, offset: -1 | 1): 
   const next = [...list];
   [next[index], next[target]] = [next[target], next[index]];
   return next;
+}
+
+/** Variation au-delà de laquelle le changement est signalé comme important. */
+const LARGE_CHANGE_PERCENT = 20;
+
+/** Prix saisi dans la grille, en attente de confirmation. */
+export interface PendingPriceChange {
+  row: PriceGridRow;
+  rate: number;
+}
+
+export function priceChangeAlerts({ row, rate }: PendingPriceChange, isBuying: boolean): string[] {
+  const alerts: string[] = [];
+  if (row.rate != null && row.rate > 0) {
+    const change = ((rate - row.rate) / row.rate) * 100;
+    if (Math.abs(change) >= LARGE_CHANGE_PERCENT) alerts.push(`Variation importante : ${change > 0 ? "+" : ""}${change.toFixed(1)} %.`);
+  }
+  if (!isBuying) {
+    if (rate === 0) alerts.push("Prix à zéro : l’article sera vendu gratuitement.");
+    else if (row.buying_rate != null && row.buying_rate > 0 && rate < row.buying_rate)
+      alerts.push(`Prix inférieur au prix d’achat (${formatMoney(row.buying_rate)}).`);
+    if (row.ppa > 0 && rate > row.ppa) alerts.push(`Prix supérieur au PPA (${formatMoney(row.ppa)}).`);
+  }
+  return alerts;
 }

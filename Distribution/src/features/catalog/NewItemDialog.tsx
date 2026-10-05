@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, PackagePlus } from "lucide-react";
+import { AlertTriangle, PackagePlus, Plus, ScanBarcode, X } from "lucide-react";
+import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { FormSelect } from "@/components/FilterSelect";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -26,13 +27,15 @@ export function NewItemDialog({
   onOpenChange,
   options,
   onSubmit,
+  onCreateBrand,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   options?: CatalogOptions;
   onSubmit: (payload: NewCatalogItemInput) => Promise<void>;
+  /** Crée la marque et renvoie son nom définitif. */
+  onCreateBrand: (name: string) => Promise<string>;
 }) {
-  const [itemCode, setItemCode] = useState("");
   const [itemName, setItemName] = useState("");
   const [barcode, setBarcode] = useState("");
   const [itemGroup, setItemGroup] = useState("");
@@ -45,10 +48,13 @@ export function NewItemDialog({
   const [showInStore, setShowInStore] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [newBrand, setNewBrand] = useState<string | null>(null);
+  const [brandPending, setBrandPending] = useState(false);
+  const [createdBrands, setCreatedBrands] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    setItemCode("");
     setItemName("");
     setBarcode("");
     setItemGroup("");
@@ -60,9 +66,35 @@ export function NewItemDialog({
     setSellingRate("");
     setShowInStore(true);
     setError("");
+    setNewBrand(null);
+    setCreatedBrands([]);
   }, [open, options?.default_uom]);
 
-  const canSave = Boolean((itemCode.trim() || barcode.trim()) && itemName.trim() && itemGroup && uom) && !pending;
+  const canSave = Boolean(itemName.trim() && itemGroup && uom) && !pending && newBrand === null;
+  const brands = [...new Set([...(options?.brands || []), ...createdBrands])].sort((a, b) => a.localeCompare(b, "fr"));
+
+  const addBrand = async () => {
+    const name = newBrand?.trim();
+    if (!name || brandPending) return;
+    const existing = brands.find((entry) => entry.localeCompare(name, "fr", { sensitivity: "base" }) === 0);
+    if (existing) {
+      setBrand(existing);
+      setNewBrand(null);
+      return;
+    }
+    setBrandPending(true);
+    setError("");
+    try {
+      const created = await onCreateBrand(name);
+      setCreatedBrands((current) => [...current, created]);
+      setBrand(created);
+      setNewBrand(null);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setBrandPending(false);
+    }
+  };
 
   const submit = async () => {
     if (!canSave) return;
@@ -70,7 +102,6 @@ export function NewItemDialog({
     setError("");
     try {
       await onSubmit({
-        item_code: itemCode.trim() || undefined,
         item_name: itemName.trim(),
         item_group: itemGroup,
         brand: brand || undefined,
@@ -131,21 +162,28 @@ export function NewItemDialog({
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field>
                   <FieldLabel htmlFor="new-item-barcode">Code-barres</FieldLabel>
-                  <Input
-                    id="new-item-barcode"
-                    value={barcode}
-                    className="font-mono"
-                    onChange={(event) => setBarcode(event.target.value)}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      id="new-item-barcode"
+                      value={barcode}
+                      className="font-mono"
+                      onChange={(event) => setBarcode(event.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Scanner le code-barres"
+                      title="Scanner avec la caméra"
+                      onClick={() => setScanning(true)}
+                    >
+                      <ScanBarcode />
+                    </Button>
+                  </div>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="new-item-code">Code article</FieldLabel>
-                  <Input
-                    id="new-item-code"
-                    value={itemCode}
-                    placeholder={barcode || "Obligatoire sans code-barres"}
-                    onChange={(event) => setItemCode(event.target.value)}
-                  />
+                  <Input id="new-item-code" value="" disabled placeholder="Généré automatiquement" />
                 </Field>
               </div>
 
@@ -160,8 +198,55 @@ export function NewItemDialog({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel>Marque</FieldLabel>
-                  <FormSelect aria-label="Marque" value={brand} onChange={setBrand} options={namesToOptions(options?.brands, "Aucune")} />
+                  <FieldLabel htmlFor={newBrand === null ? undefined : "new-item-brand"}>Marque</FieldLabel>
+                  {newBrand === null ? (
+                    <div className="flex gap-2">
+                      <FormSelect aria-label="Marque" value={brand} onChange={setBrand} options={namesToOptions(brands, "Aucune")} />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label="Nouvelle marque"
+                        title="Créer une marque"
+                        onClick={() => setNewBrand("")}
+                      >
+                        <Plus />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        id="new-item-brand"
+                        value={newBrand}
+                        autoFocus
+                        placeholder="Nom de la marque"
+                        onChange={(event) => setNewBrand(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void addBrand();
+                          } else if (event.key === "Escape") {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setNewBrand(null);
+                          }
+                        }}
+                      />
+                      <Button type="button" disabled={!newBrand.trim() || brandPending} onClick={() => void addBrand()}>
+                        {brandPending ? <Spinner /> : null}
+                        Ajouter
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Annuler la nouvelle marque"
+                        onClick={() => setNewBrand(null)}
+                      >
+                        <X />
+                      </Button>
+                    </div>
+                  )}
                 </Field>
               </div>
 
@@ -211,6 +296,16 @@ export function NewItemDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+      <BarcodeScannerDialog
+        open={scanning}
+        onOpenChange={setScanning}
+        onScan={(text) => {
+          const code = text.trim();
+          if (!code) return;
+          setBarcode(code);
+          setScanning(false);
+        }}
+      />
     </Dialog>
   );
 }

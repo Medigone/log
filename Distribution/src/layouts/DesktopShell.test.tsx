@@ -25,6 +25,10 @@ vi.mock("@/shared/api/orders", () => ({
   useOrderCounts: () => ({ data: undefined }),
 }));
 
+vi.mock("@/shared/api/inventory", () => ({
+  useInventories: () => ({ data: undefined }),
+}));
+
 const manager = { name: "manager@test", email: "manager@test", fullName: "Responsable Test", role: "responsable" as const };
 
 const dashboard: ActivityDashboardData = {
@@ -58,6 +62,7 @@ describe("DesktopShell", () => {
   beforeEach(() => {
     dashboardState.data = undefined;
     sessionStorage.removeItem(NAV_ALERT_DISMISS_KEY);
+    localStorage.clear();
   });
 
   it("n'affiche au préparateur que son espace autorisé", () => {
@@ -83,7 +88,8 @@ describe("DesktopShell", () => {
     expect(screen.getAllByText("Opérationnel").length).toBeGreaterThan(0);
     expect(screen.getByText("Ressources")).toBeInTheDocument();
     expect(screen.getByText("Ventes")).toBeInTheDocument();
-    expect(screen.getByText("Achats")).toBeInTheDocument();
+    expect(screen.getByText("Stock")).toBeInTheDocument();
+    expect(screen.queryByText("Achats")).not.toBeInTheDocument();
     expect(screen.queryByText("Caisse")).not.toBeInTheDocument();
     expect(hrefs.indexOf("/cashier")).toBeGreaterThan(hrefs.indexOf("/deliveries"));
     expect(screen.queryByText("Console")).not.toBeInTheDocument();
@@ -117,6 +123,17 @@ describe("DesktopShell", () => {
     expect(screen.getByRole("button", { name: "Déplier le menu" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Déplier le menu" }));
     expect(screen.getByRole("button", { name: "Réduire le menu" })).toBeInTheDocument();
+  });
+
+  it("replie et déplie une section du menu", async () => {
+    const user = userEvent.setup();
+    renderShell(manager);
+    expect(navHrefs()).toContain("/receptions");
+    await user.click(screen.getByRole("button", { name: "Stock" }));
+    expect(navHrefs()).not.toContain("/receptions");
+    expect(navHrefs()).toContain("/deliveries");
+    await user.click(screen.getByRole("button", { name: "Stock" }));
+    expect(navHrefs()).toContain("/receptions");
   });
 
   it("affiche les compteurs de file et l’encart d’anomalies", async () => {

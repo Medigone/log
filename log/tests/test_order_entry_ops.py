@@ -15,6 +15,8 @@ from log.order_entry_ops import (
 	_assert_editable,
 	_clean_lines,
 	_clean_schedule,
+	_line_tax_rates,
+	_serialize_taxes,
 	_price_map,
 	_validate_schedule,
 	create_customer,
@@ -50,7 +52,7 @@ class TestLinesAndSchedule(unittest.TestCase):
 		)
 		self.assertEqual(
 			lines,
-			[{"item_code": "A", "qty": 2.0, "discount_percentage": 10.0, "rate": None, "reserved_qty": None, "row_name": None}],
+			[{"item_code": "A", "qty": 2.0, "discount_percentage": 10.0, "rate": None, "reserved_qty": None, "price_list_rate": None, "row_name": None}],
 		)
 		with self.assertRaises(Exception):
 			_clean_lines([{"item_code": "A", "qty": 1, "discount_percentage": 120}])
@@ -252,6 +254,35 @@ class TestSubmittedOrders(unittest.TestCase):
 		with self.assertRaises(Exception) as raised:
 			cancel_order("SO-1")
 		self.assertIn("déjà quitté", str(raised.exception))
+
+
+class TestLineVat(unittest.TestCase):
+	def _doc(self):
+		taxes = [
+			frappe._dict(name="t19", idx=1, charge_type="On Net Total", account_head="TVA 19% - MP", rate=0, description="TVA 19%", tax_amount=190, total=0),
+			frappe._dict(name="t9", idx=2, charge_type="On Net Total", account_head="TVA 9% - MP", rate=0, description="TVA 9%", tax_amount=0, total=0),
+		]
+		items = [
+			frappe._dict(net_amount=1000, item_tax_template="TVA 19% - MP", item_tax_rate=json.dumps({"TVA 19% - MP": 19, "TVA 9% - MP": 0})),
+			frappe._dict(net_amount=500, item_tax_template=None, item_tax_rate="{}"),
+		]
+		return frappe._dict(taxes=taxes, items=items)
+
+	def test_line_rate_comes_from_item_template_and_defaults_to_row_rate(self):
+		rates = _line_tax_rates(self._doc())
+		self.assertEqual([sum(row.values()) for row in rates], [19, 0])
+
+	def test_old_single_rate_template_still_applies_to_untemplated_items(self):
+		doc = self._doc()
+		doc.taxes = [frappe._dict(name="t", idx=1, charge_type="On Net Total", account_head="TVA 19% - MP", rate=19)]
+		self.assertEqual([sum(row.values()) for row in _line_tax_rates(doc)], [19, 19])
+
+	def test_zero_tax_rows_are_hidden_and_base_is_taxed_net(self):
+		doc = self._doc()
+		self.assertEqual(
+			_serialize_taxes(doc, _line_tax_rates(doc)),
+			[{"description": "TVA 19%", "rate": 19, "base": 1000, "amount": 190}],
+		)
 
 
 if __name__ == "__main__":

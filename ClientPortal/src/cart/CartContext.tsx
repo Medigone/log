@@ -22,6 +22,11 @@ function readCart(key: string): CartLine[] {
   }
 }
 
+/** Plafonne la quantité au quota de l'article (vente en quota). */
+function capQuantity(item: Pick<CatalogItem, "maxQty">, quantity: number) {
+  return item.maxQty && item.maxQty > 0 ? Math.min(quantity, item.maxQty) : quantity
+}
+
 export function CartProvider({ user, children }: { user: string; children: ReactNode }) {
   const storageKey = `intrapro-client.cart.${user}`
   const [lines, setLines] = useState<CartLine[]>(() => readCart(storageKey))
@@ -47,17 +52,17 @@ export function CartProvider({ user, children }: { user: string; children: React
           ? {
               ...line,
               ...item,
-              quantity: line.quantity + qty,
+              quantity: capQuantity(item, line.quantity + qty),
               campaign: item.campaign ?? line.campaign,
               placement: item.placement ?? line.placement,
             }
           : line)
-        : [...lines, { ...item, quantity: qty }])
+        : [...lines, { ...item, quantity: capQuantity(item, qty) }])
     },
     updateQuantity: (itemCode, quantity) => persist(
       quantity <= 0
         ? lines.filter((line) => line.itemCode !== itemCode)
-        : lines.map((line) => line.itemCode === itemCode ? { ...line, quantity } : line),
+        : lines.map((line) => line.itemCode === itemCode ? { ...line, quantity: capQuantity(line, quantity) } : line),
     ),
     remove: (itemCode) => persist(lines.filter((line) => line.itemCode !== itemCode)),
     clear: () => persist([]),

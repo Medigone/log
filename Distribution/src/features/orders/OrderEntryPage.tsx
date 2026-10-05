@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Ban, CircleCheck, FilePenLine, Pencil, Printer, Save, Trash2, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Ban, CircleCheck, FilePenLine, Pencil, Printer, Save, Tags, Trash2, Undo2 } from "lucide-react";
 import { BarcodeScannerDialog } from "@/components/BarcodeScannerDialog";
 import { ScanQuantityPrompt } from "@/components/ScanQuantityPrompt";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -21,8 +21,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CustomerPicker } from "@/features/orders/CustomerPicker";
 import { ItemSearchPanel, type ScanOutcome } from "@/features/orders/ItemSearchPanel";
+import { StockSummary, availableTone } from "@/features/orders/StockFigures";
+import { cn } from "@/lib/utils";
 import { OrderLinesTable } from "@/features/orders/OrderLinesTable";
-import { OrderSummaryPanel } from "@/features/orders/OrderSummaryPanel";
+import { OrderFooter, OrderHeaderFields } from "@/features/orders/OrderSummaryPanel";
 import { OrderTrackingCard } from "@/features/orders/OrderTrackingCard";
 import { QuickCustomerDialog } from "@/features/orders/QuickCustomerDialog";
 import {
@@ -30,8 +32,13 @@ import {
   draftFromOrder,
   emptyDraft,
   orderWarnings,
+  quotaLimit,
+  acceptListPrices,
+  changedListPrice,
+  releaseListPrices,
   parseQuantityScan,
-  removeOrderLine,
+  removeOrderLines,
+  updateOrderLines,
   toOrderPayload,
   toUpdatePayload,
   updateOrderLine,
@@ -130,7 +137,14 @@ export function OrderEntryPage() {
   }, [name, order]);
 
   const change = useCallback((patch: Partial<OrderDraft>) => {
-    setDraft((current) => (current ? { ...current, ...patch } : current));
+    setDraft((current) => {
+      if (!current) return current;
+      const next = { ...current, ...patch };
+      const repriced =
+        ("customer" in patch && patch.customer?.name !== current.customer?.name) ||
+        ("priceList" in patch && patch.priceList !== current.priceList);
+      return repriced ? { ...next, lines: releaseListPrices(next.lines) } : next;
+    });
     setDirty(true);
   }, []);
 
@@ -200,10 +214,21 @@ export function OrderEntryPage() {
   const { data: recentData } = useCustomerRecentItems(readOnly ? null : draft?.customer?.name, context.priceList, context.warehouse);
 
   const addItem = (item: ItemCard, qty: number) => {
-    const current = draftRef.current?.lines.find((line) => line.itemCode === item.item_code)?.qty ?? 0;
-    setLines((lines) => addOrderItem(lines, item, qty).lines);
+    const existing = draftRef.current?.lines.find((line) => line.itemCode === item.item_code);
+    const current = existing?.qty ?? 0;
+    const limit = quotaLimit({ quotaMax: item.quota_max_qty ?? null, savedQty: existing?.savedQty ?? 0 }, canValidate);
+    const added = limit == null ? qty : Math.max(0, Math.min(qty, limit - current));
     setLastItem(item.item_code);
-    setFeedback({ text: `${item.item_name} : ${formatQuantity(current + qty)} ${item.uom}`, tone: "ok" });
+    if (added <= 0) {
+      setFeedback({ text: `${item.item_name} : quota atteint (${formatQuantity(limit ?? 0)} max par commande).`, tone: "warn" });
+      return;
+    }
+    setLines((lines) => addOrderItem(lines, item, added).lines);
+    setFeedback(
+      added < qty
+        ? { text: `${item.item_name} : limité à ${formatQuantity(current + added)} ${item.uom} (quota).`, tone: "warn" }
+        : { text: `${item.item_name} : ${formatQuantity(current + added)} ${item.uom}`, tone: "ok" },
+    );
   };
 
   const handleScan = async (raw: string, fromCamera = false): Promise<ScanOutcome> => {
@@ -245,7 +270,7 @@ export function OrderEntryPage() {
     toast.success(`Client ${created.customer_name} créé.`);
   };
 
-  const warnings = useMemo(() => (draft ? orderWarnings(draft, preview) : { blocking: [], warnings: [] }), [draft, preview]);
+  const warnings = useMemo(() => (draft ? orderWarnings(draft, preview, canValidate) : { blocking: [], warnings: [] }), [draft, preview, canValidate]);
 
   const persist = async (): Promise<OrderDetail | null> => {
     if (!draft) return null;
@@ -404,6 +429,11 @@ export function OrderEntryPage() {
   }
 
   const status = order ?? preview;
+  // Lignes dont le tarif a changé depuis l'enregistrement du brouillon (prix gardé tant que non mis à jour).
+  const previewByItem = new Map((preview?.lines ?? []).map((row) => [row.item_code, row]));
+  const priceChanges = draft.lines
+    .filter((line) => line.lockedListPrice != null && changedListPrice(previewByItem.get(line.itemCode)) != null)
+    .map((line) => line.key);
   const docstatus = status?.docstatus ?? 0;
   const isSaved = Boolean(draft.name);
 
@@ -436,26 +466,24 @@ export function OrderEntryPage() {
 
   const submittedActions = editingSubmitted ? (
     <>
-      {issues}
-      <Button size="lg" onClick={() => void saveSubmitted()} disabled={busy || !dirty || warnings.blocking.length > 0}>
-        {busy ? <Spinner /> : <Save />} Enregistrer les modifications
-      </Button>
       <Button variant="outline" onClick={discardEdits} disabled={busy}>
         <Undo2 /> Abandonner
+      </Button>
+      <Button onClick={() => void saveSubmitted()} disabled={busy || !dirty || warnings.blocking.length > 0}>
+        {busy ? <Spinner /> : <Save />} Enregistrer les modifications
       </Button>
     </>
   ) : null;
 
+  // Actions de saisie, affichées dans l'en-tête à côté de l'impression.
   const actions = orderDocstatus > 0 ? submittedActions : readOnly ? null : (
     <>
-      {issues}
-      {canValidate ? (
-        <Button size="lg" onClick={() => setConfirming(true)} disabled={busy || warnings.blocking.length > 0}>
-          <CircleCheck /> Valider la commande
+      {isSaved && draft.name && status?.origin !== "Portail client" ? (
+        <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
+          <Trash2 /> Supprimer le brouillon
         </Button>
       ) : null}
       <Button
-        size="lg"
         variant={canValidate ? "outline" : "default"}
         onClick={() => void saveDraft()}
         disabled={busy || warnings.blocking.length > 0 || (isSaved && !dirty)}
@@ -463,13 +491,14 @@ export function OrderEntryPage() {
         {busy && !confirming ? <Spinner /> : <Save />}
         {isSaved && !dirty ? "Brouillon enregistré" : "Enregistrer le brouillon"}
       </Button>
-      {isSaved && draft.name && status?.origin !== "Portail client" ? (
-        <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-          <Trash2 /> Supprimer le brouillon
+      {canValidate ? (
+        <Button onClick={() => setConfirming(true)} disabled={busy || warnings.blocking.length > 0}>
+          <CircleCheck /> Valider la commande
         </Button>
       ) : null}
     </>
   );
+  const hasIssues = actionError.length > 0 || warnings.warnings.length > 0;
 
   return (
     <>
@@ -495,16 +524,18 @@ export function OrderEntryPage() {
           </span>
         }
         actions={
-          draft.name ? (
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => draft.name && openOrdersPdf([draft.name])}
-                disabled={dirty && !readOnly}
-                title={dirty && !readOnly ? "Enregistrez la commande avant de l’imprimer" : undefined}
-              >
-                <Printer /> Imprimer / PDF
-              </Button>
+          draft.name || actions ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {draft.name ? (
+                <Button
+                  variant="outline"
+                  onClick={() => draft.name && openOrdersPdf([draft.name])}
+                  disabled={dirty && !readOnly}
+                  title={dirty && !readOnly ? "Enregistrez la commande avant de l’imprimer" : undefined}
+                >
+                  <Printer /> Imprimer / PDF
+                </Button>
+              ) : null}
               {order && orderDocstatus > 0 && !editingSubmitted ? (
                 <>
                   {order.can_edit_items ? (
@@ -538,6 +569,7 @@ export function OrderEntryPage() {
                   ) : null}
                 </>
               ) : null}
+              {actions}
             </div>
           ) : null
         }
@@ -567,6 +599,29 @@ export function OrderEntryPage() {
           <AlertDescription>Seul le responsable peut la modifier et la valider.</AlertDescription>
         </Alert>
       ) : null}
+      {priceChanges.length && !readOnly && !editingSubmitted ? (
+        <div
+          role="status"
+          data-testid="price-changes"
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-[12.5px] text-amber-900"
+        >
+          <Tags className="size-4 shrink-0 text-amber-600" />
+          <p className="min-w-0 flex-1">
+            <span className="font-medium">
+              {priceChanges.length > 1 ? `${priceChanges.length} articles ont changé de prix` : "Un article a changé de prix"}
+            </span>{" "}
+            <span className="text-amber-800/80">depuis l’enregistrement — la commande garde les anciens prix.</span>
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 border-amber-300 bg-white text-amber-900 hover:bg-amber-100"
+            onClick={() => setLines((lines) => acceptListPrices(lines, new Set(priceChanges)))}
+          >
+            Appliquer les nouveaux prix
+          </Button>
+        </div>
+      ) : null}
       {previewError && !readOnly ? (
         <Alert variant="destructive">
           <AlertTriangle />
@@ -575,46 +630,54 @@ export function OrderEntryPage() {
         </Alert>
       ) : null}
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="flex min-w-0 flex-col gap-3">
-          <CustomerPicker
-            customer={draft.customer}
-            readOnly={readOnly || editingSubmitted}
-            onSelect={selectCustomer}
-            onCreate={(initial) => setNewCustomerName(initial)}
-          />
-          {readOnly ? null : (
-            <ItemSearchPanel
-              context={context}
-              inputRef={itemInputRef}
-              feedback={feedback}
-              recentItems={recentData?.message ?? []}
-              onScan={handleScan}
-              onPick={addItem}
-              onOpenCamera={() => setCameraOpen(true)}
-            />
-          )}
-          <OrderLinesTable
-            lines={draft.lines}
-            preview={preview?.lines}
-            lastKey={draft.lines.find((line) => line.itemCode === lastItem)?.key ?? null}
-            readOnly={readOnly}
-            editableRate={options?.editable_rate}
-            onChange={(key, patch) => setLines((lines) => updateOrderLine(lines, key, patch))}
-            onRemove={(key) => setLines((lines) => removeOrderLine(lines, key))}
-          />
-        </div>
-        <OrderSummaryPanel
+      {/* En-tête : client et informations de base ; articles en pleine largeur ; échéances, taxes et totaux dessous. */}
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <CustomerPicker
+          customer={draft.customer}
+          readOnly={readOnly || editingSubmitted}
+          onSelect={selectCustomer}
+          onCreate={(initial) => setNewCustomerName(initial)}
+        />
+        <OrderHeaderFields
           draft={draft}
           options={options}
           preview={preview}
-          previewing={previewing}
           readOnly={readOnly || editingSubmitted}
           editableDeliveryDate={editingSubmitted}
           onChange={change}
-          actions={actions}
         />
       </div>
+      {readOnly ? null : (
+        <ItemSearchPanel
+          context={context}
+          inputRef={itemInputRef}
+          feedback={feedback}
+          recentItems={recentData?.message ?? []}
+          onScan={handleScan}
+          onPick={addItem}
+          onOpenCamera={() => setCameraOpen(true)}
+        />
+      )}
+      <OrderLinesTable
+        lines={draft.lines}
+        preview={preview?.lines}
+        lastKey={draft.lines.find((line) => line.itemCode === lastItem)?.key ?? null}
+        readOnly={readOnly}
+        editableRate={options?.editable_rate}
+        canOverrideQuota={canValidate}
+        onChange={(key, patch) => setLines((lines) => updateOrderLine(lines, key, patch))}
+        onChangeMany={(keys, patch) => setLines((lines) => updateOrderLines(lines, keys, patch))}
+        onRemove={(keys) => setLines((lines) => removeOrderLines(lines, keys))}
+      />
+      <OrderFooter
+        draft={draft}
+        options={options}
+        preview={preview}
+        previewing={previewing}
+        readOnly={readOnly || editingSubmitted}
+        onChange={change}
+        issues={hasIssues ? issues : null}
+      />
 
       <BarcodeScannerDialog
         open={cameraOpen}
@@ -633,7 +696,18 @@ export function OrderEntryPage() {
               details={
                 <span className="flex flex-wrap gap-x-3 text-muted-foreground">
                   {cameraItem.price != null ? <span>{formatMoney(cameraItem.price)}</span> : <span className="text-amber-700">Sans prix</span>}
-                  {cameraItem.is_stock_item ? <span>{formatQuantity(Math.max(0, cameraItem.available))} disponible(s)</span> : null}
+                  {cameraItem.is_stock_item ? (
+                    cameraItem.stock ? (
+                      <>
+                        <StockSummary stock={cameraItem.stock} />
+                        <span className={cn("num font-medium", availableTone(cameraItem.stock.net_qty))}>
+                          Disponible {formatQuantity(cameraItem.stock.net_qty)}
+                        </span>
+                      </>
+                    ) : (
+                      <span>{formatQuantity(Math.max(0, cameraItem.available))} disponible(s)</span>
+                    )
+                  ) : null}
                   {(() => {
                     const ordered = draft.lines.find((line) => line.itemCode === cameraItem.item_code)?.qty;
                     return ordered ? <span>Déjà commandé : {formatQuantity(ordered)}</span> : null;

@@ -108,3 +108,14 @@ class TestSavePricingRule(unittest.TestCase):
 
 if __name__ == "__main__":
 	unittest.main()
+
+
+class TestNextItemCode(unittest.TestCase):
+	def test_code_follows_item_naming_series(self):
+		from log.catalog_ops import _next_item_code
+
+		with patch("frappe.model.naming.make_autoname", return_value="STO-ITEM-2026-00001") as autoname:
+			self.assertEqual(_next_item_code(), "STO-ITEM-2026-00001")
+		series = autoname.call_args.args[0]
+		self.assertTrue(series.endswith(".#####"))
+		self.assertEqual(autoname.call_args.args[1], "Item")

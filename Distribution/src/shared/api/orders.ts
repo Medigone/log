@@ -12,8 +12,6 @@ export interface OrderOptions {
   default_warehouse: string | null;
   price_lists: string[];
   default_price_list: string | null;
-  tax_templates: Array<{ name: string; label: string }>;
-  default_tax_template: string | null;
   payment_terms_templates: string[];
   modes_of_payment: string[];
   customer_groups: string[];
@@ -36,12 +34,21 @@ export interface CustomerSummary {
   payment_terms?: string | null;
   has_gps: boolean;
   status?: string | null;
+  /** Solde comptable (GL) : positif = le client nous doit. */
+  balance?: number;
 }
 
 export interface CommuneOption {
   name: string;
   nom: string;
   wilaya?: string | null;
+}
+
+export interface ItemStockOverview {
+  actual_qty: number;
+  reserved_qty: number;
+  ordered_qty: number;
+  net_qty: number;
 }
 
 export interface ItemCard {
@@ -54,7 +61,11 @@ export interface ItemCard {
   barcode?: string | null;
   price?: number | null;
   available: number;
+  /** Vue stock de l’entrepôt de la commande ; `net_qty` = stock − en commande (peut être négatif). */
+  stock?: ItemStockOverview | null;
   is_stock_item: boolean;
+  /** Quantité max par commande si l’article est vendu en quota. */
+  quota_max_qty?: number | null;
 }
 
 export interface RecentItemCard extends ItemCard {
@@ -77,8 +88,17 @@ export interface OrderLineData {
   discount_percentage: number;
   rate: number;
   amount: number;
+  /** Taux de TVA de la ligne, d’après la fiche article (0 = exonéré). */
+  tax_rate: number;
+  tax_amount: number;
+  /** Aucun modèle de taxe sur la fiche article : la ligne est comptée exonérée. */
+  tax_missing: boolean;
   image?: string | null;
   available: number;
+  stock?: ItemStockOverview | null;
+  quota_max_qty?: number | null;
+  /** Brouillon : tarif actuel de la liste de prix (null si aucun). */
+  current_price_list_rate?: number | null;
   pricing_rules?: string | null;
   row_name?: string | null;
   reserved_qty: number;
@@ -127,14 +147,14 @@ export interface OrderDetail {
   order_type: string;
   warehouse: string | null;
   price_list: string | null;
-  tax_template: string;
   payment_terms_template: string;
   schedule_mode: "template" | "manual";
   additional_discount_percentage: number;
   discount_amount: number;
   currency?: string | null;
   lines: OrderLineData[];
-  taxes: Array<{ description: string; rate: number; amount: number }>;
+  /** Lignes de TVA non nulles ; `base` = net HT des articles soumis à ce taux. */
+  taxes: Array<{ description: string; rate: number; base: number; amount: number }>;
   payment_schedule: ScheduleRowData[];
   schedule_gap: number;
   totals: OrderTotals;
@@ -185,6 +205,8 @@ export interface OrderLineInput {
   /** null = réservation automatique (toute la quantité, dans la limite du disponible). */
   reserved_qty?: number | null;
   row_name?: string | null;
+  /** Prix de liste du brouillon enregistré, gardé tant qu’il n’est pas mis à jour. */
+  price_list_rate?: number | null;
 }
 
 export interface OrderUpdatePayload {
@@ -201,7 +223,6 @@ export interface OrderPayload {
   delivery_date: string;
   warehouse?: string | null;
   price_list?: string | null;
-  tax_template: string;
   additional_discount_percentage?: number;
   discount_amount?: number;
   payment_terms_template: string;

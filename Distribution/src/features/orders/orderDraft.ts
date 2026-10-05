@@ -1,6 +1,7 @@
 import type {
   CustomerSummary,
   ItemCard,
+  ItemStockOverview,
   OrderDetail,
   OrderOptions,
   OrderPayload,
@@ -20,6 +21,8 @@ export interface OrderLine {
   rate: number | null;
   image?: string | null;
   available: number;
+  /** Stock / réservé / en commande / disponible net de l’entrepôt (affichage). */
+  stock?: ItemStockOverview | null;
   isStockItem: boolean;
   /** Prix connu au moment de l'ajout, affiché en attendant l'aperçu serveur. */
   listPrice?: number | null;
@@ -29,6 +32,12 @@ export interface OrderLine {
   reservedQty: number | null;
   /** Quantité déjà livrée (commande validée). */
   delivered: number;
+  /** Quantité max par commande si l’article est vendu en quota. */
+  quotaMax?: number | null;
+  /** Quantité déjà enregistrée : un dépassement accepté par le responsable reste conservable. */
+  savedQty?: number;
+  /** Prix de liste du brouillon enregistré ; null = tarif actuel de la liste. */
+  lockedListPrice?: number | null;
 }
 
 export interface ManualScheduleRow {
@@ -47,8 +56,6 @@ export interface OrderDraft {
   warehouse: string;
   /** "" = liste du client (ou des Paramètres de vente). */
   priceList: string;
-  /** "" = aucune taxe. */
-  taxTemplate: string;
   discountMode: "percent" | "amount";
   discountValue: number;
   paymentTermsTemplate: string;
@@ -71,7 +78,6 @@ export function emptyDraft(options?: OrderOptions): OrderDraft {
     deliveryDate: options?.default_delivery_date || "",
     warehouse: options?.default_warehouse || "",
     priceList: "",
-    taxTemplate: options?.default_tax_template || "",
     discountMode: "percent",
     discountValue: 0,
     paymentTermsTemplate: "",
@@ -95,17 +101,20 @@ export function draftFromOrder(order: OrderDetail, makeKey = newKey): OrderDraft
       rate: null,
       image: line.image,
       available: line.available,
+      stock: line.stock ?? null,
       isStockItem: true,
       listPrice: line.price_list_rate,
       rowName: line.row_name ?? null,
       reservedQty: line.reserved_qty ?? null,
       delivered: line.delivered_qty ?? 0,
+      quotaMax: line.quota_max_qty ?? null,
+      savedQty: line.qty,
+      lockedListPrice: order.docstatus === 0 ? line.price_list_rate : null,
     })),
     orderType: order.order_type,
     deliveryDate: order.delivery_date,
     warehouse: order.warehouse || "",
     priceList: order.price_list || "",
-    taxTemplate: order.tax_template || "",
     discountMode: amountMode ? "amount" : "percent",
     discountValue: amountMode ? order.discount_amount : order.additional_discount_percentage,
     paymentTermsTemplate: order.payment_terms_template || "",
@@ -157,11 +166,14 @@ export function addOrderItem(
     rate: null,
     image: item.image,
     available: item.available,
+    stock: item.stock ?? null,
     isStockItem: item.is_stock_item,
     listPrice: item.price ?? null,
     rowName: null,
     reservedQty: null,
     delivered: 0,
+    quotaMax: item.quota_max_qty ?? null,
+    savedQty: 0,
   };
   return { lines: [...lines, line], key: line.key, created: true };
 }
@@ -172,6 +184,17 @@ export function updateOrderLine(lines: OrderLine[], key: string, patch: Partial<
 
 export function removeOrderLine(lines: OrderLine[], key: string) {
   return lines.filter((line) => line.key !== key);
+}
+
+/** Même modification sur plusieurs lignes (actions groupées). */
+export function updateOrderLines(lines: OrderLine[], keys: Iterable<string>, patch: Partial<OrderLine>) {
+  const selected = new Set(keys);
+  return lines.map((line) => (selected.has(line.key) ? { ...line, ...patch } : line));
+}
+
+export function removeOrderLines(lines: OrderLine[], keys: Iterable<string>) {
+  const selected = new Set(keys);
+  return lines.filter((line) => !selected.has(line.key));
 }
 
 function toLineInput(line: OrderLine) {
@@ -200,18 +223,53 @@ export function submittedLineRules(line: Pick<OrderLine, "delivered">) {
   return { minQty: line.delivered, removable: line.delivered <= 0 };
 }
 
+/**
+ * Quantité max saisissable sur une ligne : le quota, ou la quantité déjà enregistrée si elle est plus haute.
+ * null = pas de plafond (article hors quota, ou responsable autorisé à dépasser).
+ */
+export function quotaLimit(line: Pick<OrderLine, "quotaMax" | "savedQty">, canOverride: boolean): number | null {
+  if (canOverride || !line.quotaMax) return null;
+  return Math.max(line.quotaMax, line.savedQty ?? 0);
+}
+
+export function exceedsQuota(line: Pick<OrderLine, "quotaMax" | "qty">) {
+  return Boolean(line.quotaMax) && line.qty > (line.quotaMax ?? 0);
+}
+
+/** Ramène la quantité d’une ligne sous son plafond de quota. */
+export function capToQuota(line: OrderLine, canOverride: boolean): OrderLine {
+  const limit = quotaLimit(line, canOverride);
+  return limit != null && line.qty > limit ? { ...line, qty: limit } : line;
+}
+
+/** Tarif actuel différent du prix gardé par le brouillon ; null si le prix n’a pas changé. */
+export function changedListPrice(row: { price_list_rate: number; current_price_list_rate?: number | null } | undefined) {
+  const current = row?.current_price_list_rate;
+  if (row == null || current == null || Math.abs(current - row.price_list_rate) < 0.005) return null;
+  return current;
+}
+
+/** Le brouillon passe au tarif actuel pour les lignes données. */
+export function acceptListPrices(lines: OrderLine[], keys: Set<string>): OrderLine[] {
+  return lines.map((line) => (keys.has(line.key) ? { ...line, lockedListPrice: null } : line));
+}
+
+/** Changer de client ou de liste de prix repart du tarif de la nouvelle liste. */
+export function releaseListPrices(lines: OrderLine[]): OrderLine[] {
+  return lines.some((line) => line.lockedListPrice != null) ? lines.map((line) => ({ ...line, lockedListPrice: null })) : lines;
+}
+
 export function toOrderPayload(draft: OrderDraft): OrderPayload | null {
   if (!draft.customer) return null;
   const lines = draft.lines.filter((line) => line.qty > 0);
   return {
     name: draft.name,
     customer: draft.customer.name,
-    lines: lines.map(toLineInput),
+    lines: lines.map((line) => ({ ...toLineInput(line), price_list_rate: line.lockedListPrice ?? null })),
     order_type: draft.orderType,
     delivery_date: draft.deliveryDate,
     warehouse: draft.warehouse || null,
     price_list: draft.priceList || null,
-    tax_template: draft.taxTemplate,
     additional_discount_percentage: draft.discountMode === "percent" ? draft.discountValue : 0,
     discount_amount: draft.discountMode === "amount" ? draft.discountValue : 0,
     payment_terms_template: draft.scheduleMode === "manual" ? "" : draft.paymentTermsTemplate,
@@ -254,7 +312,7 @@ export interface OrderWarnings {
   warnings: string[];
 }
 
-export function orderWarnings(draft: OrderDraft, preview?: OrderDetail | null): OrderWarnings {
+export function orderWarnings(draft: OrderDraft, preview?: OrderDetail | null, canOverrideQuota = false): OrderWarnings {
   const blocking: string[] = [];
   const warnings: string[] = [];
   if (!draft.customer) blocking.push("Choisissez un client.");
@@ -276,6 +334,12 @@ export function orderWarnings(draft: OrderDraft, preview?: OrderDetail | null): 
     if (line.isStockItem && line.qty > line.available) {
       warnings.push(`${line.itemName} : ${line.qty} demandé, ${Math.max(0, line.available)} disponible.`);
     }
+    if (exceedsQuota(line)) {
+      const limit = quotaLimit(line, canOverrideQuota);
+      const message = `${line.itemName} : ${line.qty} demandé, quota de ${line.quotaMax} par commande.`;
+      if (limit != null && line.qty > limit) blocking.push(message);
+      else warnings.push(message);
+    }
     const lineReserved = line.reservedQty ?? reserved.get(line.itemCode);
     if (line.isStockItem && lineReserved != null && lineReserved < line.qty && line.qty <= line.available) {
       warnings.push(`${line.itemName} : ${lineReserved} réservé sur ${line.qty}.`);
@@ -284,6 +348,15 @@ export function orderWarnings(draft: OrderDraft, preview?: OrderDetail | null): 
   if (preview) {
     for (const line of preview.lines) {
       if (!line.price_list_rate && !line.rate) warnings.push(`${line.item_name} : aucun prix dans la liste.`);
+    }
+    const noVat = preview.docstatus === 0 ? preview.lines.filter((line) => line.tax_missing) : [];
+    if (noVat.length) {
+      const names = noVat.map((line) => line.item_name).join(", ");
+      warnings.push(
+        noVat.length === 1
+          ? `${names} : taux de TVA non renseigné sur la fiche article, compté exonéré.`
+          : `${noVat.length} articles sans taux de TVA sur leur fiche, comptés exonérés : ${names}.`,
+      );
     }
   }
   if (draft.customer && !draft.customer.has_gps) warnings.push("Le client n’a pas de position GPS : la tournée devra la compléter.");

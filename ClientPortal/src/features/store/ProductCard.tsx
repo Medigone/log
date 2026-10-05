@@ -147,7 +147,7 @@ export function ProductCard({ item }: { item: CatalogItem; size?: "default" | "s
         <ProductPrice item={item} compact />
       </CardContent>
       <CardFooter className="mt-auto flex-col items-stretch gap-1.5 border-0 bg-transparent p-0">
-        <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} compact />
+        <QuantitySelector value={quantity} onChange={setQuantity} name={item.itemName} uom={item.uom} max={item.maxQty} compact />
         <Button size="sm" className="h-7 w-full text-xs" disabled={adding} onClick={() => void add()}>
           {adding ? <Spinner data-icon="inline-start" /> : added ? <Check data-icon="inline-start" /> : <ShoppingCart data-icon="inline-start" />}
           {adding ? "Ajout…" : added ? "Ajouté" : "Ajouter au panier"}
