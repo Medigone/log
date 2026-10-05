@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import frappe
 from frappe import _
+from frappe.query_builder.functions import Count
 from frappe.utils import cint, flt, getdate, nowdate
 
 from log.api.distribution import RECEIPT_ROLES, RECEIPT_VALIDATION_ROLES, _payload, _require
@@ -318,12 +319,14 @@ def list_receipts(status=None, limit=100):
 	line_counts = {}
 	names = [row.name for row in rows]
 	if names:
-		for row in frappe.get_all(
-			"Purchase Receipt Item",
-			filters={"parent": ["in", names], "parenttype": "Purchase Receipt"},
-			fields=["parent", "count(name) as line_count"],
-			group_by="parent",
-			order_by="parent asc",
+		# frappe.qb rather than a "count(name)" field string: Frappe 16 rejects SQL functions in get_all fields.
+		item = frappe.qb.DocType("Purchase Receipt Item")
+		for row in (
+			frappe.qb.from_(item)
+			.select(item.parent, Count(item.name).as_("line_count"))
+			.where(item.parent.isin(names) & (item.parenttype == "Purchase Receipt"))
+			.groupby(item.parent)
+			.run(as_dict=True)
 		):
 			line_counts[row.parent] = cint(row.line_count)
 	return {

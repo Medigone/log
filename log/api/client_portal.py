@@ -424,6 +424,38 @@ def _new_sales_order(
 
 
 def _item_totals_ttc(order) -> dict[str, float]:
+	tax_by_item = _item_tax_amounts_v16(order)
+	if tax_by_item is None:
+		tax_by_item = _item_tax_amounts_legacy(order)
+	return {
+		row.item_code: flt(row.net_amount) + tax_by_item.get(row.item_code, 0)
+		for row in order.get("items") or []
+	}
+
+
+def _item_tax_amounts_v16(order) -> dict[str, float] | None:
+	"""ERPNext 16 tax breakup: ``_item_wise_tax_details`` on unsaved docs, ``item_wise_tax_details`` rows once saved."""
+	pending = order.get("_item_wise_tax_details")
+	saved = order.get("item_wise_tax_details") if order.meta.has_field("item_wise_tax_details") else None
+	if pending is None and not saved:
+		return None
+	tax_by_item: dict[str, float] = {}
+	if pending:
+		for detail in pending:
+			item_code = getattr(detail.get("item"), "item_code", None)
+			if item_code:
+				tax_by_item[item_code] = tax_by_item.get(item_code, 0) + flt(detail.get("amount"))
+		return tax_by_item
+	item_codes = {row.name: row.item_code for row in order.get("items") or []}
+	for detail in saved:
+		item_code = item_codes.get(detail.get("item_row"))
+		if item_code:
+			tax_by_item[item_code] = tax_by_item.get(item_code, 0) + flt(detail.get("amount"))
+	return tax_by_item
+
+
+def _item_tax_amounts_legacy(order) -> dict[str, float]:
+	"""ERPNext 15 tax breakup: JSON ``item_wise_tax_detail`` on each tax row."""
 	tax_by_item: dict[str, float] = {}
 	for tax in order.get("taxes") or []:
 		details = tax.get("item_wise_tax_detail")
@@ -437,10 +469,7 @@ def _item_totals_ttc(order) -> dict[str, float]:
 		for item_code, values in (details or {}).items():
 			amount = values[1] if isinstance(values, (list, tuple)) and len(values) > 1 else 0
 			tax_by_item[item_code] = tax_by_item.get(item_code, 0) + flt(amount)
-	return {
-		row.item_code: flt(row.net_amount) + tax_by_item.get(row.item_code, 0)
-		for row in order.get("items") or []
-	}
+	return tax_by_item
 
 
 def _item_images(item_codes: list[str]) -> dict[str, str | None]:
