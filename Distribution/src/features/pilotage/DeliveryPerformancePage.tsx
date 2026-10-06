@@ -129,7 +129,7 @@ export function DeliveryPerformancePage() {
           />
         </Panel>
         <Panel title="Par commune" hint="15 communes les plus livrées">
-          <DataTable label="Réussite par commune" columns={outcomeColumns<OutcomeRow>("Commune", (row) => row.key)} rows={result?.communes ?? []} rowKey={(row) => row.key} />
+          <DataTable label="Réussite par commune" columns={outcomeColumns<OutcomeRow>("Commune", (row) => row.name ?? row.key)} rows={result?.communes ?? []} rowKey={(row) => row.key} />
         </Panel>
       </div>
 

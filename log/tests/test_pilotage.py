@@ -30,6 +30,22 @@ class TestCash(unittest.TestCase):
 		self.assertEqual(sum(bucket["total"] for bucket in buckets), 200)  # au-delà de l'horizon ignoré
 
 
+class TestExpiry(unittest.TestCase):
+	def test_each_batch_lands_in_its_own_bucket(self):
+		result = pl.expiry_exposure(
+			[
+				{"item": "LAIT", "item_name": "Lait", "qty": 2, "value": 100, "expiry_date": "2026-09-30"},
+				{"item": "LAIT", "item_name": "Lait", "qty": 5, "value": 500, "expiry_date": "2026-10-20"},
+				{"item": "VITC", "item_name": "Vitamine C", "qty": 4, "value": 80, "expiry_date": "2026-12-20"},
+			],
+			TODAY,
+		)
+		self.assertEqual(result["buckets"], {"expired": 100, "d30": 500, "d60": 0, "d90": 80})
+		lait = result["items"][0]
+		self.assertEqual((lait["item_code"], lait["qty"], lait["value"], lait["days"]), ("LAIT", 7, 600, -5))
+		self.assertEqual(result["items"][1]["item_code"], "VITC")
+
+
 class TestDelivery(unittest.TestCase):
 	def test_outcomes_and_first_attempt(self):
 		result = pl.delivery_outcomes(
@@ -45,6 +61,17 @@ class TestDelivery(unittest.TestCase):
 		self.assertEqual(result["success_rate"], 0.5)
 		self.assertEqual(result["first_attempt_rate"], 0.25)
 		self.assertEqual(result["reasons"][0], {"reason": "Client absent", "count": 2})
+
+	def test_attempt_numbers_count_redelivery_of_same_order(self):
+		numbers = pl.attempt_numbers(
+			[
+				{"order": "SO-1", "name": "DN-2", "date": "2026-10-02"},
+				{"order": "SO-1", "name": "DN-1", "date": "2026-10-01"},
+				{"order": "SO-2", "name": "DN-3", "date": "2026-10-01"},
+				{"order": None, "name": "DN-4", "date": "2026-10-01"},
+			]
+		)
+		self.assertEqual(numbers, {"DN-1": 1, "DN-2": 2, "DN-3": 1})
 
 	def test_duration_stats(self):
 		self.assertEqual(pl.duration_stats([1, 2, 3, 10])["median"], 2.5)

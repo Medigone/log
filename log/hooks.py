@@ -197,6 +197,9 @@ doc_events = {
         "validate": "log.livraison_hooks.validate_livraison",
         "on_update": "log.services.portal_notifications.on_livraison_update",
     },
+    "Sales Invoice": {
+        "before_validate": "log.services.delivery_payment_terms.on_sales_invoice_before_validate",
+    },
     "Sales Order": {
         "validate": "log.services.delivery_payment_terms.on_sales_order_validate",
         "on_submit": [

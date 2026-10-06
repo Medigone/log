@@ -710,8 +710,32 @@ def _realign_sales_order_picked_qty(dn, route):
 			if item.name not in wanted:
 				continue
 			item.picked_qty = flt(item.delivered_qty) * flt(item.conversion_factor or 1)
+			_trim_submitted_pick_rows(item.name, item.picked_qty)
 			item.db_set("picked_qty", item.picked_qty, update_modified=False)
 		so.update_picking_status()
+
+
+def _trim_submitted_pick_rows(so_detail: str, delivered_stock_qty: float):
+	"""Ramène le préparé des Pick Lists soumises au livré.
+
+	ERPNext recalcule le picked_qty de la commande en sommant les Pick List Items soumis : sans cette
+	réduction, la Pick List du reliquat ferait dépasser la quantité commandée et serait refusée.
+	"""
+	rows = frappe.get_all(
+		"Pick List Item",
+		filters={"sales_order_item": so_detail, "docstatus": 1},
+		fields=["name", "picked_qty"],
+		order_by="creation desc",
+	)
+	excess = sum(flt(row.picked_qty) for row in rows) - flt(delivered_stock_qty)
+	for row in rows:
+		if excess <= 0.000001:
+			break
+		reduction = min(flt(row.picked_qty), excess)
+		if reduction <= 0:
+			continue
+		frappe.db.set_value("Pick List Item", row.name, "picked_qty", flt(row.picked_qty) - reduction, update_modified=False)
+		excess -= reduction
 
 
 def _cancel_failed_draft_delivery_note(dn):

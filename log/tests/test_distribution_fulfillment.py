@@ -343,6 +343,29 @@ class TestDistributionFulfillment(unittest.TestCase):
 		so_item.db_set.assert_called_once_with("picked_qty", 12, update_modified=False)
 		so.update_picking_status.assert_called_once()
 
+	def test_trim_submitted_pick_rows_reduces_latest_rows_to_delivered(self):
+		rows = [frappe._dict(name="pli-2", picked_qty=4), frappe._dict(name="pli-1", picked_qty=6)]
+		with (
+			patch.object(fulfillment.frappe, "get_all", return_value=rows) as get_all,
+			patch.object(fulfillment.frappe.db, "set_value") as set_value,
+		):
+			fulfillment._trim_submitted_pick_rows("soi-1", 3)
+
+		self.assertEqual(get_all.call_args.kwargs["filters"], {"sales_order_item": "soi-1", "docstatus": 1})
+		set_value.assert_any_call("Pick List Item", "pli-2", "picked_qty", 0, update_modified=False)
+		set_value.assert_any_call("Pick List Item", "pli-1", "picked_qty", 3, update_modified=False)
+		self.assertEqual(set_value.call_count, 2)
+
+	def test_trim_submitted_pick_rows_keeps_rows_matching_delivery(self):
+		rows = [frappe._dict(name="pli-1", picked_qty=5)]
+		with (
+			patch.object(fulfillment.frappe, "get_all", return_value=rows),
+			patch.object(fulfillment.frappe.db, "set_value") as set_value,
+		):
+			fulfillment._trim_submitted_pick_rows("soi-1", 5)
+
+		set_value.assert_not_called()
+
 	def test_settle_cancels_failed_draft_and_realigns_picks(self):
 		dn = Mock()
 		dn.name = "DN-FAIL"

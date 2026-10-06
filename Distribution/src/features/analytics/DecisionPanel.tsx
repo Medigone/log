@@ -1,5 +1,8 @@
-import { ArrowRight, Sparkles } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { ArrowRight, Maximize2, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { TONES } from "@/shared/design/statusTone";
@@ -28,15 +31,20 @@ export function DecisionPanel({
 }) {
   const matrix = data.thresholds.matrix;
   const actions = priorityActions(data.items);
+  const [zoomed, setZoomed] = useState(false);
+  const thresholds = `Seuils = médianes des articles vendus : taux de marque ${formatPercent(matrix.margin_rate)}, couverture ${formatDays(matrix.cover_days)}.`;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
       <Card>
         <CardHeader className="border-b border-hairline">
           <CardTitle>Matrice marge × rotation</CardTitle>
-          <p className="t-meta text-muted-foreground">
-            Seuils = médianes des articles vendus : taux de marque {formatPercent(matrix.margin_rate)}, couverture {formatDays(matrix.cover_days)}.
-          </p>
+          <p className="t-meta text-muted-foreground">{thresholds}</p>
+          <CardAction>
+            <Button variant="outline" size="sm" onClick={() => setZoomed(true)}>
+              <Maximize2 /> Agrandir
+            </Button>
+          </CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-4 pt-4">
           <div className="grid grid-cols-2 gap-2" aria-label="Quadrants">
@@ -52,6 +60,31 @@ export function DecisionPanel({
           />
         </CardContent>
       </Card>
+
+      {zoomed && (
+        <Dialog open onOpenChange={(open) => !open && setZoomed(false)}>
+          <DialogContent size="sm:max-w-[min(96vw,1400px)]" className="sm:p-6">
+            <DialogHeader className="pr-8">
+              <DialogTitle className="text-xl">Matrice marge × rotation</DialogTitle>
+              <DialogDescription>
+                {thresholds} Taille des points = marge. Cliquez sur un article pour ouvrir sa fiche.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody>
+              <ProfitScatter
+                large
+                rows={data.items}
+                marginThreshold={matrix.margin_rate}
+                coverThreshold={matrix.cover_days}
+                onSelect={(row) => {
+                  setZoomed(false);
+                  onOpenItem(row);
+                }}
+              />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <Card>
         <CardHeader className="border-b border-hairline">

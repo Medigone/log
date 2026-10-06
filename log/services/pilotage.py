@@ -120,6 +120,23 @@ def delivery_outcomes(rows) -> dict:
 	}
 
 
+def attempt_numbers(visits) -> dict[str, int]:
+	"""Rang de passage de chaque BL dans sa commande : un BL refait après un échec est une 2e tentative.
+
+	`visits` : BL effectivement présentés au client (`order`, `name`, `date`), toutes périodes confondues.
+	"""
+	by_order: dict[str, list] = {}
+	for row in visits:
+		if row.get("order"):
+			by_order.setdefault(row["order"], []).append(row)
+	numbers: dict[str, int] = {}
+	for rows in by_order.values():
+		rows.sort(key=lambda row: (getdate(row.get("date")) if row.get("date") else date.max, row.get("name") or ""))
+		for index, row in enumerate(rows, start=1):
+			numbers[row["name"]] = max(numbers.get(row["name"], 0), index)
+	return numbers
+
+
 def duration_stats(values) -> dict:
 	"""Délais en jours : moyenne, médiane, 9e décile."""
 	values = sorted(flt(value) for value in values if value is not None and flt(value) >= 0)
@@ -159,6 +176,46 @@ def group_outcomes(rows, key) -> list[dict]:
 			}
 		)
 	return sorted(result, key=lambda row: -row["closed"])
+
+
+# --- Stock -----------------------------------------------------------------------
+
+
+def expiry_exposure(batches, today, *, limit: int = 20) -> dict:
+	"""Valeur à risque par échéance de DLC, lot par lot, et liste par article (plus proche DLC d'abord).
+
+	Chaque lot tombe dans sa propre tranche : un lot périmé ne masque pas les lots à 30/60/90 jours.
+	"""
+	today = getdate(today)
+	buckets = {"expired": 0.0, "d30": 0.0, "d60": 0.0, "d90": 0.0}
+	items: dict[str, dict] = {}
+	for row in batches:
+		expiry = getdate(row.get("expiry_date"))
+		days = (expiry - today).days
+		key = "expired" if days < 0 else "d30" if days <= 30 else "d60" if days <= 60 else "d90"
+		value = flt(row.get("value"))
+		buckets[key] += value
+		item = items.setdefault(
+			row.get("item"),
+			{
+				"item_code": row.get("item"),
+				"item_name": row.get("item_name") or row.get("item"),
+				"qty": 0.0,
+				"value": 0.0,
+				"next_expiry": str(expiry),
+				"days": days,
+			},
+		)
+		item["qty"] += flt(row.get("qty"))
+		item["value"] += value
+		if days < item["days"]:
+			item["next_expiry"], item["days"] = str(expiry), days
+	for item in items.values():
+		item["value"] = money(item["value"])
+	return {
+		"buckets": {key: money(value) for key, value in buckets.items()},
+		"items": sorted(items.values(), key=lambda row: row["days"])[:limit],
+	}
 
 
 # --- Clients ---------------------------------------------------------------------

@@ -165,20 +165,25 @@ export function ItemAnalyticsTable({
     },
   ];
 
+  const selected = expanded ? rows.find((row) => row.item_code === expanded) : undefined;
+
   return (
-    <DataTable
-      label="Analyse par article"
-      columns={columns}
-      rows={rows}
-      rowKey={(row) => row.item_code}
-      rowTone={(row) => (row.margin < 0 ? "danger" : undefined)}
-      defaultSort={{ id: "margin", direction: "desc" }}
-      onRowClick={(row) => onToggle(row.item_code)}
-      isRowActive={(row) => row.item_code === expanded}
-      isRowExpanded={(row) => row.item_code === expanded}
-      expandedContent={(row) => <ItemAnalyticsDetail row={row} fromDate={fromDate} toDate={toDate} />}
-      maxHeight="max-h-[70vh]"
-      empty={empty}
-    />
+    <>
+      <DataTable
+        label="Analyse par article"
+        columns={columns}
+        rows={rows}
+        rowKey={(row) => row.item_code}
+        rowTone={(row) => (row.margin < 0 ? "danger" : undefined)}
+        defaultSort={{ id: "margin", direction: "desc" }}
+        onRowClick={(row) => onToggle(row.item_code)}
+        isRowActive={(row) => row.item_code === expanded}
+        maxHeight="max-h-[70vh]"
+        empty={empty}
+      />
+      {selected && (
+        <ItemAnalyticsDetail row={selected} fromDate={fromDate} toDate={toDate} onClose={() => onToggle(selected.item_code)} />
+      )}
+    </>
   );
 }

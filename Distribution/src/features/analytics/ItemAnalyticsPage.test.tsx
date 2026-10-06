@@ -228,14 +228,27 @@ describe("ItemAnalyticsPage", () => {
     expect(within(filtered).queryByText("Savon doux")).not.toBeInTheDocument();
   });
 
-  it("déplie le détail d'un article depuis les actions prioritaires", async () => {
+  it("agrandit la matrice marge × rotation dans une fenêtre", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("button", { name: /Agrandir/ }));
+    const dialog = screen.getByRole("dialog", { name: "Matrice marge × rotation" });
+    expect(within(dialog).getByRole("img", { name: /Nuage des articles/ })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("ouvre la fiche d'un article en fenêtre depuis les actions prioritaires", async () => {
     const user = userEvent.setup();
     renderPage();
     const actions = screen.getByText("Actions prioritaires").closest("[data-slot=card]") as HTMLElement;
     await user.click(within(actions).getByRole("button", { name: /Savon doux/ }));
-    expect(screen.getByRole("tab", { name: "Articles", selected: true })).toBeInTheDocument();
-    expect(screen.getByText("Corriger le prix de vente ou le prix d’achat")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Savon doux" });
+    expect(within(dialog).getByText("Corriger le prix de vente ou le prix d’achat")).toBeInTheDocument();
     expect(mocks.useItemAnalyticsDetail).toHaveBeenCalledWith("SAVON-3", expect.any(String), expect.any(String));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Articles", selected: true })).toBeInTheDocument();
   });
 
   it("passe d'un client à l'analyse de ses articles", async () => {

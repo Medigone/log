@@ -3,10 +3,18 @@ import type { ItemAnalyticsRow } from "@/shared/api/analytics";
 import { formatMoney } from "@/shared/format";
 import { formatDays, formatPercent, QUADRANTS } from "@/features/analytics/analyticsShared";
 
-const WIDTH = 640;
-const HEIGHT = 300;
-const PAD = { top: 16, right: 16, bottom: 34, left: 48 };
 const MAX_POINTS = 300;
+/** Vue carte (compacte) et vue fenêtre (agrandie, axes ajustés aux données, articles nommés). */
+const LAYOUTS = {
+  compact: { width: 640, height: 300, pad: { top: 16, right: 16, bottom: 34, left: 48 }, font: "text-[10px]", labels: 0 },
+  large: { width: 1100, height: 580, pad: { top: 22, right: 24, bottom: 44, left: 58 }, font: "text-[12px]", labels: 30 },
+} as const;
+const COMPACT_X_TICKS = [0.1, 0.5, 1, 2, 5, 12, 26, 52, 100, 365];
+const LARGE_X_TICKS = [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6, 8, 12, 26, 52, 100, 365];
+
+function shortName(name: string) {
+  return name.length > 24 ? `${name.slice(0, 23)}…` : name;
+}
 
 interface Point {
   row: ItemAnalyticsRow;
@@ -30,13 +38,17 @@ export function ProfitScatter({
   marginThreshold,
   coverThreshold,
   onSelect,
+  large = false,
 }: {
   rows: ItemAnalyticsRow[];
   marginThreshold: number | null;
   coverThreshold: number | null;
   onSelect: (row: ItemAnalyticsRow) => void;
+  large?: boolean;
 }) {
   const [hover, setHover] = useState<Point | null>(null);
+  const layout = LAYOUTS[large ? "large" : "compact"];
+  const { width: WIDTH, height: HEIGHT, pad: PAD } = layout;
 
   const chart = useMemo(() => {
     const sold = rows
@@ -45,11 +57,23 @@ export function ProfitScatter({
       .slice(0, MAX_POINTS);
     if (!sold.length) return null;
     const finite = sold.map((row) => turns(row.cover_days)).filter((value): value is number => value != null && Number.isFinite(value) && value > 0);
-    const xMin = Math.max(Math.min(...finite, 1) / 1.5, 0.05);
-    const xMax = Math.max(...finite, 12) * 1.5;
+    const thresholdTurn = turns(coverThreshold);
     const rates = sold.map((row) => row.margin_rate!);
-    const yMin = Math.max(Math.min(0, ...rates) - 0.05, -0.5);
-    const yMax = Math.min(Math.max(0.1, ...rates) + 0.05, 1);
+    let xMin: number, xMax: number, yMin: number, yMax: number;
+    if (large) {
+      // Axes resserrés sur les articles (et les seuils) : le nuage occupe toute la fenêtre.
+      const xs = [...finite, ...(thresholdTurn != null && Number.isFinite(thresholdTurn) ? [thresholdTurn] : [])];
+      xMin = Math.max(Math.min(...xs, 1) / 1.3, 0.05);
+      xMax = Math.max(...xs, 1) * 1.3;
+      const ys = [...rates, ...(marginThreshold != null ? [marginThreshold] : [])];
+      yMin = Math.max(Math.floor((Math.min(...ys) - 0.04) * 20) / 20, -0.5);
+      yMax = Math.min(Math.ceil((Math.max(...ys) + 0.04) * 20) / 20, 1);
+    } else {
+      xMin = Math.max(Math.min(...finite, 1) / 1.5, 0.05);
+      xMax = Math.max(...finite, 12) * 1.5;
+      yMin = Math.max(Math.min(0, ...rates) - 0.05, -0.5);
+      yMax = Math.min(Math.max(0.1, ...rates) + 0.05, 1);
+    }
     const maxMargin = Math.max(1, ...sold.map((row) => row.margin));
     const plotW = WIDTH - PAD.left - PAD.right;
     const plotH = HEIGHT - PAD.top - PAD.bottom;
@@ -61,15 +85,21 @@ export function ProfitScatter({
         row,
         x: sx(turn == null ? xMin : turn),
         y: sy(row.margin_rate!),
-        r: 4 + Math.sqrt(Math.max(row.margin, 0) / maxMargin) * 9,
+        r: (large ? 5 : 4) + Math.sqrt(Math.max(row.margin, 0) / maxMargin) * (large ? 14 : 9),
       };
     });
-    const xTicks = [0.1, 0.5, 1, 2, 5, 12, 26, 52, 100, 365].filter((tick) => tick >= xMin && tick <= xMax);
-    const yStep = yMax - yMin > 0.6 ? 0.2 : 0.1;
+    const xTicks = (large ? LARGE_X_TICKS : COMPACT_X_TICKS).filter((tick) => tick >= xMin && tick <= xMax);
+    const yStep = yMax - yMin > 0.6 ? 0.2 : large && yMax - yMin <= 0.3 ? 0.05 : 0.1;
     const yTicks: number[] = [];
     for (let tick = Math.ceil(yMin / yStep) * yStep; tick <= yMax + 1e-9; tick += yStep) yTicks.push(Math.round(tick * 100) / 100);
-    const thresholdTurn = turns(coverThreshold);
+    const labelled = new Set(
+      [...points]
+        .sort((a, b) => b.row.margin - a.row.margin)
+        .slice(0, layout.labels)
+        .map((point) => point.row.item_code),
+    );
     return {
+      labelled,
       points: points.sort((a, b) => b.r - a.r),
       xTicks,
       yTicks,
@@ -78,7 +108,7 @@ export function ProfitScatter({
       vx: thresholdTurn != null && Number.isFinite(thresholdTurn) ? sx(thresholdTurn) : null,
       vy: marginThreshold != null ? sy(marginThreshold) : null,
     };
-  }, [rows, marginThreshold, coverThreshold]);
+  }, [rows, marginThreshold, coverThreshold, large, layout, WIDTH, HEIGHT, PAD]);
 
   if (!chart) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Aucun article vendu sur la période.</p>;
@@ -101,28 +131,28 @@ export function ProfitScatter({
         {chart.yTicks.map((tick) => (
           <g key={`y${tick}`}>
             <line x1={left} x2={right} y1={chart.sy(tick)} y2={chart.sy(tick)} className="stroke-border" strokeWidth={tick === 0 ? 1.5 : 1} />
-            <text x={left - 6} y={chart.sy(tick)} dy="0.32em" textAnchor="end" className="fill-muted-foreground text-[10px]">
+            <text x={left - 8} y={chart.sy(tick)} dy="0.32em" textAnchor="end" className={`fill-muted-foreground ${layout.font}`}>
               {Math.round(tick * 100)} %
             </text>
           </g>
         ))}
         {chart.xTicks.map((tick) => (
-          <text key={`x${tick}`} x={chart.sx(tick)} y={bottom + 14} textAnchor="middle" className="fill-muted-foreground text-[10px]">
+          <text key={`x${tick}`} x={chart.sx(tick)} y={bottom + (large ? 18 : 14)} textAnchor="middle" className={`fill-muted-foreground ${layout.font}`}>
             {tick < 1 ? tick.toString().replace(".", ",") : tick}×
           </text>
         ))}
-        <text x={(left + right) / 2} y={HEIGHT - 4} textAnchor="middle" className="fill-muted-foreground text-[10px]">
+        <text x={(left + right) / 2} y={HEIGHT - 4} textAnchor="middle" className={`fill-muted-foreground ${layout.font}`}>
           Rotation (fois par an, échelle log) →
         </text>
-        <text transform={`translate(11 ${(top + bottom) / 2}) rotate(-90)`} textAnchor="middle" className="fill-muted-foreground text-[10px]">
+        <text transform={`translate(11 ${(top + bottom) / 2}) rotate(-90)`} textAnchor="middle" className={`fill-muted-foreground ${layout.font}`}>
           Taux de marque →
         </text>
 
         {chart.vx != null && <line x1={chart.vx} x2={chart.vx} y1={top} y2={bottom} className="stroke-muted-foreground/50" strokeDasharray="4 4" />}
         {chart.vy != null && <line x1={left} x2={right} y1={chart.vy} y2={chart.vy} className="stroke-muted-foreground/50" strokeDasharray="4 4" />}
-        <g className="fill-muted-foreground text-[10px] font-semibold uppercase tracking-wide">
-          <text x={left + 6} y={top + 10}>{QUADRANTS.pepite.label}</text>
-          <text x={right - 6} y={top + 10} textAnchor="end">{QUADRANTS.star.label}</text>
+        <g className={`fill-muted-foreground ${layout.font} font-semibold uppercase tracking-wide`}>
+          <text x={left + 6} y={top + (large ? 14 : 10)}>{QUADRANTS.pepite.label}</text>
+          <text x={right - 6} y={top + (large ? 14 : 10)} textAnchor="end">{QUADRANTS.star.label}</text>
           <text x={left + 6} y={bottom - 6}>{QUADRANTS.poids_mort.label}</text>
           <text x={right - 6} y={bottom - 6} textAnchor="end">{QUADRANTS.locomotive.label}</text>
         </g>
@@ -146,6 +176,22 @@ export function ProfitScatter({
             />
           </g>
         ))}
+        {chart.points
+          .filter((point) => chart.labelled.has(point.row.item_code))
+          .map((point) => (
+            <text
+              key={`label-${point.row.item_code}`}
+              x={point.x + point.r + 4}
+              y={point.y}
+              dy="0.32em"
+              className="pointer-events-none fill-foreground text-[11px]"
+              paintOrder="stroke"
+              stroke="var(--card)"
+              strokeWidth={3}
+            >
+              {shortName(point.row.item_name)}
+            </text>
+          ))}
       </svg>
 
       {hover && (

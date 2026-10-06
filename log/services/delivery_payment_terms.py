@@ -5,6 +5,8 @@
 
 ERPNext ne calcule les échéances qu'à partir de la date du document : on recale donc les
 lignes de l'échéancier sur `delivery_date` (la facture, émise à la livraison, reste à 0 jour).
+Si la livraison a lieu après la date prévue, la facture reprend l'échéancier de la commande :
+ses échéances sont alors ramenées à la date de facture, sinon ERPNext la refuse.
 """
 
 from __future__ import annotations
@@ -42,3 +44,15 @@ def on_sales_order_update_after_submit(doc, method=None):
 	for row in doc.get("payment_schedule") or []:
 		if row.name and getdate(row.due_date) != due_date:
 			row.db_set("due_date", due_date, update_modified=False)
+
+
+def on_sales_invoice_before_validate(doc, method=None):
+	"""Facture « À la livraison » émise après la date prévue : l'échéance est le jour de la facture."""
+	if doc.get("payment_terms_template") != ON_DELIVERY or not doc.get("posting_date"):
+		return
+	posting_date = getdate(doc.posting_date)
+	if doc.get("due_date") and getdate(doc.due_date) < posting_date:
+		doc.due_date = posting_date
+	for row in doc.get("payment_schedule") or []:
+		if row.due_date and getdate(row.due_date) < posting_date:
+			row.due_date = posting_date

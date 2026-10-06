@@ -199,19 +199,36 @@ def get_cash_overview(from_date=None, to_date=None):
 # --- Performance livraison ------------------------------------------------------------
 
 
+# Échec de livraison : le BL reste brouillon, « Non Livré » puis « Annulé » une fois le retour
+# confirmé (distribution_fulfillment._cancel_failed_draft_delivery_note). L'horodatage de passage
+# (custom_date_livraison) le distingue d'un BL annulé sans avoir été présenté au client.
+_VISITED_SQL = """
+	(dn.docstatus = 1 and dn.custom_statut in %(outcomes)s)
+	or (dn.docstatus = 0 and dn.custom_statut in ('Non Livré', 'Annulé')
+		and dn.custom_date_livraison is not null and ifnull(dn.custom_tournee, '') != '')
+"""
+
+
 def _closed_delivery_notes(company, from_date, to_date) -> list[dict]:
 	rows = frappe.db.sql(
-		"""
-		select dn.name, dn.customer, dn.custom_statut as status, dn.custom_commune as commune, dn.custom_wilaya as wilaya,
+		f"""
+		select dn.name, dn.customer,
+			case when dn.docstatus = 0 then %(failed)s else dn.custom_statut end as status,
+			dn.custom_commune as commune, dn.custom_wilaya as wilaya,
 			date(coalesce(dn.custom_date_livraison, l.date_liv, dn.posting_date)) as delivered_on,
 			l.livreur, l.vehicule, l.date_liv
 		from `tabDelivery Note` dn
 		left join `tabLivraison` l on l.name = dn.custom_tournee
-		where dn.docstatus = 1 and dn.is_return = 0 and dn.company = %(company)s
-			and dn.custom_statut in %(outcomes)s
+		where dn.is_return = 0 and dn.company = %(company)s and ({_VISITED_SQL})
 			and date(coalesce(dn.custom_date_livraison, l.date_liv, dn.posting_date)) between %(from_date)s and %(to_date)s
 		""",
-		{"company": company, "from_date": from_date, "to_date": to_date, "outcomes": pl.OUTCOMES},
+		{
+			"company": company,
+			"from_date": from_date,
+			"to_date": to_date,
+			"outcomes": pl.OUTCOMES,
+			"failed": pl.FAILED,
+		},
 		as_dict=True,
 	)
 	names = [row.name for row in rows] or [""]
@@ -237,6 +254,20 @@ def _closed_delivery_notes(company, from_date, to_date) -> list[dict]:
 			{"names": tuple(names)},
 		)
 	)
+	# Tentatives : une commande refaite sur un nouveau BL après un échec compte comme un 2e passage.
+	order_attempts = pl.attempt_numbers(
+		frappe.db.sql(
+			f"""
+			select distinct dni.against_sales_order as `order`, dn.name,
+				date(coalesce(dn.custom_date_livraison, dn.posting_date)) as `date`
+			from `tabDelivery Note` dn
+			join `tabDelivery Note Item` dni on dni.parent = dn.name
+			where dni.against_sales_order in %(orders)s and dn.is_return = 0 and ({_VISITED_SQL})
+			""",
+			{"orders": tuple(set(orders.values())) or ("",), "outcomes": pl.OUTCOMES},
+			as_dict=True,
+		)
+	)
 	order_dates = {
 		row.name: row
 		for row in frappe.get_all(
@@ -247,7 +278,7 @@ def _closed_delivery_notes(company, from_date, to_date) -> list[dict]:
 	}
 	for row in rows:
 		row["reasons"] = sorted(reasons.get(row.name, ()))
-		row["attempts"] = attempts.get(row.name) or 1
+		row["attempts"] = max(attempts.get(row.name) or 1, order_attempts.get(row.name) or 1)
 		order = order_dates.get(orders.get(row.name))
 		row["lead_days"] = (
 			(getdate(row.delivered_on) - getdate(order.transaction_date)).days
@@ -309,6 +340,13 @@ def _fleet(from_date, to_date, rows) -> list[dict]:
 	return sorted(result, key=lambda row: -row["stops"])
 
 
+def _named_communes(groups) -> list[dict]:
+	names = _names("Commune", [row["key"] for row in groups])
+	for row in groups:
+		row["name"] = names.get(row["key"]) or row["key"]
+	return groups
+
+
 @frappe.whitelist()
 def get_delivery_performance(from_date=None, to_date=None):
 	_require(MANAGER_ROLES)
@@ -355,7 +393,7 @@ def get_delivery_performance(from_date=None, to_date=None):
 			"lead_time": pl.duration_stats(row["lead_days"] for row in rows if row["status"] != pl.FAILED),
 		},
 		"reasons": outcome["reasons"],
-		"communes": pl.group_outcomes(rows, "commune")[:15],
+		"communes": _named_communes(pl.group_outcomes(rows, "commune")[:15]),
 		"drivers": drivers,
 		"vehicles": _fleet(from_date, to_date, rows),
 	}
@@ -365,38 +403,17 @@ def get_delivery_performance(from_date=None, to_date=None):
 
 
 def _expiry(today) -> dict:
-	rows = frappe.db.sql(
+	batches = frappe.db.sql(
 		"""
-		select b.item, i.item_name, sum(b.batch_qty) as qty, min(b.expiry_date) as next_expiry,
-			sum(b.batch_qty * ifnull(nullif(i.valuation_rate, 0), 0)) as value
+		select b.item, i.item_name, b.batch_qty as qty, b.expiry_date,
+			b.batch_qty * ifnull(nullif(i.valuation_rate, 0), 0) as value
 		from `tabBatch` b join `tabItem` i on i.name = b.item
 		where b.disabled = 0 and b.batch_qty > 0 and b.expiry_date is not null and b.expiry_date <= %s
-		group by b.item, i.item_name
 		""",
 		add_days(today, EXPIRY_HORIZON_DAYS),
 		as_dict=True,
 	)
-	buckets = {"expired": 0.0, "d30": 0.0, "d60": 0.0, "d90": 0.0}
-	today = getdate(today)
-	items = []
-	for row in rows:
-		days = (getdate(row.next_expiry) - today).days
-		key = "expired" if days < 0 else "d30" if days <= 30 else "d60" if days <= 60 else "d90"
-		buckets[key] += flt(row.value)
-		items.append(
-			{
-				"item_code": row.item,
-				"item_name": row.item_name,
-				"qty": flt(row.qty),
-				"value": pl.money(row.value),
-				"next_expiry": str(row.next_expiry),
-				"days": days,
-			}
-		)
-	return {
-		"buckets": {key: pl.money(value) for key, value in buckets.items()},
-		"items": sorted(items, key=lambda row: row["days"])[:20],
-	}
+	return pl.expiry_exposure(batches, today)
 
 
 def _inventory_gaps(from_date, to_date) -> list[dict]:
